@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
-from app.utils.dependencies import get_current_user, get_current_admin_user
+from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.expense import Expense, Currency
 from app.models.provider import Provider
 from app.models.category import Category
 from app.models.payment import ParticipantPayment
+from app.models.project import Project
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync, convert_currency, log_exchange_rate
 from app.services.expense_splitter import create_participant_payments, update_expense_status
 from app.services.file_storage import save_invoice, get_file_path
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 async def list_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
     category_id: Optional[int] = Query(None, description="Filter by category"),
     status_filter: Optional[str] = Query(None, description="Filter by status"),
@@ -33,13 +35,15 @@ async def list_expenses(
     limit: int = 100,
 ):
     """
-    List all expenses with optional filters.
+    List all expenses for the current project with optional filters.
     """
     query = (
         db.query(Expense)
         .options(joinedload(Expense.provider), joinedload(Expense.category))
     )
 
+    if project:
+        query = query.filter(Expense.project_id == project.id)
     if provider_id:
         query = query.filter(Expense.provider_id == provider_id)
     if category_id:
@@ -65,25 +69,43 @@ async def create_expense(
     expense_data: ExpenseCreate,
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
     Create a new expense (admin only).
-    This will automatically create payment records for all active participants.
+    This will automatically create payment records for all active project members.
     """
-    # Validate provider exists
+    # Project is required for new expenses
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required to create an expense",
+        )
+
+    # Validate provider exists and belongs to project
     provider = db.query(Provider).filter(Provider.id == expense_data.provider_id).first()
     if not provider or not provider.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or inactive provider",
         )
+    if provider.project_id and provider.project_id != project.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provider does not belong to this project",
+        )
 
-    # Validate category exists
+    # Validate category exists and belongs to project
     category = db.query(Category).filter(Category.id == expense_data.category_id).first()
     if not category or not category.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or inactive category",
+        )
+    if category.project_id and category.project_id != project.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category does not belong to this project",
         )
 
     # Get current exchange rate
@@ -108,13 +130,14 @@ async def create_expense(
         provider_id=expense_data.provider_id,
         category_id=expense_data.category_id,
         created_by=current_admin.id,
+        project_id=project.id,
         expense_date=expense_data.expense_date or datetime.utcnow(),
     )
     db.add(expense)
     db.commit()
     db.refresh(expense)
 
-    # Create participant payments
+    # Create participant payments for project members
     payments = create_participant_payments(db, expense)
 
     # Build response with payments

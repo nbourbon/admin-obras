@@ -1,10 +1,13 @@
-from fastapi import Depends, HTTPException, status
+from typing import Optional
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.services.auth import decode_token, get_user_by_id
 from app.models.user import User
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -44,3 +47,55 @@ async def get_current_admin_user(
             detail="Admin access required",
         )
     return current_user
+
+
+async def get_project_from_header(
+    x_project_id: Optional[int] = Header(None, alias="X-Project-ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Optional[Project]:
+    """
+    Get project from X-Project-ID header and verify user is a member.
+    Returns None if no project ID is provided.
+    """
+    if x_project_id is None:
+        return None
+
+    project = db.query(Project).filter(
+        Project.id == x_project_id,
+        Project.is_active == True
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # Check if user is a member of this project (admins always have access)
+    if not current_user.is_admin:
+        member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == x_project_id,
+            ProjectMember.user_id == current_user.id,
+            ProjectMember.is_active == True
+        ).first()
+
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this project",
+            )
+
+    return project
+
+
+async def get_required_project(
+    project: Optional[Project] = Depends(get_project_from_header),
+) -> Project:
+    """Get project from header, raising error if not provided."""
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+    return project

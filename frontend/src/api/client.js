@@ -9,11 +9,16 @@ const client = axios.create({
   },
 })
 
-// Add auth token to requests
+// Add auth token and project ID to requests
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
+  const projectId = localStorage.getItem('currentProjectId')
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  if (projectId) {
+    config.headers['X-Project-ID'] = projectId
   }
   return config
 })
@@ -115,6 +120,20 @@ export const dashboardAPI = {
 export const exchangeRateAPI = {
   current: () => client.get('/exchange-rate/current'),
   history: (limit = 100) => client.get(`/exchange-rate/history?limit=${limit}`),
+}
+
+// Projects API
+export const projectsAPI = {
+  list: () => client.get('/projects'),
+  get: (id) => client.get(`/projects/${id}`),
+  create: (data) => client.post('/projects', data),
+  update: (id, data) => client.put(`/projects/${id}`, data),
+  delete: (id) => client.delete(`/projects/${id}`),
+  members: (id) => client.get(`/projects/${id}/members`),
+  addMember: (id, data) => client.post(`/projects/${id}/members`, data),
+  updateMember: (id, userId, data) => client.put(`/projects/${id}/members/${userId}`, data),
+  removeMember: (id, userId) => client.delete(`/projects/${id}/members/${userId}`),
+  validateParticipation: (id) => client.get(`/projects/${id}/participation-validation`),
 }
 
 export default client

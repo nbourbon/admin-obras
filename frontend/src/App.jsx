@@ -10,6 +10,8 @@ import PendingApprovals from './pages/PendingApprovals'
 import Users from './pages/Users'
 import Providers from './pages/Providers'
 import Categories from './pages/Categories'
+import Projects from './pages/Projects'
+import ProjectMembers from './pages/ProjectMembers'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -58,8 +60,10 @@ function App() {
         {/* Admin routes */}
         <Route path="pending-approvals" element={<AdminRoute><PendingApprovals /></AdminRoute>} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
+        <Route path="project-members" element={<AdminRoute><ProjectMembers /></AdminRoute>} />
         <Route path="providers" element={<AdminRoute><Providers /></AdminRoute>} />
         <Route path="categories" element={<AdminRoute><Categories /></AdminRoute>} />
+        <Route path="projects" element={<AdminRoute><Projects /></AdminRoute>} />
       </Route>
     </Routes>
   )

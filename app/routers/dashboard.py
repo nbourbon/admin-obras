@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
@@ -13,10 +13,12 @@ from app.schemas.dashboard import (
     ExpensePaymentStatus,
     ParticipantStatus,
 )
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, get_project_from_header
 from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync
 from app.services.expense_splitter import get_user_payment_summary
 
@@ -27,33 +29,36 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 async def get_dashboard_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Get overall dashboard summary with totals.
+    Get overall dashboard summary with totals for the current project.
     """
-    # Get totals from expenses
-    expense_totals = (
-        db.query(
-            func.sum(Expense.amount_usd).label("total_usd"),
-            func.sum(Expense.amount_ars).label("total_ars"),
-            func.count(Expense.id).label("count"),
-        )
-        .first()
+    # Build expense query
+    expense_query = db.query(
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("count"),
     )
+    if project:
+        expense_query = expense_query.filter(Expense.project_id == project.id)
+
+    expense_totals = expense_query.first()
 
     total_expenses_usd = Decimal(str(expense_totals.total_usd or 0))
     total_expenses_ars = Decimal(str(expense_totals.total_ars or 0))
     expenses_count = expense_totals.count or 0
 
-    # Get payment totals
-    paid_payments = (
-        db.query(
-            func.sum(ParticipantPayment.amount_due_usd).label("paid_usd"),
-            func.sum(ParticipantPayment.amount_due_ars).label("paid_ars"),
-        )
-        .filter(ParticipantPayment.is_paid == True)
-        .first()
-    )
+    # Get payment totals (filter by project through expense)
+    paid_query = db.query(
+        func.sum(ParticipantPayment.amount_due_usd).label("paid_usd"),
+        func.sum(ParticipantPayment.amount_due_ars).label("paid_ars"),
+    ).filter(ParticipantPayment.is_paid == True)
+
+    if project:
+        paid_query = paid_query.join(Expense).filter(Expense.project_id == project.id)
+
+    paid_payments = paid_query.first()
 
     total_paid_usd = Decimal(str(paid_payments.paid_usd or 0))
     total_paid_ars = Decimal(str(paid_payments.paid_ars or 0))
@@ -63,12 +68,23 @@ async def get_dashboard_summary(
     total_pending_ars = total_expenses_ars - total_paid_ars
 
     # Get participant count
-    participants_count = (
-        db.query(User)
-        .filter(User.is_active == True)
-        .filter(User.participation_percentage > 0)
-        .count()
-    )
+    if project:
+        participants_count = (
+            db.query(ProjectMember)
+            .join(User)
+            .filter(ProjectMember.project_id == project.id)
+            .filter(ProjectMember.is_active == True)
+            .filter(User.is_active == True)
+            .filter(ProjectMember.participation_percentage > 0)
+            .count()
+        )
+    else:
+        participants_count = (
+            db.query(User)
+            .filter(User.is_active == True)
+            .filter(User.participation_percentage > 0)
+            .count()
+        )
 
     # Get current exchange rate
     try:
@@ -93,19 +109,25 @@ async def get_dashboard_summary(
 async def get_expense_evolution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Get monthly expense evolution.
+    Get monthly expense evolution for the current project.
     """
     # Group expenses by year and month
+    query = db.query(
+        extract("year", Expense.expense_date).label("year"),
+        extract("month", Expense.expense_date).label("month"),
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("count"),
+    )
+
+    if project:
+        query = query.filter(Expense.project_id == project.id)
+
     monthly_data = (
-        db.query(
-            extract("year", Expense.expense_date).label("year"),
-            extract("month", Expense.expense_date).label("month"),
-            func.sum(Expense.amount_usd).label("total_usd"),
-            func.sum(Expense.amount_ars).label("total_ars"),
-            func.count(Expense.id).label("count"),
-        )
+        query
         .group_by(
             extract("year", Expense.expense_date),
             extract("month", Expense.expense_date),

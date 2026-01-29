@@ -1,14 +1,15 @@
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.expense import Expense, ExpenseStatus
 from app.models.payment import ParticipantPayment
+from app.models.project_member import ProjectMember
 
 
 def get_active_participants(db: Session) -> List[User]:
-    """Get all active participants with participation > 0."""
+    """Get all active participants with participation > 0 (legacy - use get_project_members for new code)."""
     return (
         db.query(User)
         .filter(User.is_active == True)
@@ -17,13 +18,30 @@ def get_active_participants(db: Session) -> List[User]:
     )
 
 
-def validate_participation_percentages(db: Session) -> tuple[bool, Decimal]:
+def get_project_members(db: Session, project_id: int) -> List[ProjectMember]:
+    """Get all active project members with participation > 0."""
+    return (
+        db.query(ProjectMember)
+        .join(User)
+        .filter(ProjectMember.project_id == project_id)
+        .filter(ProjectMember.is_active == True)
+        .filter(User.is_active == True)
+        .filter(ProjectMember.participation_percentage > 0)
+        .all()
+    )
+
+
+def validate_participation_percentages(db: Session, project_id: Optional[int] = None) -> tuple[bool, Decimal]:
     """
     Validate that all active participants' percentages sum to 100.
     Returns (is_valid, total_percentage)
     """
-    participants = get_active_participants(db)
-    total = sum(Decimal(str(p.participation_percentage)) for p in participants)
+    if project_id:
+        members = get_project_members(db, project_id)
+        total = sum(Decimal(str(m.participation_percentage)) for m in members)
+    else:
+        participants = get_active_participants(db)
+        total = sum(Decimal(str(p.participation_percentage)) for p in participants)
     return (total == Decimal("100"), total)
 
 
@@ -32,27 +50,47 @@ def create_participant_payments(
     expense: Expense,
 ) -> List[ParticipantPayment]:
     """
-    Create payment records for all active participants based on their
+    Create payment records for all active project members based on their
     participation percentage.
     """
-    participants = get_active_participants(db)
     payments = []
 
-    for participant in participants:
-        percentage = Decimal(str(participant.participation_percentage)) / Decimal("100")
+    # Use project members if expense has a project, otherwise fall back to global users
+    if expense.project_id:
+        members = get_project_members(db, expense.project_id)
+        for member in members:
+            percentage = Decimal(str(member.participation_percentage)) / Decimal("100")
 
-        amount_due_usd = (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01"))
-        amount_due_ars = (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01"))
+            amount_due_usd = (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01"))
+            amount_due_ars = (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01"))
 
-        payment = ParticipantPayment(
-            expense_id=expense.id,
-            user_id=participant.id,
-            amount_due_usd=amount_due_usd,
-            amount_due_ars=amount_due_ars,
-            is_paid=False,
-        )
-        db.add(payment)
-        payments.append(payment)
+            payment = ParticipantPayment(
+                expense_id=expense.id,
+                user_id=member.user_id,
+                amount_due_usd=amount_due_usd,
+                amount_due_ars=amount_due_ars,
+                is_paid=False,
+            )
+            db.add(payment)
+            payments.append(payment)
+    else:
+        # Legacy: use global participants
+        participants = get_active_participants(db)
+        for participant in participants:
+            percentage = Decimal(str(participant.participation_percentage)) / Decimal("100")
+
+            amount_due_usd = (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01"))
+            amount_due_ars = (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01"))
+
+            payment = ParticipantPayment(
+                expense_id=expense.id,
+                user_id=participant.id,
+                amount_due_usd=amount_due_usd,
+                amount_due_ars=amount_due_ars,
+                is_paid=False,
+            )
+            db.add(payment)
+            payments.append(payment)
 
     db.commit()
 

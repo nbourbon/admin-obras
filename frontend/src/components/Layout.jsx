@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useProject } from '../context/ProjectContext'
 import {
   LayoutDashboard,
   Receipt,
@@ -10,12 +11,15 @@ import {
   LogOut,
   Menu,
   X,
-  ClipboardCheck
+  ClipboardCheck,
+  Briefcase,
+  ChevronDown
 } from 'lucide-react'
 import { useState } from 'react'
 
 function Layout() {
   const { user, logout } = useAuth()
+  const { projects, currentProject, selectProject, loading: projectsLoading } = useProject()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -32,9 +36,10 @@ function Layout() {
 
   const adminItems = [
     { to: '/pending-approvals', icon: ClipboardCheck, label: 'Por Aprobar' },
-    { to: '/users', icon: Users, label: 'Participantes' },
+    { to: '/project-members', icon: Users, label: 'Participantes' },
     { to: '/providers', icon: Building2, label: 'Proveedores' },
     { to: '/categories', icon: FolderOpen, label: 'Categorias' },
+    { to: '/projects', icon: Briefcase, label: 'Proyectos' },
   ]
 
   const NavItem = ({ to, icon: Icon, label }) => (
@@ -71,14 +76,44 @@ function Layout() {
         } lg:translate-x-0 transition-transform duration-200 ease-in-out`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h1 className="text-xl font-bold text-blue-600">Construccion</h1>
-            <button
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X size={24} />
-            </button>
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between mb-3">
+              <h1 className="text-xl font-bold text-blue-600">Construccion</h1>
+              <button
+                className="lg:hidden"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Project Selector */}
+            {projects.length > 0 && (
+              <div className="relative">
+                <select
+                  value={currentProject?.id || ''}
+                  onChange={(e) => {
+                    selectProject(e.target.value)
+                    // Reload page to refresh data with new project
+                    window.location.reload()
+                  }}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+            )}
+            {projects.length === 0 && !projectsLoading && (
+              <p className="text-sm text-gray-500">Sin proyectos</p>
+            )}
           </div>
 
           <nav className="flex-1 p-4 space-y-1">

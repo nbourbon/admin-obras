@@ -1,12 +1,13 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.provider import ProviderCreate, ProviderUpdate, ProviderResponse
-from app.utils.dependencies import get_current_user, get_current_admin_user
+from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.provider import Provider
+from app.models.project import Project
 
 router = APIRouter(prefix="/providers", tags=["Providers"])
 
@@ -15,12 +16,15 @@ router = APIRouter(prefix="/providers", tags=["Providers"])
 async def list_providers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
     include_inactive: bool = False,
 ):
     """
-    List all providers.
+    List all providers for the current project.
     """
     query = db.query(Provider)
+    if project:
+        query = query.filter(Provider.project_id == project.id)
     if not include_inactive:
         query = query.filter(Provider.is_active == True)
     return query.order_by(Provider.name).all()
@@ -31,11 +35,15 @@ async def create_provider(
     provider_data: ProviderCreate,
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
     Create a new provider (admin only).
     """
-    provider = Provider(**provider_data.model_dump())
+    data = provider_data.model_dump()
+    if project:
+        data["project_id"] = project.id
+    provider = Provider(**data)
     db.add(provider)
     db.commit()
     db.refresh(provider)

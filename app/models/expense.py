@@ -37,6 +37,7 @@ class Expense(Base):
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
 
     # Invoice file
     invoice_file_path = Column(String(500), nullable=True)
@@ -54,3 +55,4 @@ class Expense(Base):
     category = relationship("Category", back_populates="expenses")
     created_by_user = relationship("User", back_populates="expenses_created")
     participant_payments = relationship("ParticipantPayment", back_populates="expense", cascade="all, delete-orphan")
+    project = relationship("Project", back_populates="expenses")
