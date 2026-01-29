@@ -4,14 +4,16 @@ A full-stack application for managing construction expenses among multiple parti
 
 ## Features
 
-- **Multi-participant expense tracking**: Assign ownership percentages to participants
-- **Automatic expense splitting**: When an expense is created, it's automatically split based on each participant's percentage
+- **Multi-project support**: Manage multiple construction projects, each with its own participants, providers, and categories
+- **Project-based participant management**: Each project has independent participation percentages
+- **Automatic expense splitting**: When an expense is created, it's automatically split based on each project member's percentage
 - **Dual currency support**: All amounts stored in both USD and ARS
 - **Blue dollar exchange rate**: Automatic fetching of the blue dollar rate from bluelytics.com.ar
-- **Payment tracking**: Each participant can mark their portion as paid
-- **File uploads**: Attach invoices to expenses and receipts to payments
-- **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution
-- **Role-based access**: Admin users can create expenses and manage participants
+- **Payment approval workflow**: Participants submit payments for admin approval
+- **File uploads**: Attach invoices to expenses and receipts to payments with preview support
+- **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution per project
+- **Category colors**: Assign colors to categories for visual identification
+- **Role-based access**: Admin users can create expenses, manage participants, and approve payments
 
 ## Tech Stack
 
@@ -103,9 +105,10 @@ Open http://localhost:3000 and log in with the admin credentials.
 
 ### 3. Set up the basics
 
-1. **Add Categories**: Go to Categories and add expense categories (e.g., Materials, Salaries, Taxes)
-2. **Add Providers**: Go to Providers and add your construction suppliers
-3. **Add Participants**: Go to Participants and add all construction participants with their ownership percentages (must sum to 100%)
+1. **Create a Project**: Go to Projects and create your first construction project
+2. **Add Participants**: Go to Participants and add users to the project with their ownership percentages (must sum to 100%)
+3. **Add Categories**: Go to Categories and add expense categories (e.g., Materials, Salaries, Taxes)
+4. **Add Providers**: Go to Providers and add your construction suppliers
 
 ### 4. Start tracking expenses
 
@@ -129,16 +132,29 @@ construccion-edificio/
 │   ├── config.py          # Configuration management
 │   ├── database.py        # Database connection
 │   ├── models/            # SQLAlchemy models
+│   │   ├── project.py     # Project model
+│   │   ├── project_member.py # Project membership
+│   │   ├── user.py        # User model
+│   │   ├── expense.py     # Expense model
+│   │   └── ...
 │   ├── schemas/           # Pydantic schemas
 │   ├── routers/           # API endpoints
+│   │   ├── projects.py    # Project management
+│   │   └── ...
 │   ├── services/          # Business logic
+│   │   └── expense_splitter.py # Expense splitting logic
 │   └── utils/             # Utilities and dependencies
 ├── frontend/              # Frontend (React + Vite)
 │   ├── src/
 │   │   ├── api/          # API client
 │   │   ├── context/      # React contexts
+│   │   │   ├── AuthContext.jsx
+│   │   │   └── ProjectContext.jsx
 │   │   ├── components/   # Reusable components
 │   │   └── pages/        # Page components
+│   │       ├── Projects.jsx
+│   │       ├── ProjectMembers.jsx
+│   │       └── ...
 │   ├── package.json
 │   └── vite.config.js
 ├── uploads/               # Uploaded files
@@ -151,6 +167,8 @@ construccion-edificio/
 ```
 
 ## API Endpoints
+
+Most endpoints require an `X-Project-ID` header to scope data to the current project.
 
 ### Authentication
 - `POST /auth/register-first-admin` - Create first admin (only works once)
@@ -178,6 +196,18 @@ construccion-edificio/
 - `GET /dashboard/summary` - Get overall statistics
 - `GET /dashboard/evolution` - Get monthly expense evolution
 - `GET /dashboard/my-status` - Get current user's payment status
+
+### Projects
+- `GET /projects` - List user's projects
+- `POST /projects` - Create project (admin only)
+- `GET /projects/{id}` - Get project with members
+- `PUT /projects/{id}` - Update project
+- `DELETE /projects/{id}` - Deactivate project
+- `GET /projects/{id}/members` - List project members
+- `POST /projects/{id}/members` - Add member to project
+- `PUT /projects/{id}/members/{user_id}` - Update member percentage
+- `DELETE /projects/{id}/members/{user_id}` - Remove member from project
+- `GET /projects/{id}/participation-validation` - Validate percentages sum to 100%
 
 ### Exchange Rate
 - `GET /exchange-rate/current` - Get current blue dollar rate
