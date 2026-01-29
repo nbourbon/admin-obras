@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJuaWNvQGthbWlwYXkuaW8iLCJleHAiOjE3Njk3OTA2MzJ9.fZLCb9fquc89SX0XspBsyf7TEMU774cCZ5qc9jStwL0\")"
+    ]
+  }
+}
