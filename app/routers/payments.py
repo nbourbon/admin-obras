@@ -1,7 +1,7 @@
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
 from app.services.expense_splitter import update_expense_status
-from app.services.file_storage import save_receipt, get_file_path
+from app.services.file_storage import save_receipt, get_file_path, get_file_url
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -445,6 +445,8 @@ async def download_receipt(
 ):
     """
     Download the receipt file for a payment.
+    For Cloudinary files, redirects to the URL.
+    For local files, returns the file directly.
     """
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
@@ -467,6 +469,12 @@ async def download_receipt(
             detail="No receipt uploaded for this payment",
         )
 
+    # Check if it's a Cloudinary URL
+    file_url = get_file_url(payment.receipt_file_path)
+    if file_url:
+        return RedirectResponse(url=file_url)
+
+    # Local file
     file_path = get_file_path(payment.receipt_file_path)
     if not file_path:
         raise HTTPException(

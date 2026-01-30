@@ -2,7 +2,7 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -16,7 +16,7 @@ from app.models.payment import ParticipantPayment
 from app.models.project import Project
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync, convert_currency, log_exchange_rate
 from app.services.expense_splitter import create_participant_payments, update_expense_status
-from app.services.file_storage import save_invoice, get_file_path
+from app.services.file_storage import save_invoice, get_file_path, get_file_url
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -343,6 +343,8 @@ async def download_invoice(
 ):
     """
     Download the invoice file for an expense.
+    For Cloudinary files, redirects to the URL.
+    For local files, returns the file directly.
     """
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
     if not expense:
@@ -357,6 +359,12 @@ async def download_invoice(
             detail="No invoice uploaded for this expense",
         )
 
+    # Check if it's a Cloudinary URL
+    file_url = get_file_url(expense.invoice_file_path)
+    if file_url:
+        return RedirectResponse(url=file_url)
+
+    # Local file
     file_path = get_file_path(expense.invoice_file_path)
     if not file_path:
         raise HTTPException(

@@ -22,3 +22,9 @@ httpx==0.26.0
 # File handling
 python-magic==0.4.27
 aiofiles==23.2.1
+
+# PostgreSQL support
+psycopg2-binary==2.9.9
+
+# Cloud file storage
+cloudinary==1.36.0
