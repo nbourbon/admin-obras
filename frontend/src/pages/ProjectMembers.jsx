@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { projectsAPI, usersAPI } from '../api/client'
+import { projectsAPI, usersAPI, authAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Users as UsersIcon, Plus, Edit2, Trash2, X, AlertCircle, UserPlus } from 'lucide-react'
 
@@ -10,14 +10,24 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
   const [loading, setLoading] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [error, setError] = useState('')
+  const [mode, setMode] = useState('select') // 'select' or 'create'
+  const [newUser, setNewUser] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    is_admin: false,
+  })
 
   useEffect(() => {
     if (isOpen) {
       loadUsers()
+      setMode('select')
+      setNewUser({ full_name: '', email: '', password: '', is_admin: false })
     }
   }, [isOpen])
 
   const loadUsers = async () => {
+    setLoadingUsers(true)
     try {
       const response = await usersAPI.list(false)
       // Filter out users who are already members
@@ -53,6 +63,36 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
     }
   }
 
+  const handleCreateAndAdd = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      // First create the user
+      const userResponse = await authAPI.register({
+        ...newUser,
+        participation_percentage: 0, // Will be set via project membership
+      })
+      const newUserId = userResponse.data.id
+
+      // Then add to project
+      await projectsAPI.addMember(projectId, {
+        user_id: newUserId,
+        participation_percentage: parseFloat(percentage) || 0,
+      })
+
+      onSuccess()
+      onClose()
+      setNewUser({ full_name: '', email: '', password: '', is_admin: false })
+      setPercentage('')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear usuario')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -75,29 +115,132 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
-        ) : users.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
-            No hay usuarios disponibles para agregar.
-          </p>
+        ) : mode === 'select' ? (
+          <>
+            {users.length > 0 ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Usuario existente
+                  </label>
+                  <select
+                    required
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Seleccionar usuario</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Porcentaje de Participacion (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    required
+                    value={percentage}
+                    onChange={(e) => setPercentage(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {loading ? 'Agregando...' : 'Agregar'}
+                  </button>
+                </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setMode('create')}
+                    className="w-full text-center text-blue-600 hover:text-blue-700 text-sm"
+                  >
+                    O crear un usuario nuevo
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-gray-500 text-center py-4">
+                  No hay usuarios disponibles para agregar.
+                </p>
+                <button
+                  onClick={() => setMode('create')}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Crear nuevo usuario
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleCreateAndAdd} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Usuario
+                Nombre Completo
               </label>
-              <select
+              <input
+                type="text"
                 required
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
+                value={newUser.full_name}
+                onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Seleccionar usuario</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name} ({u.email})
-                  </option>
-                ))}
-              </select>
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Contrasena
+              </label>
+              <input
+                type="password"
+                required
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
             <div>
@@ -117,20 +260,33 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
               />
             </div>
 
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="new_is_admin"
+                checked={newUser.is_admin}
+                onChange={(e) => setNewUser({ ...newUser, is_admin: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="new_is_admin" className="text-sm text-gray-700">
+                Es administrador
+              </label>
+            </div>
+
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => setMode('select')}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
-                Cancelar
+                Volver
               </button>
               <button
                 type="submit"
                 disabled={loading}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? 'Agregando...' : 'Agregar'}
+                {loading ? 'Creando...' : 'Crear y Agregar'}
               </button>
             </div>
           </form>
@@ -307,17 +463,17 @@ function ProjectMembers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Participantes</h1>
           <p className="text-gray-500">{currentProject.name}</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
         >
           <UserPlus size={20} />
-          Agregar Participante
+          <span>Agregar</span>
         </button>
       </div>
 
