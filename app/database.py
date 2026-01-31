@@ -6,11 +6,16 @@ settings = get_settings()
 
 # Create engine - for SQLite we need check_same_thread=False
 connect_args = {}
-if settings.database_url.startswith("sqlite"):
+database_url = settings.database_url
+
+if database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+elif database_url.startswith("postgresql://"):
+    # Use psycopg3 driver explicitly
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 engine = create_engine(
-    settings.database_url,
+    database_url,
     connect_args=connect_args,
     echo=settings.debug,
 )

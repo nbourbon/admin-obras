@@ -24,7 +24,7 @@ python-magic==0.4.27
 aiofiles==23.2.1
 
 # PostgreSQL support
-psycopg2-binary==2.9.9
+psycopg[binary]==3.2.4
 
 # Cloud file storage
 cloudinary==1.42.1
