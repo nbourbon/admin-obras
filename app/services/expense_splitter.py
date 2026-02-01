@@ -144,13 +144,14 @@ def get_user_pending_payments(db: Session, user_id: int) -> List[ParticipantPaym
     )
 
 
-def get_user_payment_summary(db: Session, user_id: int) -> dict:
-    """Get payment summary for a user."""
-    payments = (
-        db.query(ParticipantPayment)
-        .filter(ParticipantPayment.user_id == user_id)
-        .all()
-    )
+def get_user_payment_summary(db: Session, user_id: int, project_id: Optional[int] = None) -> dict:
+    """Get payment summary for a user, optionally filtered by project."""
+    query = db.query(ParticipantPayment).filter(ParticipantPayment.user_id == user_id)
+
+    if project_id:
+        query = query.join(Expense).filter(Expense.project_id == project_id)
+
+    payments = query.all()
 
     total_due_usd = sum(Decimal(str(p.amount_due_usd)) for p in payments)
     total_due_ars = sum(Decimal(str(p.amount_due_ars)) for p in payments)

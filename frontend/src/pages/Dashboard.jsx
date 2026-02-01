@@ -2,14 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { dashboardAPI, exchangeRateAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import {
-  DollarSign,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  ArrowRight
-} from 'lucide-react'
+import { AlertCircle, ArrowRight } from 'lucide-react'
 import {
   LineChart,
   Line,
@@ -28,26 +21,26 @@ function formatCurrency(amount, currency = 'USD') {
   }).format(amount)
 }
 
-function StatCard({ title, value, subtitle, icon: Icon, color = 'blue' }) {
+function StatCard({ title, value, subtitle, color = 'blue' }) {
   const colors = {
-    blue: 'bg-blue-100 text-blue-600',
-    green: 'bg-green-100 text-green-600',
-    yellow: 'bg-yellow-100 text-yellow-600',
-    red: 'bg-red-100 text-red-600',
+    blue: 'border-l-blue-500 bg-blue-50',
+    green: 'border-l-green-500 bg-green-50',
+    yellow: 'border-l-yellow-500 bg-yellow-50',
+    red: 'border-l-red-500 bg-red-50',
+  }
+
+  const textColors = {
+    blue: 'text-blue-700',
+    green: 'text-green-700',
+    yellow: 'text-yellow-700',
+    red: 'text-red-700',
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{title}</p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
-          {subtitle && <p className="text-sm text-gray-400 mt-1">{subtitle}</p>}
-        </div>
-        <div className={`p-3 rounded-full ${colors[color]}`}>
-          <Icon size={24} />
-        </div>
-      </div>
+    <div className={`rounded-lg shadow-sm p-4 border-l-4 ${colors[color]}`}>
+      <p className="text-xs text-gray-500 uppercase tracking-wide">{title}</p>
+      <p className={`text-xl font-bold mt-1 ${textColors[color]}`}>{value}</p>
+      {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
     </div>
   )
 }
@@ -143,30 +136,26 @@ function Dashboard() {
       )}
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          title="Total Gastos (USD)"
+          title="Total Gastos"
           value={formatCurrency(summary?.total_expenses_usd || 0)}
           subtitle={`${summary?.expenses_count || 0} gastos`}
-          icon={DollarSign}
           color="blue"
         />
         <StatCard
-          title="Total Pagado (USD)"
+          title="Pagado"
           value={formatCurrency(summary?.total_paid_usd || 0)}
-          icon={CheckCircle}
           color="green"
         />
         <StatCard
-          title="Pendiente (USD)"
+          title="Pendiente"
           value={formatCurrency(summary?.total_pending_usd || 0)}
-          icon={Clock}
           color="yellow"
         />
         <StatCard
           title="Participantes"
           value={summary?.participants_count || 0}
-          icon={TrendingUp}
           color="blue"
         />
       </div>

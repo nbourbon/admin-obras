@@ -168,16 +168,30 @@ async def get_expense_evolution(
 async def get_my_payment_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Get current user's payment status summary.
+    Get current user's payment status summary for the current project.
     """
-    summary = get_user_payment_summary(db, current_user.id)
+    project_id = project.id if project else None
+    summary = get_user_payment_summary(db, current_user.id, project_id)
+
+    # Get participation percentage from project member if project selected
+    participation_percentage = Decimal(str(current_user.participation_percentage))
+    if project:
+        member = (
+            db.query(ProjectMember)
+            .filter(ProjectMember.project_id == project.id)
+            .filter(ProjectMember.user_id == current_user.id)
+            .first()
+        )
+        if member:
+            participation_percentage = Decimal(str(member.participation_percentage))
 
     return UserPaymentStatus(
         user_id=current_user.id,
         user_name=current_user.full_name,
-        participation_percentage=Decimal(str(current_user.participation_percentage)),
+        participation_percentage=participation_percentage,
         total_due_usd=summary["total_due_usd"],
         total_due_ars=summary["total_due_ars"],
         total_paid_usd=summary["total_paid_usd"],

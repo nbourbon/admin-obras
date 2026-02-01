@@ -46,18 +46,16 @@ export function ProjectProvider({ children }) {
         // No projects, show selector to create one
         setShowProjectSelector(true)
         setCurrentProject(null)
+      } else if (!savedProjectId) {
+        // First time login or no saved project - always show selector
+        setShowProjectSelector(true)
+        setCurrentProject(projectsList[0])
       } else if (preference === 'selector') {
         // User prefers to always see selector
         setShowProjectSelector(true)
-        // Still set a current project for when they close selector
-        if (savedProjectId) {
-          const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
-          if (savedProject) {
-            setCurrentProject(savedProject)
-          } else {
-            setCurrentProject(projectsList[0])
-            localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
-          }
+        const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
+        if (savedProject) {
+          setCurrentProject(savedProject)
         } else {
           setCurrentProject(projectsList[0])
           localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
@@ -65,14 +63,9 @@ export function ProjectProvider({ children }) {
       } else {
         // 'last' preference - auto-select last project
         setShowProjectSelector(false)
-        if (savedProjectId) {
-          const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
-          if (savedProject) {
-            setCurrentProject(savedProject)
-          } else {
-            setCurrentProject(projectsList[0])
-            localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
-          }
+        const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
+        if (savedProject) {
+          setCurrentProject(savedProject)
         } else {
           setCurrentProject(projectsList[0])
           localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())

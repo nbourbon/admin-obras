@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.schemas.payment import PaymentResponse, PaymentMarkPaid, PaymentWithExpense, ExpenseInfo, UserInfo, PaymentApproval
-from app.utils.dependencies import get_current_user, get_current_admin_user
+from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
+from app.models.project import Project
 from app.services.expense_splitter import update_expense_status
 from app.services.file_storage import save_receipt, get_file_path, get_file_url
 
@@ -20,16 +21,21 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 async def get_my_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
     pending_only: bool = False,
 ):
     """
-    Get current user's payments with expense details.
+    Get current user's payments with expense details for the current project.
     """
     query = (
         db.query(ParticipantPayment)
         .filter(ParticipantPayment.user_id == current_user.id)
         .options(joinedload(ParticipantPayment.expense))
     )
+
+    # Filter by project if specified
+    if project:
+        query = query.join(Expense).filter(Expense.project_id == project.id)
 
     if pending_only:
         query = query.filter(ParticipantPayment.is_paid == False)
@@ -78,20 +84,25 @@ async def get_my_payments(
 async def get_pending_approval_payments(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Get all payments pending admin approval (admin only).
+    Get all payments pending admin approval for the current project (admin only).
     """
-    payments = (
+    query = (
         db.query(ParticipantPayment)
         .filter(ParticipantPayment.is_pending_approval == True)
         .options(
             joinedload(ParticipantPayment.expense),
             joinedload(ParticipantPayment.user)
         )
-        .order_by(ParticipantPayment.submitted_at.desc())
-        .all()
     )
+
+    # Filter by project if specified
+    if project:
+        query = query.join(Expense).filter(Expense.project_id == project.id)
+
+    payments = query.order_by(ParticipantPayment.submitted_at.desc()).all()
 
     result = []
     for payment in payments:
