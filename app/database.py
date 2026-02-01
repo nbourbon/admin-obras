@@ -43,5 +43,34 @@ def init_db():
         Expense,
         ParticipantPayment,
         ExchangeRateLog,
+        Project,
+        ProjectMember,
+        Note,
+        NoteParticipant,
+        NoteComment,
+        VoteOption,
+        UserVote,
     )
     Base.metadata.create_all(bind=engine)
+
+    # Run migrations for new columns on existing tables
+    _run_migrations()
+
+
+def _run_migrations():
+    """Add new columns to existing tables if they don't exist."""
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(engine)
+
+    # Migration: Add is_individual to projects table
+    if 'projects' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('projects')]
+        if 'is_individual' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE projects ADD COLUMN is_individual BOOLEAN DEFAULT 0'))
+                    conn.commit()
+                    print("Migration: Added is_individual column to projects table")
+                except Exception as e:
+                    print(f"Migration warning (is_individual): {e}")
