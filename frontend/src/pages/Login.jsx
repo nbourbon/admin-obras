@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Building2 } from 'lucide-react'
 
@@ -10,6 +10,8 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const successMessage = location.state?.message
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -34,14 +36,20 @@ function Login() {
             <Building2 className="h-10 w-10 text-blue-600" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Construccion
+            Tus Proyectos
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Gestion de gastos del edificio
+            Gestion de gastos compartidos
           </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+              {successMessage}
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -91,6 +99,13 @@ function Login() {
           >
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
+
+          <p className="text-center text-sm text-gray-600">
+            No tenes cuenta?{' '}
+            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+              Crear cuenta
+            </Link>
+          </p>
         </form>
       </div>
     </div>

@@ -102,3 +102,9 @@ npm run dev
 - `/users` - Admin: manage participants and percentages
 - `/providers` - Admin: manage providers
 - `/categories` - Admin: manage categories
+- `/register` - Self-registration for new admin users
+- `/projects` - Admin: manage projects
+
+## Workflow Preferences
+- **Always offer commit + push**: After completing any task, always offer to commit and push the changes so Vercel can deploy automatically.
+- **Language**: Communicate in Spanish with the user.

@@ -316,12 +316,12 @@ function MyPayments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Mis Pagos</h1>
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-yellow-50 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <Clock className="text-yellow-600" size={24} />

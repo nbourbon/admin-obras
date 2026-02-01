@@ -65,6 +65,33 @@ async def register_first_admin(
     return user
 
 
+@router.post("/self-register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def self_register(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Self-register as a new admin user (no authentication required).
+    """
+    # Check if email already exists
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+
+    user = create_user(
+        db=db,
+        email=user_data.email,
+        password=user_data.password,
+        full_name=user_data.full_name,
+        participation_percentage=0,  # No participation by default
+        is_admin=True,  # All self-registered users are admins
+    )
+    return user
+
+
 @router.post("/login", response_model=Token)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),

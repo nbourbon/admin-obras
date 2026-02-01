@@ -78,7 +78,7 @@ function Layout() {
         <div className="h-full flex flex-col">
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-3">
-              <h1 className="text-xl font-bold text-blue-600">Construccion</h1>
+              <h1 className="text-xl font-bold text-blue-600">Tus Proyectos</h1>
               <button
                 className="lg:hidden"
                 onClick={() => setSidebarOpen(false)}
@@ -163,7 +163,7 @@ function Layout() {
           <button onClick={() => setSidebarOpen(true)}>
             <Menu size={24} />
           </button>
-          <h1 className="text-lg font-bold text-blue-600">Construccion</h1>
+          <h1 className="text-lg font-bold text-blue-600">{currentProject?.name || 'Tus Proyectos'}</h1>
         </header>
 
         {/* Page content */}

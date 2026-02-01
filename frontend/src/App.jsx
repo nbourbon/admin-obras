@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { useProject } from './context/ProjectContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Expenses from './pages/Expenses'
 import ExpenseDetail from './pages/ExpenseDetail'
@@ -12,11 +14,13 @@ import Providers from './pages/Providers'
 import Categories from './pages/Categories'
 import Projects from './pages/Projects'
 import ProjectMembers from './pages/ProjectMembers'
+import ProjectSelector from './pages/ProjectSelector'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
+  const { showProjectSelector, loading: projectsLoading } = useProject()
 
-  if (loading) {
+  if (loading || projectsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -26,6 +30,10 @@ function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (showProjectSelector) {
+    return <ProjectSelector />
   }
 
   return children
@@ -45,6 +53,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       <Route path="/" element={
         <ProtectedRoute>

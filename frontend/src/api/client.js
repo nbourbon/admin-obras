@@ -45,6 +45,7 @@ export const authAPI = {
   me: () => client.get('/auth/me'),
   registerFirstAdmin: (data) => client.post('/auth/register-first-admin', data),
   register: (data) => client.post('/auth/register', data),
+  selfRegister: (data) => client.post('/auth/self-register', data),
 }
 
 // Users API

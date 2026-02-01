@@ -4,11 +4,15 @@ import { useAuth } from './AuthContext'
 
 const ProjectContext = createContext(null)
 
+const PREFERENCE_KEY = 'projectSelectionPreference'
+const LAST_PROJECT_KEY = 'currentProjectId'
+
 export function ProjectProvider({ children }) {
   const { user } = useAuth()
   const [projects, setProjects] = useState([])
   const [currentProject, setCurrentProject] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showProjectSelector, setShowProjectSelector] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -17,8 +21,17 @@ export function ProjectProvider({ children }) {
       setProjects([])
       setCurrentProject(null)
       setLoading(false)
+      setShowProjectSelector(false)
     }
   }, [user])
+
+  const getPreference = () => {
+    return localStorage.getItem(PREFERENCE_KEY) || 'last'
+  }
+
+  const setPreference = (pref) => {
+    localStorage.setItem(PREFERENCE_KEY, pref)
+  }
 
   const loadProjects = async () => {
     try {
@@ -26,21 +39,44 @@ export function ProjectProvider({ children }) {
       const projectsList = response.data
       setProjects(projectsList)
 
-      // Try to restore last selected project from localStorage
-      const savedProjectId = localStorage.getItem('currentProjectId')
-      if (savedProjectId) {
-        const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
-        if (savedProject) {
-          setCurrentProject(savedProject)
-        } else if (projectsList.length > 0) {
-          // Saved project not found, use first available
+      const preference = getPreference()
+      const savedProjectId = localStorage.getItem(LAST_PROJECT_KEY)
+
+      if (projectsList.length === 0) {
+        // No projects, show selector to create one
+        setShowProjectSelector(true)
+        setCurrentProject(null)
+      } else if (preference === 'selector') {
+        // User prefers to always see selector
+        setShowProjectSelector(true)
+        // Still set a current project for when they close selector
+        if (savedProjectId) {
+          const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
+          if (savedProject) {
+            setCurrentProject(savedProject)
+          } else {
+            setCurrentProject(projectsList[0])
+            localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
+          }
+        } else {
           setCurrentProject(projectsList[0])
-          localStorage.setItem('currentProjectId', projectsList[0].id.toString())
+          localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
         }
-      } else if (projectsList.length > 0) {
-        // No saved project, use first available
-        setCurrentProject(projectsList[0])
-        localStorage.setItem('currentProjectId', projectsList[0].id.toString())
+      } else {
+        // 'last' preference - auto-select last project
+        setShowProjectSelector(false)
+        if (savedProjectId) {
+          const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
+          if (savedProject) {
+            setCurrentProject(savedProject)
+          } else {
+            setCurrentProject(projectsList[0])
+            localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
+          }
+        } else {
+          setCurrentProject(projectsList[0])
+          localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
+        }
       }
     } catch (err) {
       console.error('Error loading projects:', err)
@@ -53,7 +89,18 @@ export function ProjectProvider({ children }) {
     const project = projects.find(p => p.id === parseInt(projectId))
     if (project) {
       setCurrentProject(project)
-      localStorage.setItem('currentProjectId', project.id.toString())
+      localStorage.setItem(LAST_PROJECT_KEY, project.id.toString())
+    }
+  }
+
+  const openProjectSelector = () => {
+    setShowProjectSelector(true)
+  }
+
+  const closeProjectSelector = () => {
+    // Only close if we have a project selected
+    if (currentProject) {
+      setShowProjectSelector(false)
     }
   }
 
@@ -69,6 +116,11 @@ export function ProjectProvider({ children }) {
         loading,
         selectProject,
         refreshProjects,
+        showProjectSelector,
+        openProjectSelector,
+        closeProjectSelector,
+        getPreference,
+        setPreference,
       }}
     >
       {children}
