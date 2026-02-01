@@ -259,15 +259,34 @@ async def submit_payment(
             detail="Payment is already approved and paid",
         )
 
-    # Mark as pending approval
+    # Check if this is an individual project (auto-approve)
+    is_individual = False
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    if expense and expense.project_id:
+        project = db.query(Project).filter(Project.id == expense.project_id).first()
+        is_individual = project.is_individual if project else False
+
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
-    payment.is_pending_approval = True
     payment.submitted_at = datetime.utcnow()
     payment.rejection_reason = None  # Clear any previous rejection
 
+    if is_individual:
+        # Auto-approve for individual projects
+        payment.is_paid = True
+        payment.is_pending_approval = False
+        payment.paid_at = datetime.utcnow()
+        payment.approved_at = datetime.utcnow()
+    else:
+        # Mark as pending approval for multi-participant projects
+        payment.is_pending_approval = True
+
     db.commit()
     db.refresh(payment)
+
+    # Update expense status
+    from app.services.expense_splitter import update_expense_status
+    update_expense_status(db, payment.expense_id)
 
     return payment
 

@@ -53,15 +53,10 @@ def create_participant_payments(
     """
     Create payment records for all active project members based on their
     participation percentage.
-    For individual projects, payments are auto-approved.
+    Payments are always created as pending - for individual projects,
+    auto-approval happens when user submits payment.
     """
     payments = []
-
-    # Check if this is an individual project
-    is_individual = False
-    if expense.project_id:
-        project = db.query(Project).filter(Project.id == expense.project_id).first()
-        is_individual = project.is_individual if project else False
 
     # Use project members if expense has a project, otherwise fall back to global users
     if expense.project_id:
@@ -77,7 +72,7 @@ def create_participant_payments(
                 user_id=member.user_id,
                 amount_due_usd=amount_due_usd,
                 amount_due_ars=amount_due_ars,
-                is_paid=is_individual,  # Auto-approve for individual projects
+                is_paid=False,
             )
             db.add(payment)
             payments.append(payment)
@@ -101,11 +96,6 @@ def create_participant_payments(
             payments.append(payment)
 
     db.commit()
-
-    # For individual projects, update expense status to paid immediately
-    if is_individual and expense.project_id:
-        expense.status = ExpenseStatus.PAID
-        db.commit()
 
     # Refresh all payments to get IDs
     for payment in payments:

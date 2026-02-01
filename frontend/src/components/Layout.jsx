@@ -34,8 +34,7 @@ function Layout() {
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/expenses', icon: Receipt, label: 'Gastos' },
-    // Hide "Mis Pagos" for individual projects (expenses = payments)
-    ...(!isIndividual ? [{ to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' }] : []),
+    { to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' },
     { to: '/notes', icon: FileText, label: 'Notas' },
   ]
 
