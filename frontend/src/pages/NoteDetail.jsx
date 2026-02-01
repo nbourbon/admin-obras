@@ -239,8 +239,8 @@ function NoteDetail() {
       )}
 
       {/* Content */}
-      {isEditing ? (
-        <div className="bg-white rounded-xl shadow-sm p-4">
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        {isEditing ? (
           <ReactQuill
             theme="snow"
             value={editContent}
@@ -248,12 +248,51 @@ function NoteDetail() {
             modules={quillModules}
             className="bg-white [&_.ql-editor]:min-h-[150px]"
           />
+        ) : (
+          <div
+            className="prose prose-sm max-w-none text-gray-700"
+            dangerouslySetInnerHTML={{ __html: note.content || '<p class="text-gray-500 italic">Sin contenido</p>' }}
+          />
+        )}
+      </div>
+
+      {/* Edit/Delete actions */}
+      {canEdit && !isEditing && (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <Edit2 size={18} />
+            <span>Editar</span>
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+          >
+            <Trash2 size={18} />
+            <span>Eliminar</span>
+          </button>
         </div>
-      ) : (
-        <div
-          className="prose prose-sm max-w-none text-gray-700"
-          dangerouslySetInnerHTML={{ __html: note.content || '<p class="text-gray-500 italic">Sin contenido</p>' }}
-        />
+      )}
+
+      {/* Save/Cancel when editing */}
+      {isEditing && (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setIsEditing(false)}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
       )}
 
       {/* Voting Section */}
@@ -411,45 +450,6 @@ function NoteDetail() {
           </button>
         </form>
       </div>
-
-      {/* Edit/Delete actions at the bottom */}
-      {canEdit && !isEditing && (
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            <Edit2 size={18} />
-            <span>Editar</span>
-          </button>
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg"
-          >
-            <Trash2 size={18} />
-            <span>Eliminar</span>
-          </button>
-        </div>
-      )}
-
-      {/* Save/Cancel when editing */}
-      {isEditing && (
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            onClick={() => setIsEditing(false)}
-            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSaveEdit}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      )}
     </div>
   )
 }
