@@ -10,7 +10,7 @@ Full-stack application for managing construction expenses among multiple partici
 - **Database**: SQLite with SQLAlchemy ORM
 - **Auth**: JWT tokens (python-jose + passlib/bcrypt)
 - **Exchange Rate**: Blue dollar from bluelytics.com.ar API
-- **File Storage**: Local filesystem (`/uploads`)
+- **File Storage**: Cloudinary (production) / Local filesystem (development)
 
 ### Frontend (`/frontend`)
 - **Framework**: React 18 + Vite
@@ -105,6 +105,17 @@ npm run dev
 - `/register` - Self-registration for new admin users
 - `/projects` - Admin: manage projects
 
+## Deployment Setup
+- **Frontend**: Vercel (auto-deploys on push to main)
+- **Backend**: Render (may need manual redeploy or auto-deploys on push)
+- **File Storage**: Cloudinary
+- **Database**: SQLite on Render (or PostgreSQL if configured)
+
+After pushing changes:
+- Frontend changes → Vercel deploys automatically
+- Backend changes → Check Render for deployment status, redeploy if needed
+
 ## Workflow Preferences
-- **Always offer commit + push**: After completing any task, always offer to commit and push the changes so Vercel can deploy automatically.
+- **Always offer commit + push**: After completing any task, always offer to commit and push the changes so deployment can happen.
 - **Language**: Communicate in Spanish with the user.
+- **Keep CLAUDE.md updated**: Always update this file with relevant project information, architectural decisions, and setup changes.
