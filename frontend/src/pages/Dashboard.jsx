@@ -115,11 +115,8 @@ function Dashboard() {
       {/* Summary Stats - compact inline */}
       <div className="bg-white rounded-xl shadow-sm divide-y">
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-gray-600">Total Gastos</span>
-          <div className="text-right">
-            <span className="text-blue-700 font-bold">{formatCurrency(summary?.total_expenses_usd || 0)}</span>
-            <span className="text-gray-400 text-sm ml-2">({summary?.expenses_count || 0})</span>
-          </div>
+          <span className="text-gray-600">Total Gastos ({summary?.expenses_count || 0})</span>
+          <span className="text-blue-700 font-bold">{formatCurrency(summary?.total_expenses_usd || 0)}</span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Pagado</span>

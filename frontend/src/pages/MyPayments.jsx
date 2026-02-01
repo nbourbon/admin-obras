@@ -323,15 +323,15 @@ function MyPayments() {
       {/* Summary - compact inline style */}
       <div className="bg-white rounded-xl shadow-sm divide-y">
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-yellow-600 font-medium">Pendiente</span>
+          <span className="text-yellow-600 font-medium">Pendiente ({pendingPayments.length})</span>
           <span className="text-yellow-700 font-bold">{formatCurrency(totalPending)}</span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-blue-600 font-medium">En Revision</span>
+          <span className="text-blue-600 font-medium">En Revision ({pendingApprovalPayments.length})</span>
           <span className="text-blue-700 font-bold">{formatCurrency(totalPendingApproval)}</span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-green-600 font-medium">Pagado</span>
+          <span className="text-green-600 font-medium">Pagado ({paidPayments.length})</span>
           <span className="text-green-700 font-bold">{formatCurrency(totalPaid)}</span>
         </div>
       </div>
