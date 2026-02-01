@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { dashboardAPI, exchangeRateAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useProject } from '../context/ProjectContext'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 import {
   LineChart,
@@ -24,6 +25,8 @@ function formatCurrency(amount, currency = 'USD') {
 
 function Dashboard() {
   const { user } = useAuth()
+  const { currentProject } = useProject()
+  const isIndividual = currentProject?.is_individual
   const [summary, setSummary] = useState(null)
   const [myStatus, setMyStatus] = useState(null)
   const [evolution, setEvolution] = useState(null)
@@ -91,8 +94,8 @@ function Dashboard() {
         )}
       </div>
 
-      {/* Personal Status Alert */}
-      {myStatus && parseFloat(myStatus.pending_usd) > 0 && (
+      {/* Personal Status Alert - hide for individual projects */}
+      {!isIndividual && myStatus && parseFloat(myStatus.pending_usd) > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-4">
           <AlertCircle className="text-yellow-600 flex-shrink-0" size={24} />
           <div className="flex-1">
@@ -132,8 +135,8 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* My Personal Status - compact */}
-      {myStatus && (
+      {/* My Personal Status - compact (hide for individual projects) */}
+      {!isIndividual && myStatus && (
         <div className="bg-white rounded-xl shadow-sm">
           <div className="px-4 py-3 border-b bg-gray-50 rounded-t-xl">
             <h2 className="font-semibold text-gray-900">Mi Estado <span className="text-blue-600">({myStatus.participation_percentage}%)</span></h2>
