@@ -21,29 +21,6 @@ function formatCurrency(amount, currency = 'USD') {
   }).format(amount)
 }
 
-function StatCard({ title, value, subtitle, color = 'blue' }) {
-  const colors = {
-    blue: 'border-l-blue-500 bg-blue-50',
-    green: 'border-l-green-500 bg-green-50',
-    yellow: 'border-l-yellow-500 bg-yellow-50',
-    red: 'border-l-red-500 bg-red-50',
-  }
-
-  const textColors = {
-    blue: 'text-blue-700',
-    green: 'text-green-700',
-    yellow: 'text-yellow-700',
-    red: 'text-red-700',
-  }
-
-  return (
-    <div className={`rounded-lg shadow-sm p-4 border-l-4 ${colors[color]}`}>
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{title}</p>
-      <p className={`text-xl font-bold mt-1 ${textColors[color]}`}>{value}</p>
-      {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
-    </div>
-  )
-}
 
 function Dashboard() {
   const { user } = useAuth()
@@ -135,62 +112,47 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          title="Total Gastos"
-          value={formatCurrency(summary?.total_expenses_usd || 0)}
-          subtitle={`${summary?.expenses_count || 0} gastos`}
-          color="blue"
-        />
-        <StatCard
-          title="Pagado"
-          value={formatCurrency(summary?.total_paid_usd || 0)}
-          color="green"
-        />
-        <StatCard
-          title="Pendiente"
-          value={formatCurrency(summary?.total_pending_usd || 0)}
-          color="yellow"
-        />
-        <StatCard
-          title="Participantes"
-          value={summary?.participants_count || 0}
-          color="blue"
-        />
+      {/* Summary Stats - compact inline */}
+      <div className="bg-white rounded-xl shadow-sm divide-y">
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-gray-600">Total Gastos</span>
+          <div className="text-right">
+            <span className="text-blue-700 font-bold">{formatCurrency(summary?.total_expenses_usd || 0)}</span>
+            <span className="text-gray-400 text-sm ml-2">({summary?.expenses_count || 0})</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-gray-600">Pagado</span>
+          <span className="text-green-700 font-bold">{formatCurrency(summary?.total_paid_usd || 0)}</span>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-gray-600">Pendiente</span>
+          <span className="text-yellow-700 font-bold">{formatCurrency(summary?.total_pending_usd || 0)}</span>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-gray-600">Participantes</span>
+          <span className="text-blue-700 font-bold">{summary?.participants_count || 0}</span>
+        </div>
       </div>
 
-      {/* My Personal Status */}
+      {/* My Personal Status - compact */}
       {myStatus && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4">Mi Estado ({myStatus.participation_percentage}%)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">Total que me corresponde</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(myStatus.total_due_usd)}
-              </p>
-              <p className="text-sm text-gray-400">
-                {formatCurrency(myStatus.total_due_ars, 'ARS')}
-              </p>
+        <div className="bg-white rounded-xl shadow-sm">
+          <div className="px-4 py-3 border-b bg-gray-50 rounded-t-xl">
+            <h2 className="font-semibold text-gray-900">Mi Estado <span className="text-blue-600">({myStatus.participation_percentage}%)</span></h2>
+          </div>
+          <div className="divide-y">
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-gray-600">Me corresponde</span>
+              <span className="font-bold text-gray-900">{formatCurrency(myStatus.total_due_usd)}</span>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-sm text-gray-500">Ya pague</p>
-              <p className="text-xl font-bold text-green-600">
-                {formatCurrency(myStatus.total_paid_usd)}
-              </p>
-              <p className="text-sm text-gray-400">
-                {formatCurrency(myStatus.total_paid_ars, 'ARS')}
-              </p>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-gray-600">Ya pague</span>
+              <span className="font-bold text-green-600">{formatCurrency(myStatus.total_paid_usd)}</span>
             </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
-              <p className="text-sm text-gray-500">Me falta pagar</p>
-              <p className="text-xl font-bold text-yellow-600">
-                {formatCurrency(myStatus.pending_usd)}
-              </p>
-              <p className="text-sm text-gray-400">
-                {formatCurrency(myStatus.pending_ars, 'ARS')}
-              </p>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-gray-600">Me falta</span>
+              <span className="font-bold text-yellow-600">{formatCurrency(myStatus.pending_usd)}</span>
             </div>
           </div>
         </div>

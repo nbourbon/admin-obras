@@ -320,40 +320,19 @@ function MyPayments() {
         <h1 className="text-2xl font-bold text-gray-900">Mis Pagos</h1>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-yellow-50 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <Clock className="text-yellow-600" size={24} />
-            <div>
-              <p className="text-sm text-yellow-600">Pendiente</p>
-              <p className="text-xl font-bold text-yellow-700">
-                {formatCurrency(totalPending)}
-              </p>
-            </div>
-          </div>
+      {/* Summary - compact inline style */}
+      <div className="bg-white rounded-xl shadow-sm divide-y">
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-yellow-600 font-medium">Pendiente</span>
+          <span className="text-yellow-700 font-bold">{formatCurrency(totalPending)}</span>
         </div>
-        <div className="bg-blue-50 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="text-blue-600" size={24} />
-            <div>
-              <p className="text-sm text-blue-600">En Revision</p>
-              <p className="text-xl font-bold text-blue-700">
-                {formatCurrency(totalPendingApproval)}
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-blue-600 font-medium">En Revision</span>
+          <span className="text-blue-700 font-bold">{formatCurrency(totalPendingApproval)}</span>
         </div>
-        <div className="bg-green-50 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="text-green-600" size={24} />
-            <div>
-              <p className="text-sm text-green-600">Pagado</p>
-              <p className="text-xl font-bold text-green-700">
-                {formatCurrency(totalPaid)}
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-green-600 font-medium">Pagado</span>
+          <span className="text-green-700 font-bold">{formatCurrency(totalPaid)}</span>
         </div>
       </div>
 
