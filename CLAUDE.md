@@ -149,3 +149,4 @@ After pushing changes:
 - **Language**: Communicate in Spanish with the user.
 - **Keep CLAUDE.md updated**: Always update this file with relevant project information, architectural decisions, and setup changes.
 - **Keep README.md updated**: When adding new relevant modules or features, update the project README to reflect the current state of the project.
+- **Atomic commits**: When the user requests multiple unrelated tasks in a single prompt (e.g., "add notes module AND add individual projects"), ask if they want separate commits for each feature. This keeps git history clean and makes it easier to revert specific changes if needed.
