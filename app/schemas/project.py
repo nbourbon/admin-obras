@@ -11,18 +11,20 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    is_individual: bool = False
 
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    is_individual: Optional[bool] = None
     is_active: Optional[bool] = None
 
 
 class ProjectResponse(ProjectBase):
     id: int
     created_by: int
+    is_individual: bool
     is_active: bool
     created_at: datetime
 

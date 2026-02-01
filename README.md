@@ -5,6 +5,7 @@ A full-stack application for managing construction expenses among multiple parti
 ## Features
 
 - **Multi-project support**: Manage multiple construction projects, each with its own participants, providers, and categories
+- **Individual projects**: Simplified UX for single-user projects with auto-approved payments
 - **Project-based participant management**: Each project has independent participation percentages
 - **Automatic expense splitting**: When an expense is created, it's automatically split based on each project member's percentage
 - **Dual currency support**: All amounts stored in both USD and ARS
@@ -14,6 +15,8 @@ A full-stack application for managing construction expenses among multiple parti
 - **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution per project
 - **Category colors**: Assign colors to categories for visual identification
 - **Role-based access**: Admin users can create expenses, manage participants, and approve payments
+- **Meeting notes**: Record meeting minutes with rich text editor
+- **Weighted voting**: Create voting notes where each vote is weighted by the participant's ownership percentage
 
 ## Tech Stack
 
@@ -28,6 +31,7 @@ A full-stack application for managing construction expenses among multiple parti
 - Vite
 - Tailwind CSS
 - Recharts
+- React Quill (rich text editor)
 
 ## Prerequisites
 
@@ -123,6 +127,15 @@ Each participant can:
 - Mark payments as paid
 - Upload payment receipts
 
+### 6. Meeting notes and voting
+
+Record meeting minutes and make decisions:
+- **Regular notes**: Use the rich text editor to document meetings
+- **Voting notes**: Create polls where votes are weighted by ownership percentage
+  - Example: A 85% owner's vote outweighs a 15% owner's vote
+  - Results show both vote count and total participation percentage
+  - Votes are irreversible (only admin can reset)
+
 ## Project Structure
 
 ```
@@ -136,6 +149,9 @@ construccion-edificio/
 │   │   ├── project_member.py # Project membership
 │   │   ├── user.py        # User model
 │   │   ├── expense.py     # Expense model
+│   │   ├── note.py        # Notes and participants
+│   │   ├── note_comment.py # Note comments
+│   │   ├── vote.py        # Vote options and user votes
 │   │   └── ...
 │   ├── schemas/           # Pydantic schemas
 │   ├── routers/           # API endpoints
@@ -154,6 +170,8 @@ construccion-edificio/
 │   │   └── pages/        # Page components
 │   │       ├── Projects.jsx
 │   │       ├── ProjectMembers.jsx
+│   │       ├── Notes.jsx
+│   │       ├── NoteDetail.jsx
 │   │       └── ...
 │   ├── package.json
 │   └── vite.config.js
@@ -211,6 +229,17 @@ Most endpoints require an `X-Project-ID` header to scope data to the current pro
 
 ### Exchange Rate
 - `GET /exchange-rate/current` - Get current blue dollar rate
+
+### Notes
+- `GET /notes` - List project notes
+- `POST /notes` - Create note (regular or voting)
+- `GET /notes/{id}` - Get note with comments and votes
+- `PUT /notes/{id}` - Update note
+- `DELETE /notes/{id}` - Delete note
+- `POST /notes/{id}/comments` - Add comment
+- `DELETE /notes/{id}/comments/{comment_id}` - Delete comment
+- `POST /notes/{id}/vote` - Cast vote (irreversible)
+- `DELETE /notes/{id}/vote/{user_id}` - Reset user's vote (admin only)
 
 ## Environment Variables
 

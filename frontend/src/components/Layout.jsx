@@ -13,7 +13,8 @@ import {
   X,
   ClipboardCheck,
   Briefcase,
-  ChevronDown
+  ChevronDown,
+  FileText,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -28,14 +29,19 @@ function Layout() {
     navigate('/login')
   }
 
+  const isIndividual = currentProject?.is_individual
+
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/expenses', icon: Receipt, label: 'Gastos' },
-    { to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' },
+    // Hide "Mis Pagos" for individual projects (expenses = payments)
+    ...(!isIndividual ? [{ to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' }] : []),
+    { to: '/notes', icon: FileText, label: 'Notas' },
   ]
 
   const adminItems = [
-    { to: '/pending-approvals', icon: ClipboardCheck, label: 'Por Aprobar' },
+    // Hide "Por Aprobar" for individual projects (auto-approved)
+    ...(!isIndividual ? [{ to: '/pending-approvals', icon: ClipboardCheck, label: 'Por Aprobar' }] : []),
     { to: '/project-members', icon: Users, label: 'Participantes' },
     { to: '/providers', icon: Building2, label: 'Proveedores' },
     { to: '/categories', icon: FolderOpen, label: 'Categorias' },

@@ -22,3 +22,8 @@ class User(Base):
     payments = relationship("ParticipantPayment", back_populates="user", foreign_keys="[ParticipantPayment.user_id]")
     projects_created = relationship("Project", back_populates="creator", foreign_keys="[Project.created_by]")
     project_memberships = relationship("ProjectMember", back_populates="user")
+    # Note-related relationships
+    notes_created = relationship("Note", back_populates="creator", foreign_keys="[Note.created_by]")
+    note_participations = relationship("NoteParticipant", back_populates="user")
+    note_comments = relationship("NoteComment", back_populates="user")
+    user_votes = relationship("UserVote", back_populates="user")

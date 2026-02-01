@@ -19,6 +19,7 @@ Full-stack application for managing construction expenses among multiple partici
 - **HTTP Client**: Axios
 - **Charts**: Recharts
 - **Icons**: Lucide React
+- **Rich Text Editor**: React Quill (for notes)
 
 ## Project Structure
 ```
@@ -51,6 +52,12 @@ construccion-edificio/
 - **Category**: Expense categories (materials, salaries, taxes, etc.)
 - **Expense**: Records with dual currency (USD + ARS)
 - **ParticipantPayment**: Individual payment tracking per expense per user
+- **Project**: With `is_individual` flag for simplified single-user UX
+- **Note**: Meeting minutes with `note_type` (regular/voting)
+- **NoteParticipant**: Users present in meeting
+- **NoteComment**: Comments on notes
+- **VoteOption**: Voting options for voting notes
+- **UserVote**: Individual votes (irreversible, admin can reset)
 
 ## Running the Project
 
@@ -99,11 +106,33 @@ npm run dev
 - `/expenses` - List/create expenses (admin can create)
 - `/expenses/:id` - Expense detail with payment status
 - `/my-payments` - User's pending/paid payments, mark as paid, upload receipts
+- `/notes` - Meeting notes list (regular and voting)
+- `/notes/:id` - Note detail with comments and voting
 - `/users` - Admin: manage participants and percentages
 - `/providers` - Admin: manage providers
 - `/categories` - Admin: manage categories
 - `/register` - Self-registration for new admin users
 - `/projects` - Admin: manage projects
+
+## Individual Projects
+Projects marked as `is_individual=True` have simplified UX:
+- Payments are auto-approved when expense is created
+- "Mis Pagos" and "Por Aprobar" navigation items are hidden
+- Toggle available in Participantes page
+
+## Notes System
+- **Regular notes**: Meeting minutes with rich text content
+- **Voting notes**: Include vote options with weighted voting
+- Participants: Track who attended the meeting
+- Comments: Discussion thread on each note
+- Admin can reset votes if needed
+
+### Weighted Voting
+Votes are weighted by each participant's ownership percentage:
+- Each vote carries the weight of the voter's `participation_percentage`
+- Example: If user A (85%) votes for Option 1 and user B (15%) votes for Option 2, Option 1 wins with 85%
+- Results show both vote count AND total participation percentage per option
+- The option with the highest accumulated percentage is marked as "GANADOR"
 
 ## Deployment Setup
 - **Frontend**: Vercel (auto-deploys on push to main)
@@ -119,3 +148,4 @@ After pushing changes:
 - **Always offer commit + push**: After completing any task, always offer to commit and push the changes so deployment can happen.
 - **Language**: Communicate in Spanish with the user.
 - **Keep CLAUDE.md updated**: Always update this file with relevant project information, architectural decisions, and setup changes.
+- **Keep README.md updated**: When adding new relevant modules or features, update the project README to reflect the current state of the project.

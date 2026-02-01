@@ -15,6 +15,8 @@ import Categories from './pages/Categories'
 import Projects from './pages/Projects'
 import ProjectMembers from './pages/ProjectMembers'
 import ProjectSelector from './pages/ProjectSelector'
+import Notes from './pages/Notes'
+import NoteDetail from './pages/NoteDetail'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -65,6 +67,8 @@ function App() {
         <Route path="expenses" element={<Expenses />} />
         <Route path="expenses/:id" element={<ExpenseDetail />} />
         <Route path="my-payments" element={<MyPayments />} />
+        <Route path="notes" element={<Notes />} />
+        <Route path="notes/:id" element={<NoteDetail />} />
 
         {/* Admin routes */}
         <Route path="pending-approvals" element={<AdminRoute><PendingApprovals /></AdminRoute>} />

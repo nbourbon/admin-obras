@@ -7,6 +7,7 @@ from app.routers.payments import router as payments_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.exchange_rate import router as exchange_rate_router
 from app.routers.projects import router as projects_router
+from app.routers.notes import router as notes_router
 
 __all__ = [
     "auth_router",
@@ -18,4 +19,5 @@ __all__ = [
     "dashboard_router",
     "exchange_rate_router",
     "projects_router",
+    "notes_router",
 ]

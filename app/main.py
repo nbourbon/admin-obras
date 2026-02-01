@@ -13,6 +13,7 @@ from app.routers import (
     dashboard_router,
     exchange_rate_router,
     projects_router,
+    notes_router,
 )
 
 settings = get_settings()
@@ -44,6 +45,7 @@ app.include_router(payments_router)
 app.include_router(dashboard_router)
 app.include_router(exchange_rate_router)
 app.include_router(projects_router)
+app.include_router(notes_router)
 
 
 @app.on_event("startup")

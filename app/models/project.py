@@ -11,6 +11,7 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_individual = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -21,3 +22,4 @@ class Project(Base):
     providers = relationship("Provider", back_populates="project")
     categories = relationship("Category", back_populates="project")
     expenses = relationship("Expense", back_populates="project")
+    notes = relationship("Note", back_populates="project", cascade="all, delete-orphan")

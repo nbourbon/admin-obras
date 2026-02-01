@@ -138,4 +138,17 @@ export const projectsAPI = {
   validateParticipation: (id) => client.get(`/projects/${id}/participation-validation`),
 }
 
+// Notes API
+export const notesAPI = {
+  list: () => client.get('/notes'),
+  get: (id) => client.get(`/notes/${id}`),
+  create: (data) => client.post('/notes', data),
+  update: (id, data) => client.put(`/notes/${id}`, data),
+  delete: (id) => client.delete(`/notes/${id}`),
+  addComment: (id, data) => client.post(`/notes/${id}/comments`, data),
+  deleteComment: (noteId, commentId) => client.delete(`/notes/${noteId}/comments/${commentId}`),
+  vote: (id, data) => client.post(`/notes/${id}/vote`, data),
+  resetVote: (noteId, userId) => client.delete(`/notes/${noteId}/vote/${userId}`),
+}
+
 export default client

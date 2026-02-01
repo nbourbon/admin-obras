@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { projectsAPI, usersAPI, authAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Users as UsersIcon, Plus, Edit2, Trash2, X, AlertCircle, UserPlus } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle } from 'lucide-react'
 
 function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberIds }) {
   const [users, setUsers] = useState([])
@@ -387,17 +387,20 @@ function EditPercentageModal({ isOpen, onClose, onSuccess, projectId, member }) 
 }
 
 function ProjectMembers() {
-  const { currentProject } = useProject()
+  const { currentProject, refreshProjects } = useProject()
   const [members, setMembers] = useState([])
   const [validation, setValidation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
+  const [isIndividual, setIsIndividual] = useState(false)
+  const [updatingIndividual, setUpdatingIndividual] = useState(false)
 
   useEffect(() => {
     if (currentProject) {
       loadData()
+      setIsIndividual(currentProject.is_individual || false)
     }
   }, [currentProject])
 
@@ -431,6 +434,28 @@ function ProjectMembers() {
       loadData()
     } catch (err) {
       console.error('Error removing member:', err)
+    }
+  }
+
+  const handleToggleIndividual = async () => {
+    const newValue = !isIndividual
+    const confirmMsg = newValue
+      ? 'Al marcar como proyecto individual, los pagos se aprobarán automáticamente. ¿Continuar?'
+      : '¿Desmarcar como proyecto individual?'
+
+    if (!confirm(confirmMsg)) return
+
+    setUpdatingIndividual(true)
+    try {
+      await projectsAPI.update(currentProject.id, { is_individual: newValue })
+      setIsIndividual(newValue)
+      await refreshProjects()
+      // Reload page to update navigation
+      window.location.reload()
+    } catch (err) {
+      console.error('Error updating project:', err)
+    } finally {
+      setUpdatingIndividual(false)
     }
   }
 
@@ -475,6 +500,40 @@ function ProjectMembers() {
           <UserPlus size={20} />
           <span>Agregar</span>
         </button>
+      </div>
+
+      {/* Individual Project Toggle */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <User className="text-gray-400" size={20} />
+            <div>
+              <p className="font-medium text-gray-900">Proyecto Individual</p>
+              <p className="text-sm text-gray-500">
+                Los pagos se aprueban automáticamente (sin flujo de aprobación)
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleToggleIndividual}
+            disabled={updatingIndividual}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+              isIndividual ? 'bg-blue-600' : 'bg-gray-200'
+            } ${updatingIndividual ? 'opacity-50' : ''}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                isIndividual ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        {isIndividual && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
+            <AlertTriangle size={16} />
+            <span>Los nuevos gastos se marcarán como pagados automáticamente</span>
+          </div>
+        )}
       </div>
 
       {/* Validation Alert */}
