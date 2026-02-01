@@ -157,17 +157,17 @@ function Layout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen min-w-0">
         {/* Top bar (mobile) */}
         <header className="lg:hidden bg-white border-b px-4 py-4 flex items-center gap-4">
           <button onClick={() => setSidebarOpen(true)} className="p-1">
             <Menu size={28} />
           </button>
-          <h1 className="text-xl font-bold text-blue-600">{currentProject?.name || 'Tus Proyectos'}</h1>
+          <h1 className="text-xl font-bold text-blue-600 truncate">{currentProject?.name || 'Tus Proyectos'}</h1>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-8 overflow-auto">
+        <main className="flex-1 p-4 lg:p-8 overflow-x-hidden overflow-y-auto">
           <Outlet />
         </main>
       </div>
