@@ -462,7 +462,7 @@ function ProjectMembers() {
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Participantes</h1>
@@ -504,7 +504,8 @@ function ProjectMembers() {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -570,6 +571,7 @@ function ProjectMembers() {
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       )}
 
