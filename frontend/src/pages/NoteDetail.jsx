@@ -178,12 +178,12 @@ function NoteDetail() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-4">
+    <div className="space-y-4 overflow-x-hidden">
+      {/* Header - Back button and title */}
+      <div className="flex items-start gap-3">
         <button
           onClick={() => navigate('/notes')}
-          className="p-2 hover:bg-gray-100 rounded-lg"
+          className="p-2 hover:bg-gray-100 rounded-lg mt-1"
         >
           <ArrowLeft size={24} />
         </button>
@@ -196,72 +196,26 @@ function NoteDetail() {
               className="text-2xl font-bold w-full px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">{note.title}</h1>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                  note.note_type === 'voting'
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-100 text-gray-700'
-                }`}
-              >
-                {note.note_type === 'voting' ? (
-                  <>
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-bold text-gray-900">{note.title}</h1>
+                {note.note_type === 'voting' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                     <Vote size={12} />
                     Votacion
-                  </>
-                ) : (
-                  'Regular'
+                  </span>
                 )}
-              </span>
-            </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
+                <span className="flex items-center gap-1">
+                  <Calendar size={14} />
+                  {formatDate(note.created_at)}
+                </span>
+                <span>· {note.creator_name}</span>
+              </div>
+            </>
           )}
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            {isEditing ? (
-              <>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                >
-                  <X size={20} />
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  disabled={saving}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                >
-                  <Edit2 size={20} />
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                >
-                  <Trash2 size={20} />
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Meta info */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-        <span className="flex items-center gap-1">
-          <Calendar size={16} />
-          {formatDate(note.created_at)}
-        </span>
-        <span>Por {note.creator_name}</span>
       </div>
 
       {/* Participants */}
@@ -285,23 +239,22 @@ function NoteDetail() {
       )}
 
       {/* Content */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <h3 className="font-medium text-gray-900 mb-2">Contenido</h3>
-        {isEditing ? (
+      {isEditing ? (
+        <div className="bg-white rounded-xl shadow-sm p-4">
           <ReactQuill
             theme="snow"
             value={editContent}
             onChange={setEditContent}
             modules={quillModules}
-            className="bg-white"
+            className="bg-white [&_.ql-editor]:min-h-[150px]"
           />
-        ) : (
-          <div
-            className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: note.content || '<p class="text-gray-500 italic">Sin contenido</p>' }}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div
+          className="prose prose-sm max-w-none text-gray-700"
+          dangerouslySetInnerHTML={{ __html: note.content || '<p class="text-gray-500 italic">Sin contenido</p>' }}
+        />
+      )}
 
       {/* Voting Section */}
       {note.note_type === 'voting' && (
@@ -458,6 +411,45 @@ function NoteDetail() {
           </button>
         </form>
       </div>
+
+      {/* Edit/Delete actions at the bottom */}
+      {canEdit && !isEditing && (
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <Edit2 size={18} />
+            <span>Editar</span>
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+          >
+            <Trash2 size={18} />
+            <span>Eliminar</span>
+          </button>
+        </div>
+      )}
+
+      {/* Save/Cancel when editing */}
+      {isEditing && (
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            onClick={() => setIsEditing(false)}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -220,7 +220,7 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
               value={content}
               onChange={setContent}
               modules={quillModules}
-              className="bg-white"
+              className="bg-white [&_.ql-editor]:min-h-[150px]"
               placeholder="Escribe el contenido de la nota..."
             />
           </div>
