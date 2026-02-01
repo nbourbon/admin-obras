@@ -502,39 +502,41 @@ function ProjectMembers() {
         </button>
       </div>
 
-      {/* Individual Project Toggle */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <User className="text-gray-400" size={20} />
-            <div>
-              <p className="font-medium text-gray-900">Proyecto Individual</p>
-              <p className="text-sm text-gray-500">
-                Los pagos se aprueban automáticamente (sin flujo de aprobación)
-              </p>
+      {/* Individual Project Toggle - only show if 1 or fewer members */}
+      {members.length <= 1 && (
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <User className="text-gray-400" size={20} />
+              <div>
+                <p className="font-medium text-gray-900">Proyecto Individual</p>
+                <p className="text-sm text-gray-500">
+                  Los pagos se aprueban automáticamente (sin flujo de aprobación)
+                </p>
+              </div>
             </div>
+            <button
+              onClick={handleToggleIndividual}
+              disabled={updatingIndividual}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                isIndividual ? 'bg-blue-600' : 'bg-gray-200'
+              } ${updatingIndividual ? 'opacity-50' : ''}`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isIndividual ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
-          <button
-            onClick={handleToggleIndividual}
-            disabled={updatingIndividual}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              isIndividual ? 'bg-blue-600' : 'bg-gray-200'
-            } ${updatingIndividual ? 'opacity-50' : ''}`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                isIndividual ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          {isIndividual && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
+              <AlertTriangle size={16} />
+              <span>Los nuevos gastos se marcarán como pagados automáticamente</span>
+            </div>
+          )}
         </div>
-        {isIndividual && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
-            <AlertTriangle size={16} />
-            <span>Los nuevos gastos se marcarán como pagados automáticamente</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Validation Alert */}
       {validation && !validation.is_valid && (

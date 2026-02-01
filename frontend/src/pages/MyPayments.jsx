@@ -320,23 +320,7 @@ function MyPayments() {
         <h1 className="text-2xl font-bold text-gray-900">Mis Pagos</h1>
       </div>
 
-      {/* Summary - compact inline style */}
-      <div className="bg-white rounded-xl shadow-sm divide-y">
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-yellow-600 font-medium">Pendiente ({pendingPayments.length})</span>
-          <span className="text-yellow-700 font-bold">{formatCurrency(totalPending)}</span>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-blue-600 font-medium">En Revision ({pendingApprovalPayments.length})</span>
-          <span className="text-blue-700 font-bold">{formatCurrency(totalPendingApproval)}</span>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-green-600 font-medium">Pagado ({paidPayments.length})</span>
-          <span className="text-green-700 font-bold">{formatCurrency(totalPaid)}</span>
-        </div>
-      </div>
-
-      {/* Filter Tabs */}
+      {/* Filter Tabs with amounts */}
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => setFilter('pending')}
@@ -346,7 +330,7 @@ function MyPayments() {
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Pendientes ({pendingPayments.length})
+          Pendientes ({pendingPayments.length}) {totalPending > 0 && `· ${formatCurrency(totalPending)}`}
         </button>
         <button
           onClick={() => setFilter('pending_approval')}
@@ -356,7 +340,7 @@ function MyPayments() {
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          En Revision ({pendingApprovalPayments.length})
+          En Revision ({pendingApprovalPayments.length}) {totalPendingApproval > 0 && `· ${formatCurrency(totalPendingApproval)}`}
         </button>
         <button
           onClick={() => setFilter('paid')}
@@ -366,7 +350,7 @@ function MyPayments() {
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Pagados ({paidPayments.length})
+          Pagados ({paidPayments.length}) {totalPaid > 0 && `· ${formatCurrency(totalPaid)}`}
         </button>
         {rejectedPayments.length > 0 && (
           <button
