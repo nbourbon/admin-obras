@@ -69,7 +69,8 @@ def _run_migrations():
         if 'is_individual' not in columns:
             with engine.connect() as conn:
                 try:
-                    conn.execute(text('ALTER TABLE projects ADD COLUMN is_individual BOOLEAN DEFAULT 0'))
+                    # Use FALSE for PostgreSQL compatibility (also works with SQLite)
+                    conn.execute(text('ALTER TABLE projects ADD COLUMN is_individual BOOLEAN DEFAULT FALSE'))
                     conn.commit()
                     print("Migration: Added is_individual column to projects table")
                 except Exception as e:
