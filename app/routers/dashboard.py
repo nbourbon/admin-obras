@@ -481,8 +481,8 @@ async def export_project_excel(
             user.full_name,
             user.email,
             float(member.participation_percentage),
-            float(summary["total_to_pay_usd"]),
-            float(summary["paid_usd"]),
+            float(summary["total_due_usd"]),
+            float(summary["total_paid_usd"]),
             float(summary["pending_usd"]),
         ]
         ws_participants.append(row)
