@@ -408,9 +408,11 @@ async def export_project_excel(
         func.count(Expense.id).label("count"),
     ).filter(Expense.project_id == project.id).first()
 
+    from sqlalchemy import Integer
+
     payment_totals = db.query(
         func.count(ParticipantPayment.id).label("total_payments"),
-        func.sum(func.cast(ParticipantPayment.is_paid, Decimal)).label("paid_count"),
+        func.sum(func.cast(ParticipantPayment.is_paid, Integer)).label("paid_count"),
     ).join(Expense).filter(Expense.project_id == project.id).first()
 
     total_usd = float(expense_totals.total_usd or 0)
