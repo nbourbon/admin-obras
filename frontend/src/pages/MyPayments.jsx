@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { paymentsAPI } from '../api/client'
+import { useProject } from '../context/ProjectContext'
 import {
   CreditCard,
   CheckCircle,
@@ -30,7 +31,7 @@ function formatDate(dateString) {
   })
 }
 
-function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess }) {
+function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual = false }) {
   const [formData, setFormData] = useState({
     amount_paid: '',
     currency_paid: 'USD',
@@ -93,12 +94,14 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess }) {
           </button>
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-4 mb-4">
-          <p className="text-sm text-blue-600 flex items-center gap-2">
-            <AlertCircle size={16} />
-            El pago sera revisado por un administrador antes de confirmarse
-          </p>
-        </div>
+        {!isIndividual && (
+          <div className="bg-blue-50 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-600 flex items-center gap-2">
+              <AlertCircle size={16} />
+              El pago sera revisado por un administrador antes de confirmarse
+            </p>
+          </div>
+        )}
 
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">Gasto</p>
@@ -199,6 +202,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess }) {
 }
 
 function MyPayments() {
+  const { currentProject } = useProject()
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
@@ -208,6 +212,8 @@ function MyPayments() {
   const [previewFileName, setPreviewFileName] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewPaymentId, setPreviewPaymentId] = useState(null)
+
+  const isIndividual = currentProject?.is_individual || false
 
   useEffect(() => {
     loadPayments()
@@ -289,22 +295,43 @@ function MyPayments() {
     }
   }
 
-  const pendingPayments = payments.filter(p => !p.is_paid && !p.is_pending_approval)
-  const pendingApprovalPayments = payments.filter(p => p.is_pending_approval)
-  const paidPayments = payments.filter(p => p.is_paid)
-  const rejectedPayments = payments.filter(p => !p.is_paid && !p.is_pending_approval && p.rejection_reason)
+  // Calculate filtered payments using useMemo to ensure counts are correct even during loading
+  const pendingPayments = useMemo(() =>
+    payments.filter(p => !p.is_paid && !p.is_pending_approval && !p.rejection_reason),
+    [payments]
+  )
+  const pendingApprovalPayments = useMemo(() =>
+    payments.filter(p => p.is_pending_approval),
+    [payments]
+  )
+  const paidPayments = useMemo(() =>
+    payments.filter(p => p.is_paid),
+    [payments]
+  )
+  const rejectedPayments = useMemo(() =>
+    payments.filter(p => !p.is_paid && !p.is_pending_approval && p.rejection_reason),
+    [payments]
+  )
 
-  const getDisplayPayments = () => {
+  const displayPayments = useMemo(() => {
     if (filter === 'pending') return pendingPayments
     if (filter === 'pending_approval') return pendingApprovalPayments
     if (filter === 'rejected') return rejectedPayments
     return paidPayments
-  }
-  const displayPayments = getDisplayPayments()
+  }, [filter, pendingPayments, pendingApprovalPayments, paidPayments, rejectedPayments])
 
-  const totalPending = pendingPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0)
-  const totalPendingApproval = pendingApprovalPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0)
-  const totalPaid = paidPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0)
+  const totalPending = useMemo(() =>
+    pendingPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
+    [pendingPayments]
+  )
+  const totalPendingApproval = useMemo(() =>
+    pendingApprovalPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
+    [pendingApprovalPayments]
+  )
+  const totalPaid = useMemo(() =>
+    paidPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
+    [paidPayments]
+  )
 
   if (loading) {
     return (
@@ -321,47 +348,52 @@ function MyPayments() {
       </div>
 
       {/* Filter Tabs with amounts */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <button
           onClick={() => setFilter('pending')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
             filter === 'pending'
               ? 'bg-yellow-100 text-yellow-700'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Pendientes ({pendingPayments.length}) {totalPending > 0 && `· ${formatCurrency(totalPending)}`}
+          <div className="font-semibold">Pendientes ({pendingPayments.length})</div>
+          {totalPending > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPending)}</div>}
         </button>
-        <button
-          onClick={() => setFilter('pending_approval')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            filter === 'pending_approval'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          En Revision ({pendingApprovalPayments.length}) {totalPendingApproval > 0 && `· ${formatCurrency(totalPendingApproval)}`}
-        </button>
+        {!isIndividual && (
+          <button
+            onClick={() => setFilter('pending_approval')}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
+              filter === 'pending_approval'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <div className="font-semibold">En Revision ({pendingApprovalPayments.length})</div>
+            {totalPendingApproval > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPendingApproval)}</div>}
+          </button>
+        )}
         <button
           onClick={() => setFilter('paid')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
             filter === 'paid'
               ? 'bg-green-100 text-green-700'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Pagados ({paidPayments.length}) {totalPaid > 0 && `· ${formatCurrency(totalPaid)}`}
+          <div className="font-semibold">Pagados ({paidPayments.length})</div>
+          {totalPaid > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPaid)}</div>}
         </button>
         {rejectedPayments.length > 0 && (
           <button
             onClick={() => setFilter('rejected')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
               filter === 'rejected'
                 ? 'bg-red-100 text-red-700'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            Rechazados ({rejectedPayments.length})
+            <div className="font-semibold">Rechazados ({rejectedPayments.length})</div>
           </button>
         )}
       </div>
@@ -533,6 +565,7 @@ function MyPayments() {
         onClose={() => setShowModal(false)}
         payment={selectedPayment}
         onSuccess={loadPayments}
+        isIndividual={isIndividual}
       />
 
       <FilePreviewModal
