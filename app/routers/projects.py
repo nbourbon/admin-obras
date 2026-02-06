@@ -290,7 +290,10 @@ async def add_project_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
 ):
-    """Add a member to a project (project admin only)."""
+    """
+    Add a member to a project (project admin only).
+    This endpoint expects a user_id and adds an existing user to the project.
+    """
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.is_active == True,
@@ -344,12 +347,118 @@ async def add_project_member(
             created_at=existing.created_at,
         )
 
-    # Create new membership (new members are NOT admins by default)
+    # Create new membership
     member = ProjectMember(
         project_id=project_id,
         user_id=member_data.user_id,
         participation_percentage=member_data.participation_percentage,
         is_admin=member_data.is_admin,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+
+    return ProjectMemberResponse(
+        id=member.id,
+        project_id=member.project_id,
+        user_id=member.user_id,
+        user_name=user.full_name,
+        user_email=user.email,
+        participation_percentage=member.participation_percentage,
+        is_admin=member.is_admin,
+        is_active=member.is_active,
+        created_at=member.created_at,
+    )
+
+
+@router.post("/{project_id}/members/by-email", response_model=ProjectMemberResponse)
+async def add_project_member_by_email(
+    project_id: int,
+    email: str,
+    participation_percentage: float,
+    is_admin: bool = False,
+    full_name: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+):
+    """
+    Add a member to a project by email (project admin only).
+    - If user exists with that email: add to project
+    - If user doesn't exist: create user without password (they'll set it on first login)
+    """
+    from app.schemas.project import ProjectMemberCreate as PMC
+    from decimal import Decimal
+
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.is_active == True,
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # Check if user exists by email
+    user = db.query(User).filter(
+        User.email == email.lower(),
+        User.is_active == True,
+    ).first()
+
+    if not user:
+        # Create new user without password
+        if not full_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Full name is required for new users",
+            )
+
+        user = User(
+            email=email.lower(),
+            full_name=full_name,
+            hashed_password="",  # Empty password - user must set it on first login
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # Check if already a member
+    existing = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user.id,
+    ).first()
+
+    if existing:
+        if existing.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{user.full_name} ({user.email}) is already a member of this project",
+            )
+        # Reactivate
+        existing.is_active = True
+        existing.participation_percentage = Decimal(str(participation_percentage))
+        existing.is_admin = is_admin
+        db.commit()
+        db.refresh(existing)
+        return ProjectMemberResponse(
+            id=existing.id,
+            project_id=existing.project_id,
+            user_id=existing.user_id,
+            user_name=user.full_name,
+            user_email=user.email,
+            participation_percentage=existing.participation_percentage,
+            is_admin=existing.is_admin,
+            is_active=existing.is_active,
+            created_at=existing.created_at,
+        )
+
+    # Create new membership
+    member = ProjectMember(
+        project_id=project_id,
+        user_id=user.id,
+        participation_percentage=Decimal(str(participation_percentage)),
+        is_admin=is_admin,
     )
     db.add(member)
     db.commit()

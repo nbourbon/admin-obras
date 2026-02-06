@@ -4,49 +4,42 @@ import { useProject } from '../context/ProjectContext'
 import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield } from 'lucide-react'
 
 function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberIds }) {
+  const [email, setEmail] = useState('')
+  const [fullName, setFullName] = useState('')
   const [percentage, setPercentage] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isProjectAdmin, setIsProjectAdmin] = useState(false)
-  const [newUser, setNewUser] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-  })
 
   useEffect(() => {
     if (isOpen) {
-      setNewUser({ full_name: '', email: '', password: '' })
+      setEmail('')
+      setFullName('')
       setPercentage('')
       setIsProjectAdmin(false)
       setError('')
     }
   }, [isOpen])
 
-  const handleCreateAndAdd = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      // First create the user
-      const userResponse = await authAPI.register({
-        ...newUser,
-        participation_percentage: 0, // Will be set via project membership
-      })
-      const newUserId = userResponse.data.id
-
-      // Then add to project
-      await projectsAPI.addMember(projectId, {
-        user_id: newUserId,
-        participation_percentage: parseFloat(percentage) || 0,
-        is_admin: isProjectAdmin,
-      })
+      // Add member by email - backend will create user if needed
+      await projectsAPI.addMemberByEmail(
+        projectId,
+        email,
+        parseFloat(percentage) || 0,
+        isProjectAdmin,
+        fullName || undefined
+      )
 
       onSuccess()
       onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear usuario')
+      setError(err.response?.data?.detail || 'Error al agregar participante')
     } finally {
       setLoading(false)
     }
@@ -65,7 +58,7 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
         </div>
 
         <p className="text-gray-600 text-sm mb-4">
-          Crea una cuenta para el nuevo participante. Luego podra iniciar sesion con su email y contrasena.
+          Ingresa el email del participante. Si ya existe como usuario, se agregara al proyecto. Si no existe, se creara un usuario nuevo que debera configurar su contrasena en el primer inicio de sesion.
         </p>
 
         {error && (
@@ -74,21 +67,7 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
           </div>
         )}
 
-        <form onSubmit={handleCreateAndAdd} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre Completo
-            </label>
-            <input
-              type="text"
-              required
-              value={newUser.full_name}
-              onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Nombre del participante"
-            />
-          </div>
-
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Email
@@ -96,25 +75,28 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
             <input
               type="email"
               required
-              value={newUser.email}
-              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="email@ejemplo.com"
+              autoFocus
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contrasena
+              Nombre Completo (opcional)
             </label>
             <input
-              type="password"
-              required
-              value={newUser.password}
-              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Minimo 6 caracteres"
+              placeholder="Solo para usuarios nuevos"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Si el email ya existe, este campo se ignora
+            </p>
           </div>
 
           <div>

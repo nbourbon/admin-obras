@@ -267,6 +267,7 @@ async def submit_payment(
     if expense and expense.project_id:
         project = db.query(Project).filter(Project.id == expense.project_id).first()
         is_individual = project.is_individual if project else False
+        print(f"[DEBUG submit_payment] Payment {payment_id}, Expense {expense.id}, Project {expense.project_id}, is_individual={is_individual}")
 
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
@@ -279,9 +280,12 @@ async def submit_payment(
         payment.is_pending_approval = False
         payment.paid_at = datetime.utcnow()
         payment.approved_at = datetime.utcnow()
+        payment.approved_by = current_user.id  # Set approved_by for individual projects
+        print(f"[DEBUG submit_payment] Auto-approved payment {payment_id} for individual project")
     else:
         # Mark as pending approval for multi-participant projects
         payment.is_pending_approval = True
+        print(f"[DEBUG submit_payment] Payment {payment_id} marked as pending approval")
 
     db.commit()
     db.refresh(payment)

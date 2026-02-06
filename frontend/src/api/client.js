@@ -133,6 +133,10 @@ export const projectsAPI = {
   delete: (id) => client.delete(`/projects/${id}`),
   members: (id) => client.get(`/projects/${id}/members`),
   addMember: (id, data) => client.post(`/projects/${id}/members`, data),
+  addMemberByEmail: (id, email, participationPercentage, isAdmin, fullName) =>
+    client.post(`/projects/${id}/members/by-email`, null, {
+      params: { email, participation_percentage: participationPercentage, is_admin: isAdmin, full_name: fullName },
+    }),
   updateMember: (id, userId, data) => client.put(`/projects/${id}/members/${userId}`, data),
   removeMember: (id, userId) => client.delete(`/projects/${id}/members/${userId}`),
   validateParticipation: (id) => client.get(`/projects/${id}/participation-validation`),
