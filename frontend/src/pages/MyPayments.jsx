@@ -31,6 +31,39 @@ function formatDate(dateString) {
   })
 }
 
+function PaymentStatusBadge({ payment }) {
+  if (payment.is_paid) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <CheckCircle size={14} />
+        Pagado
+      </span>
+    )
+  }
+  if (payment.is_pending_approval) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+        <AlertCircle size={14} />
+        En Revision
+      </span>
+    )
+  }
+  if (payment.rejection_reason) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+        <XCircle size={14} />
+        Rechazado
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+      <Clock size={14} />
+      Pendiente
+    </span>
+  )
+}
+
 function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual = false }) {
   const [formData, setFormData] = useState({
     amount_paid: '',
@@ -203,9 +236,9 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
 
 function MyPayments() {
   const { currentProject } = useProject()
-  const [payments, setPayments] = useState([])
+  const [allPayments, setAllPayments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('pending')
+  const [filter, setFilter] = useState('all') // 'all', 'pending', 'pending_approval', 'paid'
   const [selectedPayment, setSelectedPayment] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -217,13 +250,14 @@ function MyPayments() {
 
   useEffect(() => {
     loadPayments()
-  }, [filter])
+  }, [])
 
   const loadPayments = async () => {
     try {
       setLoading(true)
-      const response = await paymentsAPI.myPayments(filter === 'pending')
-      setPayments(response.data)
+      // Load ALL payments at once
+      const response = await paymentsAPI.myPayments(false)
+      setAllPayments(response.data)
     } catch (err) {
       console.error('Error loading payments:', err)
     } finally {
@@ -295,43 +329,36 @@ function MyPayments() {
     }
   }
 
-  // Calculate filtered payments using useMemo to ensure counts are correct even during loading
+  // Sort all payments by date (most recent first)
+  const sortedPayments = useMemo(() => {
+    return [...allPayments].sort((a, b) => {
+      const dateA = new Date(a.expense?.expense_date || 0)
+      const dateB = new Date(b.expense?.expense_date || 0)
+      return dateB - dateA // Descending order
+    })
+  }, [allPayments])
+
+  // Calculate filtered categories
   const pendingPayments = useMemo(() =>
-    payments.filter(p => !p.is_paid && !p.is_pending_approval && !p.rejection_reason),
-    [payments]
+    sortedPayments.filter(p => !p.is_paid && !p.is_pending_approval && !p.rejection_reason),
+    [sortedPayments]
   )
   const pendingApprovalPayments = useMemo(() =>
-    payments.filter(p => p.is_pending_approval),
-    [payments]
+    sortedPayments.filter(p => p.is_pending_approval),
+    [sortedPayments]
   )
   const paidPayments = useMemo(() =>
-    payments.filter(p => p.is_paid),
-    [payments]
-  )
-  const rejectedPayments = useMemo(() =>
-    payments.filter(p => !p.is_paid && !p.is_pending_approval && p.rejection_reason),
-    [payments]
+    sortedPayments.filter(p => p.is_paid),
+    [sortedPayments]
   )
 
+  // Apply filter to display
   const displayPayments = useMemo(() => {
     if (filter === 'pending') return pendingPayments
     if (filter === 'pending_approval') return pendingApprovalPayments
-    if (filter === 'rejected') return rejectedPayments
-    return paidPayments
-  }, [filter, pendingPayments, pendingApprovalPayments, paidPayments, rejectedPayments])
-
-  const totalPending = useMemo(() =>
-    pendingPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
-    [pendingPayments]
-  )
-  const totalPendingApproval = useMemo(() =>
-    pendingApprovalPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
-    [pendingApprovalPayments]
-  )
-  const totalPaid = useMemo(() =>
-    paidPayments.reduce((sum, p) => sum + parseFloat(p.amount_due_usd), 0),
-    [paidPayments]
-  )
+    if (filter === 'paid') return paidPayments
+    return sortedPayments // 'all' - show everything
+  }, [filter, sortedPayments, pendingPayments, pendingApprovalPayments, paidPayments])
 
   if (loading) {
     return (
@@ -345,57 +372,21 @@ function MyPayments() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Mis Pagos</h1>
-      </div>
 
-      {/* Filter Tabs with amounts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <button
-          onClick={() => setFilter('pending')}
-          className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
-            filter === 'pending'
-              ? 'bg-yellow-100 text-yellow-700'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <div className="font-semibold">Pendientes ({pendingPayments.length})</div>
-          {totalPending > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPending)}</div>}
-        </button>
-        {!isIndividual && (
-          <button
-            onClick={() => setFilter('pending_approval')}
-            className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
-              filter === 'pending_approval'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+        {/* Simple filter dropdown */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Filtrar:</label>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
-            <div className="font-semibold">En Revision ({pendingApprovalPayments.length})</div>
-            {totalPendingApproval > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPendingApproval)}</div>}
-          </button>
-        )}
-        <button
-          onClick={() => setFilter('paid')}
-          className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
-            filter === 'paid'
-              ? 'bg-green-100 text-green-700'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <div className="font-semibold">Pagados ({paidPayments.length})</div>
-          {totalPaid > 0 && <div className="text-sm mt-0.5">{formatCurrency(totalPaid)}</div>}
-        </button>
-        {rejectedPayments.length > 0 && (
-          <button
-            onClick={() => setFilter('rejected')}
-            className={`px-4 py-3 rounded-lg font-medium transition-colors text-left ${
-              filter === 'rejected'
-                ? 'bg-red-100 text-red-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <div className="font-semibold">Rechazados ({rejectedPayments.length})</div>
-          </button>
-        )}
+            <option value="all">Todos ({sortedPayments.length})</option>
+            <option value="pending">Pendientes ({pendingPayments.length})</option>
+            {!isIndividual && <option value="pending_approval">En Revision ({pendingApprovalPayments.length})</option>}
+            <option value="paid">Pagados ({paidPayments.length})</option>
+          </select>
+        </div>
       </div>
 
       {/* Payments List */}
@@ -403,7 +394,10 @@ function MyPayments() {
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">
-            {filter === 'pending' ? 'Sin pagos pendientes' : 'Sin pagos realizados'}
+            {filter === 'all' ? 'Sin pagos' :
+             filter === 'pending' ? 'Sin pagos pendientes' :
+             filter === 'pending_approval' ? 'Sin pagos en revision' :
+             'Sin pagos realizados'}
           </h3>
         </div>
       ) : (
@@ -415,12 +409,15 @@ function MyPayments() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <Link
-                    to={`/expenses/${payment.expense_id}`}
-                    className="text-lg font-medium text-blue-600 hover:text-blue-800"
-                  >
-                    {payment.expense?.description}
-                  </Link>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Link
+                      to={`/expenses/${payment.expense_id}`}
+                      className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      {payment.expense?.description}
+                    </Link>
+                    <PaymentStatusBadge payment={payment} />
+                  </div>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                     <span>{payment.expense?.provider_name}</span>
                     <span>{payment.expense?.category_name}</span>
@@ -428,7 +425,7 @@ function MyPayments() {
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <p className="text-lg font-bold">
                     {formatCurrency(payment.amount_due_usd)}
                   </p>
