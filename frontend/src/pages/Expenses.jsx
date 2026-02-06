@@ -27,10 +27,11 @@ function formatCurrency(amount, currency = 'USD') {
 }
 
 function formatDate(dateString) {
+  // Compact numeric format for mobile: dd/mm/yy
   return new Date(dateString).toLocaleDateString('es-AR', {
     day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+    month: '2-digit',
+    year: '2-digit',
   })
 }
 

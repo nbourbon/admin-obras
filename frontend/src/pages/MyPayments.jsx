@@ -24,10 +24,11 @@ function formatCurrency(amount, currency = 'USD') {
 }
 
 function formatDate(dateString) {
+  // Compact numeric format for mobile: dd/mm/yy
   return new Date(dateString).toLocaleDateString('es-AR', {
     day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+    month: '2-digit',
+    year: '2-digit',
   })
 }
 
@@ -440,18 +441,21 @@ function MyPayments() {
                 {payment.is_paid ? (
                   <>
                     <div className="flex items-center gap-2 text-green-600">
-                      <CheckCircle size={20} />
-                      <span className="font-medium">
-                        Aprobado el {formatDate(payment.approved_at || payment.paid_at)}
+                      <CheckCircle size={18} />
+                      <span className="font-medium text-sm">
+                        {formatDate(payment.approved_at || payment.paid_at)}
                       </span>
                     </div>
                   </>
                 ) : payment.is_pending_approval ? (
                   <>
-                    <div className="flex items-center gap-2 text-blue-600">
-                      <AlertCircle size={20} />
-                      <span className="font-medium">
-                        Enviado el {formatDate(payment.submitted_at)} - En revision
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-blue-600">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={18} />
+                        <span className="font-medium text-sm">En revision</span>
+                      </div>
+                      <span className="text-xs sm:text-sm text-blue-500 ml-7 sm:ml-0">
+                        {formatDate(payment.submitted_at)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
