@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Briefcase, Plus, Edit2, Trash2, X } from 'lucide-react'
+import { Briefcase, Plus, Edit2, Trash2, X, Shield } from 'lucide-react'
 
 function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
   const [formData, setFormData] = useState({
@@ -207,22 +207,24 @@ function Projects() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleEdit(project)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(project.id)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
+                {project.current_user_is_admin && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleEdit(project)}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(project.id)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="mt-4 pt-4 border-t">
+              <div className="mt-4 pt-4 border-t flex items-center gap-2">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   project.is_active
                     ? 'bg-green-100 text-green-700'
@@ -230,6 +232,12 @@ function Projects() {
                 }`}>
                   {project.is_active ? 'Activo' : 'Inactivo'}
                 </span>
+                {project.current_user_is_admin && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                    <Shield size={10} />
+                    Admin
+                  </span>
+                )}
               </div>
             </div>
           ))}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
-import { useAuth } from '../context/AuthContext'
+import { useProject } from '../context/ProjectContext'
 import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -242,7 +242,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers, categories 
 }
 
 function Expenses() {
-  const { user } = useAuth()
+  const { isProjectAdmin } = useProject()
   const [expenses, setExpenses] = useState([])
   const [providers, setProviders] = useState([])
   const [categories, setCategories] = useState([])
@@ -282,7 +282,7 @@ function Expenses() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-        {user?.is_admin && (
+        {isProjectAdmin && (
           <button
             onClick={() => setShowModal(true)}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"

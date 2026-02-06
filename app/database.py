@@ -75,3 +75,27 @@ def _run_migrations():
                     print("Migration: Added is_individual column to projects table")
                 except Exception as e:
                     print(f"Migration warning (is_individual): {e}")
+
+    # Migration: Add is_admin to project_members table
+    if 'project_members' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('project_members')]
+        if 'is_admin' not in columns:
+            with engine.connect() as conn:
+                try:
+                    # Add is_admin column with default FALSE
+                    conn.execute(text('ALTER TABLE project_members ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
+                    conn.commit()
+                    print("Migration: Added is_admin column to project_members table")
+
+                    # Set is_admin=TRUE for members who are also the project creator
+                    conn.execute(text('''
+                        UPDATE project_members
+                        SET is_admin = TRUE
+                        WHERE user_id IN (
+                            SELECT created_by FROM projects WHERE projects.id = project_members.project_id
+                        )
+                    '''))
+                    conn.commit()
+                    print("Migration: Set is_admin=TRUE for project creators")
+                except Exception as e:
+                    print(f"Migration warning (is_admin): {e}")

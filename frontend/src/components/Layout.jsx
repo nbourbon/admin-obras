@@ -20,7 +20,7 @@ import { useState } from 'react'
 
 function Layout() {
   const { user, logout } = useAuth()
-  const { projects, currentProject, selectProject, loading: projectsLoading } = useProject()
+  const { projects, currentProject, isProjectAdmin, selectProject, loading: projectsLoading } = useProject()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -36,6 +36,7 @@ function Layout() {
     { to: '/expenses', icon: Receipt, label: 'Gastos' },
     { to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' },
     { to: '/notes', icon: FileText, label: 'Notas' },
+    { to: '/projects', icon: Briefcase, label: 'Proyectos' },
   ]
 
   const adminItems = [
@@ -44,7 +45,6 @@ function Layout() {
     { to: '/project-members', icon: Users, label: 'Participantes' },
     { to: '/providers', icon: Building2, label: 'Proveedores' },
     { to: '/categories', icon: FolderOpen, label: 'Categorias' },
-    { to: '/projects', icon: Briefcase, label: 'Proyectos' },
   ]
 
   const NavItem = ({ to, icon: Icon, label }) => (
@@ -126,7 +126,7 @@ function Layout() {
               <NavItem key={item.to} {...item} />
             ))}
 
-            {user?.is_admin && (
+            {isProjectAdmin && (
               <>
                 <div className="pt-4 pb-2">
                   <p className="px-4 text-xs font-semibold text-gray-400 uppercase">

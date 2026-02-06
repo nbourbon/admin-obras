@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { notesAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useProject } from '../context/ProjectContext'
 import {
   ArrowLeft,
   Vote,
@@ -23,6 +24,7 @@ function NoteDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { isProjectAdmin } = useProject()
   const [note, setNote] = useState(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -144,7 +146,7 @@ function NoteDetail() {
     }
   }
 
-  const canEdit = note && (note.created_by === user?.id || user?.is_admin)
+  const canEdit = note && (note.created_by === user?.id || isProjectAdmin)
   const totalVotes = note?.vote_options?.reduce((sum, opt) => sum + opt.vote_count, 0) || 0
   const totalParticipation = note?.vote_options?.reduce((sum, opt) => sum + opt.participation_percentage, 0) || 0
 
@@ -365,8 +367,8 @@ function NoteDetail() {
                     )}
                   </button>
 
-                  {/* Admin: Reset vote buttons */}
-                  {user?.is_admin && option.voters.length > 0 && (
+                  {/* Project Admin: Reset vote buttons */}
+                  {isProjectAdmin && option.voters.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {option.voters.map((voter) => (
                         <button
@@ -417,7 +419,7 @@ function NoteDetail() {
                       {formatDate(comment.created_at)}
                     </span>
                   </div>
-                  {(comment.user_id === user?.id || user?.is_admin) && (
+                  {(comment.user_id === user?.id || isProjectAdmin) && (
                     <button
                       onClick={() => handleDeleteComment(comment.id)}
                       className="p-1 text-gray-400 hover:text-red-500"

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
-from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, get_required_project, is_project_admin
 from app.models.user import User
 from app.models.category import Category
 from app.models.project import Project
@@ -34,17 +34,17 @@ async def list_categories(
 async def create_category(
     category_data: CategoryCreate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    current_user: User = Depends(get_project_admin_user),
+    project: Project = Depends(get_required_project),
 ):
     """
-    Create a new category (admin only).
+    Create a new category (project admin only).
     """
     # Check if category with same name exists in this project
-    query = db.query(Category).filter(Category.name == category_data.name)
-    if project:
-        query = query.filter(Category.project_id == project.id)
-    existing = query.first()
+    existing = db.query(Category).filter(
+        Category.name == category_data.name,
+        Category.project_id == project.id
+    ).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -52,8 +52,7 @@ async def create_category(
         )
 
     data = category_data.model_dump()
-    if project:
-        data["project_id"] = project.id
+    data["project_id"] = project.id
     category = Category(**data)
     db.add(category)
     db.commit()
@@ -84,16 +83,23 @@ async def update_category(
     category_id: int,
     category_data: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Update a category (admin only).
+    Update a category (project admin only).
     """
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Category not found",
+        )
+
+    # Verify user is admin of the category's project
+    if category.project_id and not is_project_admin(db, current_user.id, category.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     # Check name uniqueness if updating name (within same project)
@@ -121,16 +127,23 @@ async def update_category(
 async def deactivate_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Deactivate a category (admin only).
+    Deactivate a category (project admin only).
     """
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Category not found",
+        )
+
+    # Verify user is admin of the category's project
+    if category.project_id and not is_project_admin(db, current_user.id, category.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     category.is_active = False

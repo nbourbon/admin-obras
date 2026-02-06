@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.provider import ProviderCreate, ProviderUpdate, ProviderResponse
-from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, get_required_project, is_project_admin
 from app.models.user import User
 from app.models.provider import Provider
 from app.models.project import Project
@@ -34,15 +34,14 @@ async def list_providers(
 async def create_provider(
     provider_data: ProviderCreate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    current_user: User = Depends(get_project_admin_user),
+    project: Project = Depends(get_required_project),
 ):
     """
-    Create a new provider (admin only).
+    Create a new provider (project admin only).
     """
     data = provider_data.model_dump()
-    if project:
-        data["project_id"] = project.id
+    data["project_id"] = project.id
     provider = Provider(**data)
     db.add(provider)
     db.commit()
@@ -73,16 +72,23 @@ async def update_provider(
     provider_id: int,
     provider_data: ProviderUpdate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Update a provider (admin only).
+    Update a provider (project admin only).
     """
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider not found",
+        )
+
+    # Verify user is admin of the provider's project
+    if provider.project_id and not is_project_admin(db, current_user.id, provider.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     update_data = provider_data.model_dump(exclude_unset=True)
@@ -98,16 +104,23 @@ async def update_provider(
 async def deactivate_provider(
     provider_id: int,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Deactivate a provider (admin only).
+    Deactivate a provider (project admin only).
     """
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider not found",
+        )
+
+    # Verify user is admin of the provider's project
+    if provider.project_id and not is_project_admin(db, current_user.id, provider.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     provider.is_active = False

@@ -11,6 +11,7 @@ class ProjectMember(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     participation_percentage = Column(Numeric(5, 2), nullable=False, default=0)
+    is_admin = Column(Boolean, default=False)  # Admin of this specific project
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

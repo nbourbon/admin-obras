@@ -72,19 +72,18 @@ async def get_project_from_header(
             detail="Project not found",
         )
 
-    # Check if user is a member of this project (admins always have access)
-    if not current_user.is_admin:
-        member = db.query(ProjectMember).filter(
-            ProjectMember.project_id == x_project_id,
-            ProjectMember.user_id == current_user.id,
-            ProjectMember.is_active == True
-        ).first()
+    # Check if user is a member of this project
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == x_project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True
+    ).first()
 
-        if not member:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a member of this project",
-            )
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
 
     return project
 
@@ -99,3 +98,59 @@ async def get_required_project(
             detail="X-Project-ID header is required",
         )
     return project
+
+
+async def get_project_admin_user(
+    x_project_id: Optional[int] = Header(None, alias="X-Project-ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Get current user and verify they are an admin of the specified project.
+    Raises 403 if user is not an admin of the project.
+    """
+    if x_project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    project = db.query(Project).filter(
+        Project.id == x_project_id,
+        Project.is_active == True
+    ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # Check if user is an admin of this project
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == x_project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True
+    ).first()
+
+    if not member or not member.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
+        )
+
+    return current_user
+
+
+def is_project_admin(db: Session, user_id: int, project_id: int) -> bool:
+    """
+    Helper function to check if a user is an admin of a project.
+    Returns True if the user is an admin of the project.
+    """
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id,
+        ProjectMember.is_active == True,
+        ProjectMember.is_admin == True
+    ).first()
+    return member is not None

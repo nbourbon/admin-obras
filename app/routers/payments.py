@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.schemas.payment import PaymentResponse, PaymentMarkPaid, PaymentWithExpense, ExpenseInfo, UserInfo, PaymentApproval
-from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
@@ -83,11 +83,11 @@ async def get_my_payments(
 @router.get("/pending-approval", response_model=List[PaymentWithExpense])
 async def get_pending_approval_payments(
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
     project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Get all payments pending admin approval for the current project (admin only).
+    Get all payments pending admin approval for the current project (project admin only).
     """
     query = (
         db.query(ParticipantPayment)
@@ -177,8 +177,10 @@ async def get_payment(
             detail="Payment not found",
         )
 
-    # Check access
-    if payment.user_id != current_user.id and not current_user.is_admin:
+    # Check access - user can view their own payments, or must be project admin
+    expense = payment.expense
+    is_admin = expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+    if payment.user_id != current_user.id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this payment",
@@ -296,10 +298,10 @@ async def approve_payment(
     payment_id: int,
     approval: PaymentApproval,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Approve or reject a payment (admin only).
+    Approve or reject a payment (project admin only).
     """
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
@@ -307,6 +309,14 @@ async def approve_payment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
+        )
+
+    # Verify user is admin of the payment's expense project
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    if expense and expense.project_id and not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     if not payment.is_pending_approval:
@@ -320,7 +330,7 @@ async def approve_payment(
         payment.is_pending_approval = False
         payment.is_paid = True
         payment.paid_at = datetime.utcnow()
-        payment.approved_by = current_admin.id
+        payment.approved_by = current_user.id
         payment.approved_at = datetime.utcnow()
         payment.rejection_reason = None
     else:
@@ -330,7 +340,7 @@ async def approve_payment(
         payment.amount_paid = None
         payment.currency_paid = None
         payment.rejection_reason = approval.rejection_reason or "Rejected by admin"
-        payment.approved_by = current_admin.id
+        payment.approved_by = current_user.id
         payment.approved_at = datetime.utcnow()
 
     db.commit()
@@ -353,11 +363,6 @@ async def mark_payment_as_paid(
     Mark a payment as paid (legacy - redirects to submit-payment).
     For backwards compatibility. Use submit-payment instead.
     """
-    # Redirect to submit_payment for non-admins
-    if not current_user.is_admin:
-        return await submit_payment(payment_id, payment_data, db, current_user)
-
-    # Admins can directly mark as paid (bypass approval)
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
     if not payment:
@@ -366,6 +371,15 @@ async def mark_payment_as_paid(
             detail="Payment not found",
         )
 
+    # Check if user is project admin
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    is_admin = expense and expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+
+    # Redirect to submit_payment for non-admins
+    if not is_admin:
+        return await submit_payment(payment_id, payment_data, db, current_user)
+
+    # Project admins can directly mark as paid (bypass approval)
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
     payment.is_pending_approval = False
@@ -391,7 +405,7 @@ async def unmark_payment_as_paid(
 ):
     """
     Unmark a payment as paid (useful for corrections).
-    Admin only for approved payments.
+    Project admin only for approved payments.
     """
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
@@ -401,15 +415,19 @@ async def unmark_payment_as_paid(
             detail="Payment not found",
         )
 
-    # Only admin can unmark approved payments
-    if payment.is_paid and not current_user.is_admin:
+    # Check if user is project admin
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    is_admin = expense and expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+
+    # Only project admin can unmark approved payments
+    if payment.is_paid and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can unmark approved payments",
+            detail="Only project admin can unmark approved payments",
         )
 
     # Users can cancel their own pending submissions
-    if payment.is_pending_approval and payment.user_id != current_user.id and not current_user.is_admin:
+    if payment.is_pending_approval and payment.user_id != current_user.id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to cancel this submission",
@@ -453,8 +471,10 @@ async def upload_receipt(
             detail="Payment not found",
         )
 
-    # Check access
-    if payment.user_id != current_user.id and not current_user.is_admin:
+    # Check access - user can upload their own receipts, or must be project admin
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    is_admin = expense and expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+    if payment.user_id != current_user.id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to upload receipt for this payment",
@@ -486,8 +506,10 @@ async def download_receipt(
             detail="Payment not found",
         )
 
-    # Admins can always view, users can only view their own
-    if payment.user_id != current_user.id and not current_user.is_admin:
+    # Project admins can always view, users can only view their own
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    is_admin = expense and expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+    if payment.user_id != current_user.id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this receipt",

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
-from app.utils.dependencies import get_current_user, get_current_admin_user, get_project_from_header
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense, Currency
 from app.models.provider import Provider
@@ -68,11 +68,11 @@ async def list_expenses(
 async def create_expense(
     expense_data: ExpenseCreate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
     project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
-    Create a new expense (admin only).
+    Create a new expense (project admin only).
     This will automatically create payment records for all active project members.
     """
     # Project is required for new expenses
@@ -129,7 +129,7 @@ async def create_expense(
         exchange_rate_used=exchange_rate,
         provider_id=expense_data.provider_id,
         category_id=expense_data.category_id,
-        created_by=current_admin.id,
+        created_by=current_user.id,
         project_id=project.id,
         expense_date=expense_data.expense_date or datetime.utcnow(),
     )
@@ -267,10 +267,10 @@ async def update_expense(
     expense_id: int,
     expense_data: ExpenseUpdate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Update an expense (admin only).
+    Update an expense (project admin only).
     Note: Updating amount will NOT recalculate participant payments.
     """
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
@@ -278,6 +278,13 @@ async def update_expense(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Expense not found",
+        )
+
+    # Verify user is admin of the expense's project
+    if expense.project_id and not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     update_data = expense_data.model_dump(exclude_unset=True)
@@ -316,16 +323,23 @@ async def upload_invoice(
     expense_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Upload an invoice file for an expense (admin only).
+    Upload an invoice file for an expense (project admin only).
     """
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Expense not found",
+        )
+
+    # Verify user is admin of the expense's project
+    if expense.project_id and not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
         )
 
     file_path = await save_invoice(file, expense_id)

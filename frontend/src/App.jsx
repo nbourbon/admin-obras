@@ -42,9 +42,9 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { user } = useAuth()
+  const { isProjectAdmin } = useProject()
 
-  if (!user?.is_admin) {
+  if (!isProjectAdmin) {
     return <Navigate to="/dashboard" replace />
   }
 
@@ -69,14 +69,14 @@ function App() {
         <Route path="my-payments" element={<MyPayments />} />
         <Route path="notes" element={<Notes />} />
         <Route path="notes/:id" element={<NoteDetail />} />
+        <Route path="projects" element={<Projects />} />
 
-        {/* Admin routes */}
+        {/* Admin routes (project admin only) */}
         <Route path="pending-approvals" element={<AdminRoute><PendingApprovals /></AdminRoute>} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
         <Route path="project-members" element={<AdminRoute><ProjectMembers /></AdminRoute>} />
         <Route path="providers" element={<AdminRoute><Providers /></AdminRoute>} />
         <Route path="categories" element={<AdminRoute><Categories /></AdminRoute>} />
-        <Route path="projects" element={<AdminRoute><Projects /></AdminRoute>} />
       </Route>
     </Routes>
   )

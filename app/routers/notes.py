@@ -20,7 +20,7 @@ from app.schemas.note import (
     VoteOptionWithVoters,
     VoterInfo,
 )
-from app.utils.dependencies import get_current_user, get_current_admin_user
+from app.utils.dependencies import get_current_user, is_project_admin
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -237,13 +237,14 @@ async def update_note(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update a note (only creator or admin can update)."""
+    """Update a note (only creator or project admin can update)."""
     note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Check permissions
-    if note.created_by != current_user.id and not current_user.is_admin:
+    # Check permissions - creator or project admin
+    is_admin = note.project_id and is_project_admin(db, current_user.id, note.project_id)
+    if note.created_by != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to update this note")
 
     # Update fields
@@ -266,13 +267,14 @@ async def delete_note(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft delete a note (only creator or admin can delete)."""
+    """Soft delete a note (only creator or project admin can delete)."""
     note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Check permissions
-    if note.created_by != current_user.id and not current_user.is_admin:
+    # Check permissions - creator or project admin
+    is_admin = note.project_id and is_project_admin(db, current_user.id, note.project_id)
+    if note.created_by != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
 
     note.is_active = False
@@ -330,8 +332,10 @@ async def delete_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
-    # Check permissions
-    if comment.user_id != current_user.id and not current_user.is_admin:
+    # Check permissions - comment owner or project admin
+    note = db.query(Note).filter(Note.id == note_id).first()
+    is_admin = note and note.project_id and is_project_admin(db, current_user.id, note.project_id)
+    if comment.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
 
     comment.is_active = False
@@ -391,9 +395,18 @@ async def reset_vote(
     note_id: int,
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Reset a user's vote (admin only)."""
+    """Reset a user's vote (project admin only)."""
+    # Get the note to check project admin
+    note = db.query(Note).filter(Note.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    # Verify user is admin of the note's project
+    if not note.project_id or not is_project_admin(db, current_user.id, note.project_id):
+        raise HTTPException(status_code=403, detail="You must be an admin of this project")
+
     # Find the user's vote on this note
     vote = (
         db.query(UserVote)

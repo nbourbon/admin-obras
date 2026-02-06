@@ -13,7 +13,7 @@ from app.schemas.project import (
     ProjectMemberResponse,
     ProjectWithMembers,
 )
-from app.utils.dependencies import get_current_user, get_current_admin_user
+from app.utils.dependencies import get_current_user, get_project_admin_user, is_project_admin
 from app.models.user import User
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -28,13 +28,10 @@ async def list_projects(
 ):
     """
     List all projects the user is a member of.
-    Admins see all projects.
+    All users only see projects where they are members.
     """
-    if current_user.is_admin:
-        return db.query(Project).filter(Project.is_active == True).order_by(Project.name).all()
-
     # Get projects where user is a member
-    return (
+    projects = (
         db.query(Project)
         .join(ProjectMember)
         .filter(
@@ -46,33 +43,61 @@ async def list_projects(
         .all()
     )
 
+    # Add current_user_is_admin flag to each project
+    result = []
+    for project in projects:
+        project_dict = {
+            "id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "created_by": project.created_by,
+            "is_individual": project.is_individual,
+            "is_active": project.is_active,
+            "created_at": project.created_at,
+            "current_user_is_admin": is_project_admin(db, current_user.id, project.id),
+        }
+        result.append(ProjectResponse(**project_dict))
+
+    return result
+
 
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Create a new project (admin only)."""
+    """Create a new project. Any authenticated user can create a project and becomes its admin."""
     project = Project(
         name=project_data.name,
         description=project_data.description,
-        created_by=current_admin.id,
+        is_individual=project_data.is_individual,
+        created_by=current_user.id,
     )
     db.add(project)
     db.commit()
     db.refresh(project)
 
-    # Add creator as a member with 0% participation
+    # Add creator as a member with 0% participation AND is_admin=True
     member = ProjectMember(
         project_id=project.id,
-        user_id=current_admin.id,
+        user_id=current_user.id,
         participation_percentage=Decimal("0"),
+        is_admin=True,  # Creator is admin of the project
     )
     db.add(member)
     db.commit()
 
-    return project
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        description=project.description,
+        created_by=project.created_by,
+        is_individual=project.is_individual,
+        is_active=project.is_active,
+        created_at=project.created_at,
+        current_user_is_admin=True,  # Creator is always admin
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectWithMembers)
@@ -93,18 +118,17 @@ async def get_project(
             detail="Project not found",
         )
 
-    # Check access
-    if not current_user.is_admin:
-        member = db.query(ProjectMember).filter(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == current_user.id,
-            ProjectMember.is_active == True,
-        ).first()
-        if not member:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a member of this project",
-            )
+    # Check access - user must be a member
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True,
+    ).first()
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
 
     # Build response with members
     members = (
@@ -126,6 +150,7 @@ async def get_project(
             user_name=m.user.full_name,
             user_email=m.user.email,
             participation_percentage=m.participation_percentage,
+            is_admin=m.is_admin,
             is_active=m.is_active,
             created_at=m.created_at,
         )
@@ -137,8 +162,10 @@ async def get_project(
         name=project.name,
         description=project.description,
         created_by=project.created_by,
+        is_individual=project.is_individual,
         is_active=project.is_active,
         created_at=project.created_at,
+        current_user_is_admin=member.is_admin,
         members=member_responses,
     )
 
@@ -148,9 +175,9 @@ async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
 ):
-    """Update project details (admin only)."""
+    """Update project details (project admin only)."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(
@@ -164,16 +191,26 @@ async def update_project(
 
     db.commit()
     db.refresh(project)
-    return project
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        description=project.description,
+        created_by=project.created_by,
+        is_individual=project.is_individual,
+        is_active=project.is_active,
+        created_at=project.created_at,
+        current_user_is_admin=True,  # Caller is project admin
+    )
 
 
 @router.delete("/{project_id}")
 async def deactivate_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
 ):
-    """Deactivate a project (admin only)."""
+    """Deactivate a project (project admin only)."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(
@@ -206,18 +243,17 @@ async def list_project_members(
             detail="Project not found",
         )
 
-    # Check access
-    if not current_user.is_admin:
-        member = db.query(ProjectMember).filter(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == current_user.id,
-            ProjectMember.is_active == True,
-        ).first()
-        if not member:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a member of this project",
-            )
+    # Check access - user must be a member
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True,
+    ).first()
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
 
     members = (
         db.query(ProjectMember)
@@ -239,6 +275,7 @@ async def list_project_members(
             user_name=m.user.full_name,
             user_email=m.user.email,
             participation_percentage=m.participation_percentage,
+            is_admin=m.is_admin,
             is_active=m.is_active,
             created_at=m.created_at,
         )
@@ -251,9 +288,9 @@ async def add_project_member(
     project_id: int,
     member_data: ProjectMemberCreate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
 ):
-    """Add a member to a project (admin only)."""
+    """Add a member to a project (project admin only)."""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.is_active == True,
@@ -292,6 +329,7 @@ async def add_project_member(
         # Reactivate
         existing.is_active = True
         existing.participation_percentage = member_data.participation_percentage
+        existing.is_admin = member_data.is_admin
         db.commit()
         db.refresh(existing)
         return ProjectMemberResponse(
@@ -301,15 +339,17 @@ async def add_project_member(
             user_name=user.full_name,
             user_email=user.email,
             participation_percentage=existing.participation_percentage,
+            is_admin=existing.is_admin,
             is_active=existing.is_active,
             created_at=existing.created_at,
         )
 
-    # Create new membership
+    # Create new membership (new members are NOT admins by default)
     member = ProjectMember(
         project_id=project_id,
         user_id=member_data.user_id,
         participation_percentage=member_data.participation_percentage,
+        is_admin=member_data.is_admin,
     )
     db.add(member)
     db.commit()
@@ -322,6 +362,7 @@ async def add_project_member(
         user_name=user.full_name,
         user_email=user.email,
         participation_percentage=member.participation_percentage,
+        is_admin=member.is_admin,
         is_active=member.is_active,
         created_at=member.created_at,
     )
@@ -333,9 +374,9 @@ async def update_project_member(
     user_id: int,
     member_data: ProjectMemberUpdate,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
 ):
-    """Update a member's participation percentage (admin only)."""
+    """Update a member's participation percentage or admin status (project admin only)."""
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == user_id,
@@ -363,6 +404,7 @@ async def update_project_member(
         user_name=user.full_name,
         user_email=user.email,
         participation_percentage=member.participation_percentage,
+        is_admin=member.is_admin,
         is_active=member.is_active,
         created_at=member.created_at,
     )
@@ -373,9 +415,9 @@ async def remove_project_member(
     project_id: int,
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_project_admin_user),
 ):
-    """Remove a member from a project (admin only)."""
+    """Remove a member from a project (project admin only)."""
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == user_id,

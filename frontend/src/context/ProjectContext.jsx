@@ -11,6 +11,7 @@ export function ProjectProvider({ children }) {
   const { user } = useAuth()
   const [projects, setProjects] = useState([])
   const [currentProject, setCurrentProject] = useState(null)
+  const [isProjectAdmin, setIsProjectAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showProjectSelector, setShowProjectSelector] = useState(false)
 
@@ -20,6 +21,7 @@ export function ProjectProvider({ children }) {
     } else {
       setProjects([])
       setCurrentProject(null)
+      setIsProjectAdmin(false)
       setLoading(false)
       setShowProjectSelector(false)
     }
@@ -46,18 +48,23 @@ export function ProjectProvider({ children }) {
         // No projects, show selector to create one
         setShowProjectSelector(true)
         setCurrentProject(null)
+        setIsProjectAdmin(false)
       } else if (!savedProjectId) {
         // First time login or no saved project - always show selector
         setShowProjectSelector(true)
-        setCurrentProject(projectsList[0])
+        const firstProject = projectsList[0]
+        setCurrentProject(firstProject)
+        setIsProjectAdmin(firstProject.current_user_is_admin || false)
       } else if (preference === 'selector') {
         // User prefers to always see selector
         setShowProjectSelector(true)
         const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
         if (savedProject) {
           setCurrentProject(savedProject)
+          setIsProjectAdmin(savedProject.current_user_is_admin || false)
         } else {
           setCurrentProject(projectsList[0])
+          setIsProjectAdmin(projectsList[0].current_user_is_admin || false)
           localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
         }
       } else {
@@ -66,8 +73,10 @@ export function ProjectProvider({ children }) {
         const savedProject = projectsList.find(p => p.id === parseInt(savedProjectId))
         if (savedProject) {
           setCurrentProject(savedProject)
+          setIsProjectAdmin(savedProject.current_user_is_admin || false)
         } else {
           setCurrentProject(projectsList[0])
+          setIsProjectAdmin(projectsList[0].current_user_is_admin || false)
           localStorage.setItem(LAST_PROJECT_KEY, projectsList[0].id.toString())
         }
       }
@@ -82,6 +91,7 @@ export function ProjectProvider({ children }) {
     const project = projects.find(p => p.id === parseInt(projectId))
     if (project) {
       setCurrentProject(project)
+      setIsProjectAdmin(project.current_user_is_admin || false)
       localStorage.setItem(LAST_PROJECT_KEY, project.id.toString())
     }
   }
@@ -106,6 +116,7 @@ export function ProjectProvider({ children }) {
       value={{
         projects,
         currentProject,
+        isProjectAdmin,
         loading,
         selectProject,
         refreshProjects,
