@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette } from 'lucide-react'
+
+// Predefined colors for categories
+const CATEGORY_COLORS = [
+  { name: 'Sin color', value: null, bg: 'bg-white', border: 'border-gray-200' },
+  { name: 'Rojo', value: '#FEE2E2', bg: 'bg-red-100', border: 'border-red-300' },
+  { name: 'Naranja', value: '#FFEDD5', bg: 'bg-orange-100', border: 'border-orange-300' },
+  { name: 'Amarillo', value: '#FEF9C3', bg: 'bg-yellow-100', border: 'border-yellow-300' },
+  { name: 'Verde', value: '#DCFCE7', bg: 'bg-green-100', border: 'border-green-300' },
+  { name: 'Celeste', value: '#CFFAFE', bg: 'bg-cyan-100', border: 'border-cyan-300' },
+  { name: 'Azul', value: '#DBEAFE', bg: 'bg-blue-100', border: 'border-blue-300' },
+  { name: 'Violeta', value: '#EDE9FE', bg: 'bg-violet-100', border: 'border-violet-300' },
+  { name: 'Rosa', value: '#FCE7F3', bg: 'bg-pink-100', border: 'border-pink-300' },
+  { name: 'Gris', value: '#F3F4F6', bg: 'bg-gray-100', border: 'border-gray-300' },
+]
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -39,7 +53,214 @@ function StatusBadge({ status }) {
   )
 }
 
-function CreateExpenseModal({ isOpen, onClose, onCreated, providers, categories }) {
+function QuickCreateProviderModal({ isOpen, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [contactInfo, setContactInfo] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const response = await providersAPI.create({ name, contact_info: contactInfo })
+      onCreated(response.data)
+      onClose()
+      setName('')
+      setContactInfo('')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear proveedor')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold">Nuevo Proveedor</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Nombre del proveedor"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Informacion de Contacto (opcional)
+            </label>
+            <textarea
+              value={contactInfo}
+              onChange={(e) => setContactInfo(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              placeholder="Telefono, email, etc."
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [color, setColor] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const response = await categoriesAPI.create({ name, description, color })
+      onCreated(response.data)
+      onClose()
+      setName('')
+      setDescription('')
+      setColor(null)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear categoria')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold">Nueva Categoria</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej: Materiales, Salarios"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Descripcion (opcional)
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              placeholder="Descripcion de la categoria"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Color (opcional)
+            </label>
+            <div className="grid grid-cols-5 gap-2">
+              {CATEGORY_COLORS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setColor(c.value)}
+                  className={`h-10 rounded-lg border-2 transition-all ${c.bg} ${
+                    color === c.value ? 'ring-2 ring-blue-500 border-blue-500' : c.border
+                  }`}
+                  title={c.name}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories }) {
   const [formData, setFormData] = useState({
     description: '',
     amount_original: '',
@@ -50,6 +271,25 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers, categories 
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showProviderModal, setShowProviderModal] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [providers, setProviders] = useState(initialProviders)
+  const [categories, setCategories] = useState(initialCategories)
+
+  useEffect(() => {
+    setProviders(initialProviders)
+    setCategories(initialCategories)
+  }, [initialProviders, initialCategories])
+
+  const handleProviderCreated = (newProvider) => {
+    setProviders([...providers, newProvider])
+    setFormData({ ...formData, provider_id: newProvider.id.toString() })
+  }
+
+  const handleCategoryCreated = (newCategory) => {
+    setCategories([...categories, newCategory])
+    setFormData({ ...formData, category_id: newCategory.id.toString() })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -159,34 +399,54 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers, categories 
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Proveedor
             </label>
-            <select
-              required
-              value={formData.provider_id}
-              onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Seleccionar proveedor</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                required
+                value={formData.provider_id}
+                onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Seleccionar proveedor</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowProviderModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nuevo proveedor"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Categoria
             </label>
-            <select
-              required
-              value={formData.category_id}
-              onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Seleccionar categoria</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                required
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Seleccionar categoria</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nueva categoria"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
 
           <div>
@@ -236,6 +496,18 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers, categories 
             </button>
           </div>
         </form>
+
+        {/* Quick create modals */}
+        <QuickCreateProviderModal
+          isOpen={showProviderModal}
+          onClose={() => setShowProviderModal(false)}
+          onCreated={handleProviderCreated}
+        />
+        <QuickCreateCategoryModal
+          isOpen={showCategoryModal}
+          onClose={() => setShowCategoryModal(false)}
+          onCreated={handleCategoryCreated}
+        />
       </div>
     </div>
   )
