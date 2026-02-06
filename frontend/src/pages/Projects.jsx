@@ -113,7 +113,7 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
 }
 
 function Projects() {
-  const { refreshProjects } = useProject()
+  const { refreshProjects, selectProject, currentProject } = useProject()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -134,7 +134,8 @@ function Projects() {
     }
   }
 
-  const handleEdit = (project) => {
+  const handleEdit = (e, project) => {
+    e.stopPropagation() // Prevent project selection when clicking edit
     setSelectedProject(project)
     setShowModal(true)
   }
@@ -144,7 +145,8 @@ function Projects() {
     setShowModal(true)
   }
 
-  const handleDelete = async (projectId) => {
+  const handleDelete = async (e, projectId) => {
+    e.stopPropagation() // Prevent project selection when clicking delete
     if (!confirm('Desactivar este proyecto?')) return
 
     try {
@@ -154,6 +156,12 @@ function Projects() {
     } catch (err) {
       console.error('Error deleting project:', err)
     }
+  }
+
+  const handleSelectProject = (projectId) => {
+    if (currentProject?.id === projectId) return // Already selected
+    selectProject(projectId)
+    window.location.reload() // Reload to refresh data with new project
   }
 
   const handleSuccess = () => {
@@ -190,57 +198,74 @@ function Projects() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              className="bg-white rounded-xl shadow-sm p-6 border hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Briefcase className="text-blue-600" size={24} />
+          {projects.map((project) => {
+            const isCurrentProject = currentProject?.id === project.id
+            return (
+              <div
+                key={project.id}
+                onClick={() => handleSelectProject(project.id)}
+                className={`bg-white rounded-xl shadow-sm p-6 border transition-all cursor-pointer ${
+                  isCurrentProject
+                    ? 'border-blue-600 ring-2 ring-blue-200 bg-blue-50'
+                    : 'hover:shadow-md hover:border-blue-300'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${
+                      isCurrentProject ? 'bg-blue-200' : 'bg-blue-100'
+                    }`}>
+                      <Briefcase className="text-blue-600" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {project.name}
+                        {isCurrentProject && (
+                          <span className="ml-2 text-xs text-blue-600 font-normal">
+                            (Seleccionado)
+                          </span>
+                        )}
+                      </h3>
+                      {project.description && (
+                        <p className="text-sm text-gray-500 mt-1">{project.description}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{project.name}</h3>
-                    {project.description && (
-                      <p className="text-sm text-gray-500 mt-1">{project.description}</p>
-                    )}
-                  </div>
+                  {project.current_user_is_admin && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => handleEdit(e, project)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, project.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {project.current_user_is_admin && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleEdit(project)}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(project.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="mt-4 pt-4 border-t flex items-center gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  project.is_active
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}>
-                  {project.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-                {project.current_user_is_admin && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
-                    <Shield size={10} />
-                    Admin
+                <div className="mt-4 pt-4 border-t flex items-center gap-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    project.is_active
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {project.is_active ? 'Activo' : 'Inactivo'}
                   </span>
-                )}
+                  {project.current_user_is_admin && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                      <Shield size={10} />
+                      Admin
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
