@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { dashboardAPI, exchangeRateAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
-import { AlertCircle, ArrowRight } from 'lucide-react'
+import { AlertCircle, ArrowRight, Download } from 'lucide-react'
 import {
   LineChart,
   Line,
@@ -33,6 +33,7 @@ function Dashboard() {
   const [exchangeRate, setExchangeRate] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [downloadingExcel, setDownloadingExcel] = useState(false)
 
   useEffect(() => {
     loadDashboardData()
@@ -57,6 +58,40 @@ function Dashboard() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDownloadExcel = async () => {
+    try {
+      setDownloadingExcel(true)
+      const response = await dashboardAPI.exportExcel()
+
+      // Create blob and download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+
+      // Extract filename from Content-Disposition header if available
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `Reporte_${currentProject?.name || 'Proyecto'}_${new Date().toISOString().split('T')[0]}.xlsx`
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '')
+        }
+      }
+
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error downloading Excel:', err)
+      alert('Error al descargar el reporte')
+    } finally {
+      setDownloadingExcel(false)
     }
   }
 
@@ -87,11 +122,21 @@ function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        {exchangeRate && (
-          <div className="text-sm text-gray-500">
-            Dolar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span>
-          </div>
-        )}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {exchangeRate && (
+            <div className="text-sm text-gray-500">
+              Dolar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span>
+            </div>
+          )}
+          <button
+            onClick={handleDownloadExcel}
+            disabled={downloadingExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+          >
+            <Download size={18} />
+            <span>{downloadingExcel ? 'Descargando...' : 'Descargar Reporte Excel'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Personal Status Alert - hide for individual projects */}

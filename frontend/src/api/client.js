@@ -116,6 +116,7 @@ export const dashboardAPI = {
   myStatus: () => client.get('/dashboard/my-status'),
   allUsersStatus: () => client.get('/dashboard/all-users-status'),
   expenseStatus: (id) => client.get(`/dashboard/expense-status/${id}`),
+  exportExcel: () => client.get('/dashboard/export-excel', { responseType: 'blob' }),
 }
 
 // Exchange Rate API

@@ -1,8 +1,11 @@
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
+from io import BytesIO
+from datetime import datetime
 
 from app.database import get_db
 from app.schemas.dashboard import (
@@ -292,4 +295,224 @@ async def get_expense_payment_status(
         fully_paid=pending_count == 0,
         paid_count=paid_count,
         pending_count=pending_count,
+    )
+
+
+@router.get("/export-excel")
+async def export_project_excel(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Export complete project report to Excel with multiple sheets:
+    - Sheet 1: All expenses with payment details
+    - Sheet 2: Dashboard summary statistics
+    - Sheet 3: Summary by participant
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    if not project:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project context required (X-Project-ID header)"
+        )
+
+    # Create workbook
+    wb = Workbook()
+    wb.remove(wb.active)  # Remove default sheet
+
+    # Styles
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    center_align = Alignment(horizontal="center", vertical="center")
+    currency_format = '"$"#,##0.00'
+    date_format = "DD/MM/YYYY"
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # === SHEET 1: GASTOS ===
+    ws_expenses = wb.create_sheet("Gastos")
+
+    # Headers
+    headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+               "Monto USD", "Monto ARS", "Estado", "Pagado", "Pendiente"]
+    ws_expenses.append(headers)
+
+    # Style header row
+    for col_num, header in enumerate(headers, 1):
+        cell = ws_expenses.cell(row=1, column=col_num)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+
+    # Get expenses
+    expenses = db.query(Expense).filter(
+        Expense.project_id == project.id
+    ).order_by(Expense.expense_date.desc()).all()
+
+    for expense in expenses:
+        payments = db.query(ParticipantPayment).filter(
+            ParticipantPayment.expense_id == expense.id
+        ).all()
+
+        paid_count = sum(1 for p in payments if p.is_paid)
+        pending_count = len(payments) - paid_count
+        status = "Pagado" if pending_count == 0 else ("Parcial" if paid_count > 0 else "Pendiente")
+
+        row = [
+            expense.id,
+            expense.expense_date,
+            expense.description,
+            expense.provider.name if expense.provider else "-",
+            expense.category.name if expense.category else "-",
+            float(expense.amount_usd),
+            float(expense.amount_ars),
+            status,
+            paid_count,
+            pending_count,
+        ]
+        ws_expenses.append(row)
+
+    # Format columns
+    for row in ws_expenses.iter_rows(min_row=2, max_row=ws_expenses.max_row):
+        row[0].alignment = center_align  # ID
+        row[1].number_format = date_format  # Fecha
+        row[5].number_format = currency_format  # USD
+        row[6].number_format = currency_format  # ARS
+        row[7].alignment = center_align  # Estado
+        row[8].alignment = center_align  # Pagado
+        row[9].alignment = center_align  # Pendiente
+        for cell in row:
+            cell.border = thin_border
+
+    # Auto-adjust column widths
+    for col in range(1, len(headers) + 1):
+        ws_expenses.column_dimensions[get_column_letter(col)].width = 15
+
+    # === SHEET 2: DASHBOARD RESUMEN ===
+    ws_summary = wb.create_sheet("Resumen Dashboard")
+
+    # Get summary data
+    expense_totals = db.query(
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("count"),
+    ).filter(Expense.project_id == project.id).first()
+
+    payment_totals = db.query(
+        func.count(ParticipantPayment.id).label("total_payments"),
+        func.sum(func.cast(ParticipantPayment.is_paid, Decimal)).label("paid_count"),
+    ).join(Expense).filter(Expense.project_id == project.id).first()
+
+    total_usd = float(expense_totals.total_usd or 0)
+    total_ars = float(expense_totals.total_ars or 0)
+    expense_count = expense_totals.count or 0
+    total_payments = payment_totals.total_payments or 0
+    paid_payments = int(payment_totals.paid_count or 0)
+    pending_payments = total_payments - paid_payments
+
+    # Add summary data
+    ws_summary.append(["RESUMEN DEL PROYECTO", project.name])
+    ws_summary.append(["Fecha de generación", datetime.now().strftime("%d/%m/%Y %H:%M")])
+    ws_summary.append([])
+
+    ws_summary.append(["GASTOS"])
+    ws_summary.append(["Total de gastos", expense_count])
+    ws_summary.append(["Total en USD", total_usd])
+    ws_summary.append(["Total en ARS", total_ars])
+    ws_summary.append([])
+
+    ws_summary.append(["PAGOS"])
+    ws_summary.append(["Total de pagos", total_payments])
+    ws_summary.append(["Pagos realizados", paid_payments])
+    ws_summary.append(["Pagos pendientes", pending_payments])
+
+    # Style summary sheet
+    ws_summary.column_dimensions['A'].width = 25
+    ws_summary.column_dimensions['B'].width = 20
+
+    # Bold headers
+    for row in [1, 4, 9]:
+        ws_summary.cell(row=row, column=1).font = Font(bold=True, size=12)
+
+    # Currency format
+    ws_summary.cell(row=6, column=2).number_format = currency_format
+    ws_summary.cell(row=7, column=2).number_format = currency_format
+
+    # === SHEET 3: POR PARTICIPANTE ===
+    ws_participants = wb.create_sheet("Por Participante")
+
+    # Headers
+    part_headers = ["Participante", "Email", "% Participación", "Total a pagar USD",
+                    "Pagado USD", "Pendiente USD"]
+    ws_participants.append(part_headers)
+
+    # Style header
+    for col_num, header in enumerate(part_headers, 1):
+        cell = ws_participants.cell(row=1, column=col_num)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+
+    # Get participants
+    members = db.query(ProjectMember).join(User).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.is_active == True,
+        User.is_active == True,
+    ).all()
+
+    for member in members:
+        user = member.user
+        summary = get_user_payment_summary(db, user.id, project.id)
+
+        row = [
+            user.full_name,
+            user.email,
+            float(member.participation_percentage),
+            float(summary["total_to_pay_usd"]),
+            float(summary["paid_usd"]),
+            float(summary["pending_usd"]),
+        ]
+        ws_participants.append(row)
+
+    # Format columns
+    for row in ws_participants.iter_rows(min_row=2, max_row=ws_participants.max_row):
+        row[2].number_format = '0.00"%"'  # Percentage
+        row[2].alignment = center_align
+        row[3].number_format = currency_format  # Total USD
+        row[4].number_format = currency_format  # Pagado USD
+        row[5].number_format = currency_format  # Pendiente USD
+        for cell in row:
+            cell.border = thin_border
+
+    # Auto-adjust column widths
+    ws_participants.column_dimensions['A'].width = 25
+    ws_participants.column_dimensions['B'].width = 30
+    ws_participants.column_dimensions['C'].width = 18
+    for col in [4, 5, 6]:
+        ws_participants.column_dimensions[get_column_letter(col)].width = 18
+
+    # Save to BytesIO
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+
+    # Generate filename
+    filename = f"Reporte_{project.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+
+    # Return as streaming response
+    return StreamingResponse(
+        excel_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
