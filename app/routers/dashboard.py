@@ -368,9 +368,12 @@ async def export_project_excel(
         pending_count = len(payments) - paid_count
         status = "Pagado" if pending_count == 0 else ("Parcial" if paid_count > 0 else "Pendiente")
 
+        # Remove timezone from date for Excel compatibility
+        expense_date = expense.expense_date.replace(tzinfo=None) if expense.expense_date else None
+
         row = [
             expense.id,
-            expense.expense_date,
+            expense_date,
             expense.description,
             expense.provider.name if expense.provider else "-",
             expense.category.name if expense.category else "-",
