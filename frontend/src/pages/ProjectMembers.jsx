@@ -1,67 +1,27 @@
 import { useState, useEffect } from 'react'
-import { projectsAPI, usersAPI, authAPI } from '../api/client'
+import { projectsAPI, authAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Users as UsersIcon, Plus, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield } from 'lucide-react'
+import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield } from 'lucide-react'
 
 function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberIds }) {
-  const [users, setUsers] = useState([])
-  const [selectedUserId, setSelectedUserId] = useState('')
   const [percentage, setPercentage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [loadingUsers, setLoadingUsers] = useState(true)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState('select') // 'select' or 'create'
+  const [isProjectAdmin, setIsProjectAdmin] = useState(false)
   const [newUser, setNewUser] = useState({
     full_name: '',
     email: '',
     password: '',
-    is_admin: false,
   })
 
   useEffect(() => {
     if (isOpen) {
-      loadUsers()
-      setMode('select')
-      setNewUser({ full_name: '', email: '', password: '', is_admin: false })
+      setNewUser({ full_name: '', email: '', password: '' })
+      setPercentage('')
+      setIsProjectAdmin(false)
+      setError('')
     }
   }, [isOpen])
-
-  const loadUsers = async () => {
-    setLoadingUsers(true)
-    try {
-      const response = await usersAPI.list(false)
-      // Filter out users who are already members
-      const availableUsers = response.data.filter(
-        (u) => !existingMemberIds.includes(u.id)
-      )
-      setUsers(availableUsers)
-    } catch (err) {
-      console.error('Error loading users:', err)
-    } finally {
-      setLoadingUsers(false)
-    }
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      await projectsAPI.addMember(projectId, {
-        user_id: parseInt(selectedUserId),
-        participation_percentage: parseFloat(percentage) || 0,
-      })
-      onSuccess()
-      onClose()
-      setSelectedUserId('')
-      setPercentage('')
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al agregar participante')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleCreateAndAdd = async (e) => {
     e.preventDefault()
@@ -80,12 +40,11 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
       await projectsAPI.addMember(projectId, {
         user_id: newUserId,
         participation_percentage: parseFloat(percentage) || 0,
+        is_admin: isProjectAdmin,
       })
 
       onSuccess()
       onClose()
-      setNewUser({ full_name: '', email: '', password: '', is_admin: false })
-      setPercentage('')
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al crear usuario')
     } finally {
@@ -105,192 +64,109 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
           </button>
         </div>
 
+        <p className="text-gray-600 text-sm mb-4">
+          Crea una cuenta para el nuevo participante. Luego podra iniciar sesion con su email y contrasena.
+        </p>
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
             {error}
           </div>
         )}
 
-        {loadingUsers ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <form onSubmit={handleCreateAndAdd} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre Completo
+            </label>
+            <input
+              type="text"
+              required
+              value={newUser.full_name}
+              onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Nombre del participante"
+            />
           </div>
-        ) : mode === 'select' ? (
-          <>
-            {users.length > 0 ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Usuario existente
-                  </label>
-                  <select
-                    required
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Seleccionar usuario</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.full_name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Porcentaje de Participacion (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    required
-                    value={percentage}
-                    onChange={(e) => setPercentage(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              required
+              value={newUser.email}
+              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="email@ejemplo.com"
+            />
+          </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {loading ? 'Agregando...' : 'Agregar'}
-                  </button>
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contrasena
+            </label>
+            <input
+              type="password"
+              required
+              value={newUser.password}
+              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Minimo 6 caracteres"
+            />
+          </div>
 
-                <div className="border-t pt-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setMode('create')}
-                    className="w-full text-center text-blue-600 hover:text-blue-700 text-sm"
-                  >
-                    O crear un usuario nuevo
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-gray-500 text-center py-4">
-                  No hay usuarios disponibles para agregar.
-                </p>
-                <button
-                  onClick={() => setMode('create')}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Crear nuevo usuario
-                </button>
-                <button
-                  onClick={onClose}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <form onSubmit={handleCreateAndAdd} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre Completo
-              </label>
-              <input
-                type="text"
-                required
-                value={newUser.full_name}
-                onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Porcentaje de Participacion (%)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              required
+              value={percentage}
+              onChange={(e) => setPercentage(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                required
-                value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="new_is_project_admin"
+              checked={isProjectAdmin}
+              onChange={(e) => setIsProjectAdmin(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="new_is_project_admin" className="text-sm text-gray-700">
+              Es admin del proyecto
+            </label>
+          </div>
+          <p className="text-xs text-gray-500">
+            Los admins pueden crear gastos, proveedores, categorias y gestionar miembros.
+          </p>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contrasena
-              </label>
-              <input
-                type="password"
-                required
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Porcentaje de Participacion (%)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                required
-                value={percentage}
-                onChange={(e) => setPercentage(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.00"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="new_is_admin"
-                checked={newUser.is_admin}
-                onChange={(e) => setNewUser({ ...newUser, is_admin: e.target.checked })}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="new_is_admin" className="text-sm text-gray-700">
-                Es administrador
-              </label>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => setMode('select')}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Volver
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Creando...' : 'Crear y Agregar'}
-              </button>
-            </div>
-          </form>
-        )}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear y Agregar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
