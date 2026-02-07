@@ -58,6 +58,6 @@ class Expense(Base):
     # Relationships
     provider = relationship("Provider", back_populates="expenses")
     category = relationship("Category", back_populates="expenses")
-    created_by_user = relationship("User", back_populates="expenses_created")
+    created_by_user = relationship("User", back_populates="expenses_created", foreign_keys=[created_by])
     participant_payments = relationship("ParticipantPayment", back_populates="expense", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="expenses")

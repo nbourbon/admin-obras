@@ -18,7 +18,7 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    expenses_created = relationship("Expense", back_populates="created_by_user")
+    expenses_created = relationship("Expense", back_populates="created_by_user", foreign_keys="[Expense.created_by]")
     payments = relationship("ParticipantPayment", back_populates="user", foreign_keys="[ParticipantPayment.user_id]")
     projects_created = relationship("Project", back_populates="creator", foreign_keys="[Project.created_by]")
     project_memberships = relationship("ProjectMember", back_populates="user")
