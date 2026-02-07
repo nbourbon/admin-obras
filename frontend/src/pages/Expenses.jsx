@@ -268,6 +268,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     currency_original: 'USD',
     provider_id: '',
     category_id: '',
+    expense_date: new Date().toISOString().split('T')[0], // Default to today
   })
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -304,6 +305,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         amount_original: parseFloat(formData.amount_original),
         provider_id: parseInt(formData.provider_id),
         category_id: parseInt(formData.category_id),
+        expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
       })
 
       // Upload invoice if selected
@@ -324,6 +326,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         currency_original: 'USD',
         provider_id: '',
         category_id: '',
+        expense_date: new Date().toISOString().split('T')[0],
       })
       setInvoiceFile(null)
     } catch (err) {
@@ -448,6 +451,19 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
                 <Plus size={20} />
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha del Gasto
+            </label>
+            <input
+              type="date"
+              required
+              value={formData.expense_date}
+              onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           <div>
