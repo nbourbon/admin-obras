@@ -91,12 +91,28 @@ npm run dev
 - Frontend uses `/api` proxy to backend (configured in vite.config.js)
 
 ## Expense Flow
-1. Project admin creates expense with amount + currency (USD or ARS)
+1. Project admin creates expense with amount + currency (USD or ARS) and optionally specifies expense date
 2. System fetches current blue dollar rate
 3. Converts amount to both USD and ARS
 4. Creates `ParticipantPayment` for each active project member (amount × their %)
-5. Users mark their payments as paid + upload receipts
+5. Users mark their payments as paid + upload receipts, optionally specifying payment date
 6. For non-individual projects, payments require project admin approval
+
+## Date Tracking
+The system distinguishes between **event dates** (when something actually happened) and **audit timestamps** (when it was recorded in the system):
+
+### Expense Dates
+- **`expense_date`**: The actual date when the expense occurred (user-editable, defaults to today)
+- **`created_at`**: When the expense was created in the system (auto-generated)
+- **`updated_at`**: When the expense was last modified (auto-generated)
+
+### Payment Dates
+- **`payment_date`**: The actual date when the user made the payment (user-editable, defaults to today)
+- **`submitted_at`**: When the payment was submitted for approval in the system (auto-generated)
+- **`paid_at`**: When the payment was marked as paid in the system (auto-generated)
+- **`approved_at`**: When the payment was approved by admin (auto-generated)
+
+This separation allows users to backfill historical expenses and payments with correct dates while maintaining full audit trails.
 
 ## API Authentication
 - First admin: `POST /auth/register-first-admin` (only works if no users exist)
