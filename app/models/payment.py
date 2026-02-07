@@ -21,9 +21,10 @@ class ParticipantPayment(Base):
     # Payment info
     amount_paid = Column(Numeric(15, 2), nullable=True, default=0)
     currency_paid = Column(Enum(Currency), nullable=True)
+    payment_date = Column(DateTime(timezone=True), nullable=True)  # Actual date of payment
     is_pending_approval = Column(Boolean, default=False)
     is_paid = Column(Boolean, default=False)
-    paid_at = Column(DateTime(timezone=True), nullable=True)
+    paid_at = Column(DateTime(timezone=True), nullable=True)  # When marked as paid in system
     submitted_at = Column(DateTime(timezone=True), nullable=True)
 
     # Approval info

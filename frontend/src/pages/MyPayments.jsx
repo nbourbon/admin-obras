@@ -70,6 +70,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
   const [formData, setFormData] = useState({
     amount_paid: '',
     currency_paid: 'USD',
+    payment_date: new Date().toISOString().split('T')[0], // Default to today
   })
   const [receiptFile, setReceiptFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -80,6 +81,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
       setFormData({
         amount_paid: payment.amount_due_usd,
         currency_paid: 'USD',
+        payment_date: new Date().toISOString().split('T')[0],
       })
       setReceiptFile(null)
     }
@@ -95,6 +97,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
       await paymentsAPI.submitPayment(payment.id, {
         amount_paid: parseFloat(formData.amount_paid),
         currency_paid: formData.currency_paid,
+        payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
       })
 
       // Upload receipt if provided
@@ -181,6 +184,19 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
                 <option value="ARS">ARS</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha del Pago
+            </label>
+            <input
+              type="date"
+              required
+              value={formData.payment_date}
+              onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           <div>

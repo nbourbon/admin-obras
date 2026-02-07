@@ -16,6 +16,7 @@ class PaymentResponse(PaymentBase):
     id: int
     amount_paid: Optional[Decimal] = None
     currency_paid: Optional[Currency] = None
+    payment_date: Optional[datetime] = None
     is_pending_approval: bool = False
     is_paid: bool
     paid_at: Optional[datetime] = None
@@ -34,6 +35,7 @@ class PaymentResponse(PaymentBase):
 class PaymentMarkPaid(BaseModel):
     amount_paid: Decimal
     currency_paid: Currency
+    payment_date: Optional[datetime] = None
 
 
 class PaymentApproval(BaseModel):

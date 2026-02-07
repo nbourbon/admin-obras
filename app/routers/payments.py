@@ -276,6 +276,7 @@ async def submit_payment(
 
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
+    payment.payment_date = payment_data.payment_date or datetime.utcnow()
     payment.submitted_at = datetime.utcnow()
     payment.rejection_reason = None  # Clear any previous rejection
 
