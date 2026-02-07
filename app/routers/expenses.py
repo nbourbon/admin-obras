@@ -31,11 +31,13 @@ async def list_expenses(
     status_filter: Optional[str] = Query(None, description="Filter by status"),
     from_date: Optional[datetime] = Query(None, description="Filter from date"),
     to_date: Optional[datetime] = Query(None, description="Filter to date"),
+    include_deleted: bool = Query(False, description="Include deleted expenses (admin only)"),
     skip: int = 0,
     limit: int = 100,
 ):
     """
     List all expenses for the current project with optional filters.
+    By default, deleted expenses are excluded. Admins can include them with include_deleted=true.
     """
     query = (
         db.query(Expense)
@@ -44,6 +46,11 @@ async def list_expenses(
 
     if project:
         query = query.filter(Expense.project_id == project.id)
+
+    # Filter deleted expenses unless admin specifically requests them
+    if not include_deleted:
+        query = query.filter(Expense.is_deleted == False)
+
     if provider_id:
         query = query.filter(Expense.provider_id == provider_id)
     if category_id:
@@ -391,3 +398,112 @@ async def download_invoice(
         filename=file_path.name,
         media_type="application/octet-stream",
     )
+
+
+@router.delete("/{expense_id}")
+async def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Soft delete an expense (project admin only).
+    Can only delete if there are no active payments associated.
+    Payments pending approval will be automatically cancelled.
+    """
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found",
+        )
+
+    # Check if user is project admin
+    if expense.project_id and not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only project admins can delete expenses",
+        )
+
+    # Check for active payments (not deleted)
+    active_payments = (
+        db.query(ParticipantPayment)
+        .filter(
+            ParticipantPayment.expense_id == expense_id,
+            ParticipantPayment.is_deleted == False,
+        )
+        .all()
+    )
+
+    # Check if there are paid payments or pending non-approval payments
+    blocking_payments = []
+    pending_approvals = []
+
+    for payment in active_payments:
+        if payment.is_paid:
+            blocking_payments.append(f"{payment.user.full_name} (pagado)")
+        elif not payment.is_pending_approval and (payment.amount_paid is not None):
+            blocking_payments.append(f"{payment.user.full_name} (pendiente de eliminar)")
+        elif payment.is_pending_approval:
+            pending_approvals.append(payment)
+
+    if blocking_payments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se puede eliminar el gasto. Los siguientes participantes deben eliminar sus pagos primero: {', '.join(blocking_payments)}",
+        )
+
+    # Auto-cancel payments that are pending approval
+    for payment in pending_approvals:
+        payment.is_deleted = True
+        payment.deleted_at = datetime.utcnow()
+        payment.deleted_by = current_user.id
+
+    # Soft delete the expense
+    expense.is_deleted = True
+    expense.deleted_at = datetime.utcnow()
+    expense.deleted_by = current_user.id
+
+    db.commit()
+
+    return {"message": "Gasto eliminado correctamente"}
+
+
+@router.put("/{expense_id}/restore")
+async def restore_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Restore a deleted expense (project admin only).
+    """
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found",
+        )
+
+    # Check if user is project admin
+    if expense.project_id and not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only project admins can restore expenses",
+        )
+
+    if not expense.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Expense is not deleted",
+        )
+
+    # Restore the expense
+    expense.is_deleted = False
+    expense.deleted_at = None
+    expense.deleted_by = None
+
+    db.commit()
+    db.refresh(expense)
+
+    return expense

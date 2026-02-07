@@ -44,6 +44,7 @@ class UserPaymentStatus(BaseModel):
 
 
 class ParticipantStatus(BaseModel):
+    payment_id: int
     user_id: int
     user_name: str
     amount_due_usd: Decimal

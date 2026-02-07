@@ -29,7 +29,10 @@ async def get_my_payments(
     """
     query = (
         db.query(ParticipantPayment)
-        .filter(ParticipantPayment.user_id == current_user.id)
+        .filter(
+            ParticipantPayment.user_id == current_user.id,
+            ParticipantPayment.is_deleted == False,
+        )
         .options(joinedload(ParticipantPayment.expense))
     )
 
@@ -261,29 +264,33 @@ async def submit_payment(
             detail="Payment is already approved and paid",
         )
 
-    # Check if this is an individual project (auto-approve)
+    # Check if this is an individual project or if user is admin (auto-approve)
     is_individual = False
+    user_is_admin = False
     expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
     if expense and expense.project_id:
         project = db.query(Project).filter(Project.id == expense.project_id).first()
         is_individual = project.is_individual if project else False
-        print(f"[DEBUG submit_payment] Payment {payment_id}, Expense {expense.id}, Project {expense.project_id}, is_individual={is_individual}")
+        user_is_admin = is_project_admin(db, current_user.id, expense.project_id)
+        print(f"[DEBUG submit_payment] Payment {payment_id}, Expense {expense.id}, Project {expense.project_id}, is_individual={is_individual}, user_is_admin={user_is_admin}")
 
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
     payment.submitted_at = datetime.utcnow()
     payment.rejection_reason = None  # Clear any previous rejection
 
-    if is_individual:
-        # Auto-approve for individual projects
+    # Auto-approve if: individual project OR user is project admin
+    if is_individual or user_is_admin:
+        # Auto-approve for individual projects or admin users
         payment.is_paid = True
         payment.is_pending_approval = False
         payment.paid_at = datetime.utcnow()
         payment.approved_at = datetime.utcnow()
-        payment.approved_by = current_user.id  # Set approved_by for individual projects
-        print(f"[DEBUG submit_payment] Auto-approved payment {payment_id} for individual project")
+        payment.approved_by = current_user.id
+        reason = "individual project" if is_individual else "admin self-approval"
+        print(f"[DEBUG submit_payment] Auto-approved payment {payment_id} ({reason})")
     else:
-        # Mark as pending approval for multi-participant projects
+        # Mark as pending approval for non-admin users in multi-participant projects
         payment.is_pending_approval = True
         print(f"[DEBUG submit_payment] Payment {payment_id} marked as pending approval")
 
@@ -543,3 +550,54 @@ async def download_receipt(
         filename=file_path.name,
         media_type="application/octet-stream",
     )
+
+
+@router.delete("/{payment_id}")
+async def delete_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Soft delete a payment.
+    Users can delete their own unpaid payments.
+    Admins can delete any payment.
+    Paid payments cannot be deleted.
+    """
+    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    # Check if user is project admin or payment owner
+    expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
+    is_admin = expense and expense.project_id and is_project_admin(db, current_user.id, expense.project_id)
+    is_owner = payment.user_id == current_user.id
+
+    if not is_admin and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this payment",
+        )
+
+    # Cannot delete paid payments
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar un pago que ya fue aprobado. Contacte al administrador.",
+        )
+
+    # Soft delete the payment
+    payment.is_deleted = True
+    payment.deleted_at = datetime.utcnow()
+    payment.deleted_by = current_user.id
+
+    db.commit()
+
+    # Update expense status
+    update_expense_status(db, payment.expense_id)
+
+    return {"message": "Pago eliminado correctamente"}

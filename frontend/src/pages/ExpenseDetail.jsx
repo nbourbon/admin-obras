@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { expensesAPI, dashboardAPI, paymentsAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { ArrowLeft, FileText, Upload, CheckCircle, Clock, Download, AlertCircle, XCircle, User, Eye } from 'lucide-react'
+import { useProject } from '../context/ProjectContext'
+import { ArrowLeft, FileText, Upload, CheckCircle, Clock, Download, AlertCircle, XCircle, User, Eye, Trash2 } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -23,13 +24,20 @@ function formatDate(dateString) {
 
 function ExpenseDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
+  const { isProjectAdmin } = useProject()
   const [expense, setExpense] = useState(null)
   const [paymentStatus, setPaymentStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [markingPaid, setMarkingPaid] = useState(null) // { paymentId, userName }
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentCurrency, setPaymentCurrency] = useState('USD')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     loadExpense()
@@ -102,6 +110,42 @@ function ExpenseDetail() {
     }
   }
 
+  const handleMarkAsPaid = async (paymentId) => {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+      alert('Ingrese un monto valido')
+      return
+    }
+
+    try {
+      await paymentsAPI.markPaid(paymentId, {
+        amount_paid: parseFloat(paymentAmount),
+        currency_paid: paymentCurrency,
+      })
+      setMarkingPaid(null)
+      setPaymentAmount('')
+      setPaymentCurrency('USD')
+      loadExpense()
+    } catch (err) {
+      console.error('Error marking payment as paid:', err)
+      alert('Error al marcar el pago')
+    }
+  }
+
+  const handleDeleteExpense = async () => {
+    setDeleting(true)
+    try {
+      await expensesAPI.delete(id)
+      navigate('/expenses')
+    } catch (err) {
+      console.error('Error deleting expense:', err)
+      const errorMsg = err.response?.data?.detail || 'Error al eliminar el gasto'
+      alert(errorMsg)
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -123,14 +167,25 @@ function ExpenseDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link
-          to="/expenses"
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft size={24} />
-        </Link>
-        <h1 className="text-2xl font-bold text-gray-900">{expense.description}</h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/expenses"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={24} />
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">{expense.description}</h1>
+        </div>
+        {isProjectAdmin && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            <Trash2 size={18} />
+            <span>Eliminar Gasto</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -364,25 +419,86 @@ function ExpenseDetail() {
                     }
 
                     const style = getParticipantStyle()
+                    const showMarkPaidButton = isProjectAdmin && !p.is_paid && !isMe
 
                     return (
-                      <div
-                        key={p.user_id}
-                        className={`flex items-center gap-3 p-3 rounded-lg ${style.bg} ${isMe ? 'ring-2 ring-blue-400' : ''}`}
-                      >
-                        {style.icon}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {p.user_name}
-                            {isMe && <span className="ml-2 text-xs text-blue-600">(Tu)</span>}
-                          </p>
-                          <p className="text-xs text-gray-500">{style.status}</p>
+                      <div key={p.user_id}>
+                        <div
+                          className={`flex items-center gap-3 p-3 rounded-lg ${style.bg} ${isMe ? 'ring-2 ring-blue-400' : ''}`}
+                        >
+                          {style.icon}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">
+                              {p.user_name}
+                              {isMe && <span className="ml-2 text-xs text-blue-600">(Tu)</span>}
+                            </p>
+                            <p className="text-xs text-gray-500">{style.status}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-sm">
+                              {formatCurrency(p.amount_due_usd)}
+                            </p>
+                          </div>
+                          {showMarkPaidButton && (
+                            <button
+                              onClick={() => setMarkingPaid({ paymentId: p.payment_id, userName: p.user_name, amountDue: p.amount_due_usd })}
+                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap"
+                            >
+                              Marcar Pagado
+                            </button>
+                          )}
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-sm">
-                            {formatCurrency(p.amount_due_usd)}
-                          </p>
-                        </div>
+
+                        {/* Inline form for marking as paid */}
+                        {markingPaid?.paymentId === p.payment_id && (
+                          <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <p className="text-sm font-medium mb-3">
+                              Marcar pago de <span className="text-blue-600">{markingPaid.userName}</span> como pagado
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Monto Pagado</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={paymentAmount}
+                                  onChange={(e) => setPaymentAmount(e.target.value)}
+                                  placeholder={markingPaid.amountDue?.toString()}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Moneda</label>
+                                <select
+                                  value={paymentCurrency}
+                                  onChange={(e) => setPaymentCurrency(e.target.value)}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="USD">USD</option>
+                                  <option value="ARS">ARS</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleMarkAsPaid(markingPaid.paymentId)}
+                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                              >
+                                Confirmar Pago
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setMarkingPaid(null)
+                                  setPaymentAmount('')
+                                  setPaymentCurrency('USD')
+                                }}
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -392,6 +508,39 @@ function ExpenseDetail() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Confirmar Eliminacion</h2>
+            <p className="text-gray-600 mb-6">
+              ¿Estas seguro que queres eliminar este gasto? Esta accion solo se puede realizar si no hay pagos activos asociados.
+              {paymentStatus && paymentStatus.paid_count > 0 && (
+                <span className="block mt-2 text-red-600 font-medium">
+                  Atención: Este gasto tiene {paymentStatus.paid_count} pago(s) asociado(s). Los participantes deben eliminar sus pagos primero.
+                </span>
+              )}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteExpense}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <FilePreviewModal
         isOpen={showPreview}

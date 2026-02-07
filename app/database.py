@@ -99,3 +99,31 @@ def _run_migrations():
                     print("Migration: Set is_admin=TRUE for project creators")
                 except Exception as e:
                     print(f"Migration warning (is_admin): {e}")
+
+    # Migration: Add soft delete columns to expenses table
+    if 'expenses' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('expenses')]
+        if 'is_deleted' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE expenses ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL'))
+                    conn.execute(text('ALTER TABLE expenses ADD COLUMN deleted_at TIMESTAMP'))
+                    conn.execute(text('ALTER TABLE expenses ADD COLUMN deleted_by INTEGER'))
+                    conn.commit()
+                    print("Migration: Added soft delete columns to expenses table")
+                except Exception as e:
+                    print(f"Migration warning (expenses soft delete): {e}")
+
+    # Migration: Add soft delete columns to participant_payments table
+    if 'participant_payments' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
+        if 'is_deleted' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL'))
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN deleted_at TIMESTAMP'))
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN deleted_by INTEGER'))
+                    conn.commit()
+                    print("Migration: Added soft delete columns to participant_payments table")
+                except Exception as e:
+                    print(f"Migration warning (participant_payments soft delete): {e}")

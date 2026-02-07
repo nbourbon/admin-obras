@@ -37,12 +37,12 @@ async def get_dashboard_summary(
     """
     Get overall dashboard summary with totals for the current project.
     """
-    # Build expense query
+    # Build expense query (exclude deleted expenses)
     expense_query = db.query(
         func.sum(Expense.amount_usd).label("total_usd"),
         func.sum(Expense.amount_ars).label("total_ars"),
         func.count(Expense.id).label("count"),
-    )
+    ).filter(Expense.is_deleted == False)
     if project:
         expense_query = expense_query.filter(Expense.project_id == project.id)
 
@@ -52,14 +52,20 @@ async def get_dashboard_summary(
     total_expenses_ars = Decimal(str(expense_totals.total_ars or 0))
     expenses_count = expense_totals.count or 0
 
-    # Get payment totals (filter by project through expense)
+    # Get payment totals (filter by project through expense, exclude deleted)
     paid_query = db.query(
         func.sum(ParticipantPayment.amount_due_usd).label("paid_usd"),
         func.sum(ParticipantPayment.amount_due_ars).label("paid_ars"),
-    ).filter(ParticipantPayment.is_paid == True)
+    ).filter(
+        ParticipantPayment.is_paid == True,
+        ParticipantPayment.is_deleted == False,
+    )
 
     if project:
-        paid_query = paid_query.join(Expense).filter(Expense.project_id == project.id)
+        paid_query = paid_query.join(Expense).filter(
+            Expense.project_id == project.id,
+            Expense.is_deleted == False,
+        )
 
     paid_payments = paid_query.first()
 
@@ -117,14 +123,14 @@ async def get_expense_evolution(
     """
     Get monthly expense evolution for the current project.
     """
-    # Group expenses by year and month
+    # Group expenses by year and month (exclude deleted)
     query = db.query(
         extract("year", Expense.expense_date).label("year"),
         extract("month", Expense.expense_date).label("month"),
         func.sum(Expense.amount_usd).label("total_usd"),
         func.sum(Expense.amount_ars).label("total_ars"),
         func.count(Expense.id).label("count"),
-    )
+    ).filter(Expense.is_deleted == False)
 
     if project:
         query = query.filter(Expense.project_id == project.id)
@@ -259,7 +265,10 @@ async def get_expense_payment_status(
 
     payments = (
         db.query(ParticipantPayment)
-        .filter(ParticipantPayment.expense_id == expense_id)
+        .filter(
+            ParticipantPayment.expense_id == expense_id,
+            ParticipantPayment.is_deleted == False,
+        )
         .all()
     )
 
@@ -270,6 +279,7 @@ async def get_expense_payment_status(
     for payment in payments:
         user = db.query(User).filter(User.id == payment.user_id).first()
         participants.append(ParticipantStatus(
+            payment_id=payment.id,
             user_id=payment.user_id,
             user_name=user.full_name if user else "Unknown",
             amount_due_usd=Decimal(str(payment.amount_due_usd)),
@@ -354,14 +364,16 @@ async def export_project_excel(
         cell.alignment = center_align
         cell.border = thin_border
 
-    # Get expenses
+    # Get expenses (exclude deleted)
     expenses = db.query(Expense).filter(
-        Expense.project_id == project.id
+        Expense.project_id == project.id,
+        Expense.is_deleted == False,
     ).order_by(Expense.expense_date.desc()).all()
 
     for expense in expenses:
         payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.expense_id == expense.id
+            ParticipantPayment.expense_id == expense.id,
+            ParticipantPayment.is_deleted == False,
         ).all()
 
         paid_count = sum(1 for p in payments if p.is_paid)

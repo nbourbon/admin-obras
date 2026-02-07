@@ -80,6 +80,8 @@ export const expensesAPI = {
   get: (id) => client.get(`/expenses/${id}`),
   create: (data) => client.post('/expenses', data),
   update: (id, data) => client.put(`/expenses/${id}`, data),
+  delete: (id) => client.delete(`/expenses/${id}`),
+  restore: (id) => client.put(`/expenses/${id}/restore`),
   uploadInvoice: (id, file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -97,6 +99,7 @@ export const paymentsAPI = {
   markPaid: (id, data) => client.put(`/payments/${id}/mark-paid`, data),
   submitPayment: (id, data) => client.put(`/payments/${id}/submit-payment`, data),
   unmarkPaid: (id) => client.put(`/payments/${id}/unmark-paid`),
+  delete: (id) => client.delete(`/payments/${id}`),
   pendingApproval: () => client.get('/payments/pending-approval'),
   approve: (id, data) => client.put(`/payments/${id}/approve`, data),
   uploadReceipt: (id, file) => {

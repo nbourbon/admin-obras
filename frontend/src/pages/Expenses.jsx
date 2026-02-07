@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette, RotateCcw, Eye, EyeOff } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -521,15 +521,16 @@ function Expenses() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [showDeleted])
 
   const loadData = async () => {
     try {
       const [expensesRes, providersRes, categoriesRes] = await Promise.all([
-        expensesAPI.list(),
+        expensesAPI.list({ include_deleted: showDeleted }),
         providersAPI.list(),
         categoriesAPI.list(),
       ])
@@ -540,6 +541,16 @@ function Expenses() {
       console.error('Error loading data:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRestoreExpense = async (expenseId) => {
+    try {
+      await expensesAPI.restore(expenseId)
+      loadData()
+    } catch (err) {
+      console.error('Error restoring expense:', err)
+      alert('Error al restaurar el gasto')
     }
   }
 
@@ -555,15 +566,26 @@ function Expenses() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-        {isProjectAdmin && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus size={20} />
-            Nuevo Gasto
-          </button>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {isProjectAdmin && (
+            <button
+              onClick={() => setShowDeleted(!showDeleted)}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+            >
+              {showDeleted ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showDeleted ? 'Ocultar eliminados' : 'Ver eliminados'}
+            </button>
+          )}
+          {isProjectAdmin && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus size={20} />
+              Nuevo Gasto
+            </button>
+          )}
+        </div>
       </div>
 
       {expenses.length === 0 ? (
@@ -596,25 +618,37 @@ function Expenses() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
+                  {showDeleted && isProjectAdmin && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {expenses.map((expense) => (
                   <tr
                     key={expense.id}
-                    className="hover:opacity-80 transition-opacity"
-                    style={{ backgroundColor: expense.category?.color || '#ffffff' }}
+                    className={`hover:opacity-80 transition-opacity ${expense.is_deleted ? 'opacity-50' : ''}`}
+                    style={{ backgroundColor: expense.is_deleted ? '#fee' : (expense.category?.color || '#ffffff') }}
                   >
                     <td className="px-6 py-4">
-                      <Link
-                        to={`/expenses/${expense.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        {expense.description}
-                      </Link>
-                      {expense.invoice_file_path && (
-                        <FileText size={14} className="inline ml-2 text-gray-400" />
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/expenses/${expense.id}`}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          {expense.description}
+                        </Link>
+                        {expense.invoice_file_path && (
+                          <FileText size={14} className="text-gray-400" />
+                        )}
+                        {expense.is_deleted && (
+                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
+                            ELIMINADO
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
@@ -636,6 +670,19 @@ function Expenses() {
                     <td className="px-6 py-4">
                       <StatusBadge status={expense.status} />
                     </td>
+                    {showDeleted && isProjectAdmin && (
+                      <td className="px-6 py-4">
+                        {expense.is_deleted && (
+                          <button
+                            onClick={() => handleRestoreExpense(expense.id)}
+                            className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                          >
+                            <RotateCcw size={14} />
+                            Restaurar
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

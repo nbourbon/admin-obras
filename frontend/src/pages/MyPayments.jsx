@@ -11,7 +11,8 @@ import {
   X,
   AlertCircle,
   XCircle,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
 
@@ -246,6 +247,9 @@ function MyPayments() {
   const [previewFileName, setPreviewFileName] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewPaymentId, setPreviewPaymentId] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [paymentToDelete, setPaymentToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const isIndividual = currentProject?.is_individual || false
 
@@ -288,6 +292,24 @@ function MyPayments() {
       loadPayments()
     } catch (err) {
       console.error('Error uploading receipt:', err)
+    }
+  }
+
+  const handleDeletePayment = async () => {
+    if (!paymentToDelete) return
+
+    setDeleting(true)
+    try {
+      await paymentsAPI.delete(paymentToDelete.id)
+      setShowDeleteConfirm(false)
+      setPaymentToDelete(null)
+      loadPayments()
+    } catch (err) {
+      console.error('Error deleting payment:', err)
+      const errorMsg = err.response?.data?.detail || 'Error al eliminar el pago'
+      alert(errorMsg)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -468,6 +490,16 @@ function MyPayments() {
                       >
                         Cancelar
                       </button>
+                      <button
+                        onClick={() => {
+                          setPaymentToDelete(payment)
+                          setShowDeleteConfirm(true)
+                        }}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
+                        title="Eliminar pago"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </>
                 ) : payment.rejection_reason ? (
@@ -479,12 +511,24 @@ function MyPayments() {
                       </div>
                       <p className="text-sm text-red-500 ml-7">{payment.rejection_reason}</p>
                     </div>
-                    <button
-                      onClick={() => handleMarkPaid(payment)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Enviar nuevamente
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleMarkPaid(payment)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Enviar nuevamente
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPaymentToDelete(payment)
+                          setShowDeleteConfirm(true)
+                        }}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
+                        title="Eliminar pago"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -492,12 +536,24 @@ function MyPayments() {
                       <Clock size={20} />
                       <span className="font-medium">Pendiente de pago</span>
                     </div>
-                    <button
-                      onClick={() => handleMarkPaid(payment)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Enviar pago
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleMarkPaid(payment)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Enviar pago
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPaymentToDelete(payment)
+                          setShowDeleteConfirm(true)
+                        }}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
+                        title="Eliminar pago"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
@@ -568,6 +624,49 @@ function MyPayments() {
         onSuccess={loadPayments}
         isIndividual={isIndividual}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && paymentToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Confirmar Eliminacion de Pago</h2>
+            <div className="mb-6">
+              <p className="text-gray-700 mb-4">
+                Estas por eliminar el pago de <span className="font-semibold">{paymentToDelete.expense?.description}</span>.
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-yellow-800 text-sm font-medium mb-2">⚠️ Importante:</p>
+                <p className="text-yellow-700 text-sm">
+                  Este pago se eliminara del registro de pagos. Esta accion solo se debe hacer si:
+                </p>
+                <ul className="list-disc list-inside text-yellow-700 text-sm mt-2 space-y-1">
+                  <li>Se te asigno el pago por error</li>
+                  <li>Ya coordinaste con el administrador la devolucion del pago</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeletePayment}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar Pago'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setPaymentToDelete(null)
+                }}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <FilePreviewModal
         isOpen={showPreview}

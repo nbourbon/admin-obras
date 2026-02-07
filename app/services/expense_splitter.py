@@ -148,11 +148,20 @@ def get_user_pending_payments(db: Session, user_id: int) -> List[ParticipantPaym
 
 
 def get_user_payment_summary(db: Session, user_id: int, project_id: Optional[int] = None) -> dict:
-    """Get payment summary for a user, optionally filtered by project."""
-    query = db.query(ParticipantPayment).filter(ParticipantPayment.user_id == user_id)
+    """Get payment summary for a user, optionally filtered by project (excludes deleted payments and expenses)."""
+    query = db.query(ParticipantPayment).filter(
+        ParticipantPayment.user_id == user_id,
+        ParticipantPayment.is_deleted == False,
+    )
 
     if project_id:
-        query = query.join(Expense).filter(Expense.project_id == project_id)
+        query = query.join(Expense).filter(
+            Expense.project_id == project_id,
+            Expense.is_deleted == False,
+        )
+    else:
+        # Even without project filter, exclude deleted expenses
+        query = query.join(Expense).filter(Expense.is_deleted == False)
 
     payments = query.all()
 
