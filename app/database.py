@@ -127,3 +127,39 @@ def _run_migrations():
                     print("Migration: Added soft delete columns to participant_payments table")
                 except Exception as e:
                     print(f"Migration warning (participant_payments soft delete): {e}")
+
+    # Migration: Add payment_date to participant_payments table
+    if 'participant_payments' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
+        if 'payment_date' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN payment_date TIMESTAMP'))
+                    conn.commit()
+                    print("Migration: Added payment_date column to participant_payments table")
+                except Exception as e:
+                    print(f"Migration warning (payment_date): {e}")
+
+    # Migration: Update single-member projects to 100% participation
+    if 'project_members' in inspector.get_table_names():
+        with engine.connect() as conn:
+            try:
+                # For individual projects with only one member, set that member to 100%
+                conn.execute(text('''
+                    UPDATE project_members
+                    SET participation_percentage = 100
+                    WHERE project_id IN (
+                        SELECT p.id FROM projects p
+                        WHERE p.is_individual = TRUE
+                        AND (
+                            SELECT COUNT(*) FROM project_members pm
+                            WHERE pm.project_id = p.id AND pm.is_active = TRUE
+                        ) = 1
+                    )
+                    AND is_active = TRUE
+                    AND participation_percentage != 100
+                '''))
+                conn.commit()
+                print("Migration: Updated single-member individual projects to 100% participation")
+            except Exception as e:
+                print(f"Migration warning (single-member projects): {e}")

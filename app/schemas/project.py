@@ -11,7 +11,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    is_individual: bool = False
+    is_individual: bool = True  # New projects are individual (single-user) by default
 
 
 class ProjectUpdate(BaseModel):

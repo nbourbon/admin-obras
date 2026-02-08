@@ -78,11 +78,13 @@ async def create_project(
     db.commit()
     db.refresh(project)
 
-    # Add creator as a member with 0% participation AND is_admin=True
+    # Add creator as a member with 100% participation AND is_admin=True
+    # For individual projects, creator owns 100%
+    # User can later add members and recalculate percentages
     member = ProjectMember(
         project_id=project.id,
         user_id=current_user.id,
-        participation_percentage=Decimal("0"),
+        participation_percentage=Decimal("100"),
         is_admin=True,  # Creator is admin of the project
     )
     db.add(member)
