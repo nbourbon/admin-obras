@@ -23,7 +23,7 @@ A full-stack application for managing construction expenses among multiple parti
 ### Backend
 - Python 3.10+
 - FastAPI
-- SQLAlchemy + SQLite
+- SQLAlchemy ORM (supports SQLite for local dev, PostgreSQL for production)
 - JWT Authentication
 
 ### Frontend
@@ -60,12 +60,18 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file
-cp .env.example .env
+# (Optional) Copy environment file for custom configuration
+# If you skip this step, the app will use SQLite by default (recommended for local dev)
+cp .env.example .env  # Edit if you want to use PostgreSQL locally
 
 # Start the backend server
 uvicorn app.main:app --reload
 ```
+
+**Database Setup:**
+- **By default**: Uses SQLite (`./data/construction.db`) - no configuration needed
+- **For PostgreSQL**: Set `DATABASE_URL` in `.env` file
+- The database and tables are created automatically on first run
 
 The API will be available at http://localhost:8000
 
@@ -246,10 +252,13 @@ Most endpoints require an `X-Project-ID` header to scope data to the current pro
 See `.env.example` for all available configuration options:
 
 - `DATABASE_URL` - Database connection string
+  - **Default**: `sqlite:///./data/construction.db` (local development)
+  - **Production**: `postgresql://user:pass@host:5432/dbname`
 - `SECRET_KEY` - JWT signing key (change in production!)
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time
-- `MAX_FILE_SIZE_MB` - Maximum upload file size
-- `EXCHANGE_RATE_CACHE_MINUTES` - Exchange rate cache duration
+- `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time (default: 1440 = 24 hours)
+- `MAX_FILE_SIZE_MB` - Maximum upload file size (default: 10)
+- `EXCHANGE_RATE_CACHE_MINUTES` - Exchange rate cache duration (default: 60)
+- `CLOUDINARY_*` - Cloud file storage credentials (production only)
 
 ## License
 

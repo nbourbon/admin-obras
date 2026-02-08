@@ -7,7 +7,7 @@ Full-stack application for managing construction expenses among multiple partici
 
 ### Backend (`/app`)
 - **Framework**: FastAPI
-- **Database**: SQLite with SQLAlchemy ORM
+- **Database**: PostgreSQL (production) / SQLite (development) with SQLAlchemy ORM
 - **Auth**: JWT tokens (python-jose + passlib/bcrypt)
 - **Exchange Rate**: Blue dollar from bluelytics.com.ar API
 - **File Storage**: Cloudinary (production) / Local filesystem (development)
@@ -79,6 +79,48 @@ npm install
 npm run dev
 ```
 - App: http://localhost:3000
+
+## Database Configuration
+
+The application supports both SQLite and PostgreSQL through SQLAlchemy ORM.
+
+### Configuration Priority (Pydantic Settings)
+Configuration is loaded in this order (higher priority overwrites lower):
+1. **Default values in `config.py`** - SQLite (fallback for local development)
+2. **`.env` file** - PostgreSQL connection string (production)
+3. **Environment variables** - Highest priority (if set in system)
+
+### Development (Local)
+**Default behavior** (no `.env` file):
+- Uses SQLite: `sqlite:///./data/construction.db`
+- Database file created automatically in `./data/` directory
+- No setup required - perfect for:
+  - New developers getting started
+  - Quick local testing
+  - Offline development
+  - Portable demos
+
+**With `.env` file**:
+- Can configure PostgreSQL connection via `DATABASE_URL`
+- Useful if you want to mirror production environment locally
+
+### Production (Render)
+- Uses PostgreSQL (Supabase)
+- Configured via `.env` file with `DATABASE_URL=postgresql://...`
+- The `database.py` automatically detects PostgreSQL and uses the `psycopg` driver
+
+### Why Keep SQLite as Default?
+1. **Zero-friction onboarding**: New developers can run the app immediately without configuring databases
+2. **No external dependencies**: Don't need PostgreSQL installed locally
+3. **Portable**: Can copy the SQLite file for backups or sharing
+4. **Safe fallback**: If `.env` is missing or misconfigured, the app still works with SQLite
+
+### Database Migrations
+The app uses a custom migration system in `database.py` (`_run_migrations()`) that:
+- Automatically adds new columns to existing tables
+- Works with both SQLite and PostgreSQL
+- Runs on startup via `init_db()`
+- Safe to run multiple times (checks if columns exist first)
 
 ## Key Conventions
 - **Project-based permissions**: Admin status is per-project (`ProjectMember.is_admin`), not global

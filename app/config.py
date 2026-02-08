@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Database
+    # Default: SQLite for local development (zero-configuration)
+    # Production: Set DATABASE_URL in .env to use PostgreSQL
     database_url: str = "sqlite:///./data/construction.db"
 
     # JWT Settings
