@@ -48,7 +48,7 @@ construccion-edificio/
 
 ## Key Models
 - **User**: System users (global `is_admin` flag is now legacy, unused)
-- **Project**: With `is_individual` flag for simplified single-user UX
+- **Project**: With `is_individual` flag (defaults to True for new projects)
 - **ProjectMember**: Links users to projects with `participation_percentage` and `is_admin` (per-project admin)
 - **Provider**: Construction suppliers (per project)
 - **Category**: Expense categories (per project)
@@ -184,11 +184,20 @@ This separation allows users to backfill historical expenses and payments with c
 - Users only see projects where they are members (no global admin access)
 - Project admins can grant admin privileges to other members via the Participantes page
 
-## Individual Projects
-Projects marked as `is_individual=True` have simplified UX:
-- Payments are auto-approved when expense is created
+## Project Creation Flow
+**New projects are individual (single-user) by default:**
+- `is_individual=True` by default
+- Creator gets 100% participation automatically
+- Payments are auto-approved (no admin review needed)
 - "Por Aprobar" navigation item is hidden
+
+**Converting to multi-participant:**
+- Project admin can add members in Participantes page
+- Must recalculate percentages to sum to 100%
+- Can toggle `is_individual` flag off to require payment approvals
 - Toggle available in Participantes page (only for project admins)
+
+This approach simplifies onboarding - users start simple and grow complexity as needed.
 
 ## Notes System
 - **Regular notes**: Meeting minutes with rich text content
