@@ -15,6 +15,7 @@ from app.schemas.project import (
 )
 from app.utils.dependencies import get_current_user, get_project_admin_user, is_project_admin
 from app.models.user import User
+from app.models.expense import Expense
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 
@@ -52,6 +53,7 @@ async def list_projects(
             "description": project.description,
             "created_by": project.created_by,
             "is_individual": project.is_individual,
+            "currency_mode": getattr(project, 'currency_mode', None) or "DUAL",
             "is_active": project.is_active,
             "created_at": project.created_at,
             "current_user_is_admin": is_project_admin(db, current_user.id, project.id),
@@ -68,10 +70,19 @@ async def create_project(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new project. Any authenticated user can create a project and becomes its admin."""
+    # Validate currency_mode
+    valid_modes = ("ARS", "USD", "DUAL")
+    if project_data.currency_mode not in valid_modes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"currency_mode must be one of: {', '.join(valid_modes)}",
+        )
+
     project = Project(
         name=project_data.name,
         description=project_data.description,
         is_individual=project_data.is_individual,
+        currency_mode=project_data.currency_mode,
         created_by=current_user.id,
     )
     db.add(project)
@@ -96,6 +107,7 @@ async def create_project(
         description=project.description,
         created_by=project.created_by,
         is_individual=project.is_individual,
+        currency_mode=project.currency_mode or "DUAL",
         is_active=project.is_active,
         created_at=project.created_at,
         current_user_is_admin=True,  # Creator is always admin
@@ -165,6 +177,7 @@ async def get_project(
         description=project.description,
         created_by=project.created_by,
         is_individual=project.is_individual,
+        currency_mode=getattr(project, 'currency_mode', None) or "DUAL",
         is_active=project.is_active,
         created_at=project.created_at,
         current_user_is_admin=member.is_admin,
@@ -188,6 +201,29 @@ async def update_project(
         )
 
     update_data = project_data.model_dump(exclude_unset=True)
+
+    # Validate currency_mode change
+    if "currency_mode" in update_data:
+        valid_modes = ("ARS", "USD", "DUAL")
+        if update_data["currency_mode"] not in valid_modes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"currency_mode must be one of: {', '.join(valid_modes)}",
+            )
+
+        # Cannot change currency_mode if project has expenses
+        current_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+        if update_data["currency_mode"] != current_mode:
+            expense_count = db.query(Expense).filter(
+                Expense.project_id == project_id,
+                Expense.is_deleted == False,
+            ).count()
+            if expense_count > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No se puede cambiar el modo de moneda cuando el proyecto ya tiene gastos",
+                )
+
     for field, value in update_data.items():
         setattr(project, field, value)
 
@@ -200,6 +236,7 @@ async def update_project(
         description=project.description,
         created_by=project.created_by,
         is_individual=project.is_individual,
+        currency_mode=getattr(project, 'currency_mode', None) or "DUAL",
         is_active=project.is_active,
         created_at=project.created_at,
         current_user_is_admin=True,  # Caller is project admin

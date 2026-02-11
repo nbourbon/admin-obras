@@ -49,23 +49,38 @@ def validate_participation_percentages(db: Session, project_id: Optional[int] = 
 def create_participant_payments(
     db: Session,
     expense: Expense,
+    currency_mode: str = "DUAL",
 ) -> List[ParticipantPayment]:
     """
     Create payment records for all active project members based on their
     participation percentage.
     Payments are always created as pending - for individual projects,
     auto-approval happens when user submits payment.
+
+    Currency mode determines which amounts are calculated:
+    - ARS: only amount_due_ars, amount_due_usd = 0
+    - USD: only amount_due_usd, amount_due_ars = 0
+    - DUAL: both amounts (current behavior)
     """
     payments = []
+
+    def calc_amounts(percentage):
+        if currency_mode == "ARS":
+            return (Decimal("0"), (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01")))
+        elif currency_mode == "USD":
+            return ((Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01")), Decimal("0"))
+        else:  # DUAL
+            return (
+                (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01")),
+                (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01")),
+            )
 
     # Use project members if expense has a project, otherwise fall back to global users
     if expense.project_id:
         members = get_project_members(db, expense.project_id)
         for member in members:
             percentage = Decimal(str(member.participation_percentage)) / Decimal("100")
-
-            amount_due_usd = (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01"))
-            amount_due_ars = (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01"))
+            amount_due_usd, amount_due_ars = calc_amounts(percentage)
 
             payment = ParticipantPayment(
                 expense_id=expense.id,
@@ -81,9 +96,7 @@ def create_participant_payments(
         participants = get_active_participants(db)
         for participant in participants:
             percentage = Decimal(str(participant.participation_percentage)) / Decimal("100")
-
-            amount_due_usd = (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01"))
-            amount_due_ars = (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01"))
+            amount_due_usd, amount_due_ars = calc_amounts(percentage)
 
             payment = ParticipantPayment(
                 expense_id=expense.id,

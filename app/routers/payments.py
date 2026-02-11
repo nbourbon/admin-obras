@@ -1,4 +1,5 @@
 from typing import List, Optional
+from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
@@ -12,6 +13,7 @@ from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
 from app.models.project import Project
 from app.services.expense_splitter import update_expense_status
+from app.services.exchange_rate import fetch_blue_dollar_rate_sync
 from app.services.file_storage import save_receipt, get_file_path, get_file_url
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
@@ -48,6 +50,10 @@ async def get_my_payments(
     result = []
     for payment in payments:
         expense = payment.expense
+        # Get currency_mode from project
+        project = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
         expense_info = ExpenseInfo(
             id=expense.id,
             description=expense.description,
@@ -56,6 +62,7 @@ async def get_my_payments(
             expense_date=expense.expense_date,
             provider_name=expense.provider.name if expense.provider else None,
             category_name=expense.category.name if expense.category else None,
+            currency_mode=currency_mode,
         )
 
         payment_with_expense = PaymentWithExpense(
@@ -74,6 +81,10 @@ async def get_my_payments(
             approved_at=payment.approved_at,
             rejection_reason=payment.rejection_reason,
             receipt_file_path=payment.receipt_file_path,
+            exchange_rate_at_payment=payment.exchange_rate_at_payment,
+            amount_paid_usd=payment.amount_paid_usd,
+            amount_paid_ars=payment.amount_paid_ars,
+            exchange_rate_source=payment.exchange_rate_source,
             created_at=payment.created_at,
             updated_at=payment.updated_at,
             expense=expense_info,
@@ -112,6 +123,10 @@ async def get_pending_approval_payments(
         expense = payment.expense
         user = payment.user
 
+        # Get currency_mode from project
+        project_obj = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
+
         expense_info = ExpenseInfo(
             id=expense.id,
             description=expense.description,
@@ -120,6 +135,7 @@ async def get_pending_approval_payments(
             expense_date=expense.expense_date,
             provider_name=expense.provider.name if expense.provider else None,
             category_name=expense.category.name if expense.category else None,
+            currency_mode=currency_mode,
         )
 
         user_info = UserInfo(
@@ -144,6 +160,10 @@ async def get_pending_approval_payments(
             approved_at=payment.approved_at,
             rejection_reason=payment.rejection_reason,
             receipt_file_path=payment.receipt_file_path,
+            exchange_rate_at_payment=payment.exchange_rate_at_payment,
+            amount_paid_usd=payment.amount_paid_usd,
+            amount_paid_ars=payment.amount_paid_ars,
+            exchange_rate_source=payment.exchange_rate_source,
             created_at=payment.created_at,
             updated_at=payment.updated_at,
             expense=expense_info,
@@ -192,6 +212,10 @@ async def get_payment(
     expense = payment.expense
     user = payment.user
 
+    # Get currency_mode from project
+    project_obj = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+    currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
+
     expense_info = ExpenseInfo(
         id=expense.id,
         description=expense.description,
@@ -200,6 +224,7 @@ async def get_payment(
         expense_date=expense.expense_date,
         provider_name=expense.provider.name if expense.provider else None,
         category_name=expense.category.name if expense.category else None,
+        currency_mode=currency_mode,
     )
 
     user_info = UserInfo(
@@ -224,6 +249,10 @@ async def get_payment(
         approved_at=payment.approved_at,
         rejection_reason=payment.rejection_reason,
         receipt_file_path=payment.receipt_file_path,
+        exchange_rate_at_payment=payment.exchange_rate_at_payment,
+        amount_paid_usd=payment.amount_paid_usd,
+        amount_paid_ars=payment.amount_paid_ars,
+        exchange_rate_source=payment.exchange_rate_source,
         created_at=payment.created_at,
         updated_at=payment.updated_at,
         expense=expense_info,
@@ -279,6 +308,47 @@ async def submit_payment(
     payment.payment_date = payment_data.payment_date or datetime.utcnow()
     payment.submitted_at = datetime.utcnow()
     payment.rejection_reason = None  # Clear any previous rejection
+
+    # Track exchange rate at payment time based on currency mode
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL' if project else 'DUAL'
+
+    if currency_mode == "ARS":
+        payment.amount_paid_ars = payment_data.amount_paid
+        payment.amount_paid_usd = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+    elif currency_mode == "USD":
+        payment.amount_paid_usd = payment_data.amount_paid
+        payment.amount_paid_ars = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+    else:
+        # DUAL mode - track exchange rate and calculate equivalents
+        if payment_data.exchange_rate_override:
+            tc = payment_data.exchange_rate_override
+            payment.exchange_rate_source = "manual"
+        else:
+            try:
+                tc = fetch_blue_dollar_rate_sync()
+                payment.exchange_rate_source = "auto"
+            except Exception:
+                tc = None
+                payment.exchange_rate_source = None
+
+        payment.exchange_rate_at_payment = tc
+
+        if tc and tc > 0:
+            if payment_data.currency_paid.value == "USD":
+                payment.amount_paid_usd = payment_data.amount_paid
+                payment.amount_paid_ars = (Decimal(str(payment_data.amount_paid)) * Decimal(str(tc))).quantize(Decimal("0.01"))
+            else:  # ARS
+                payment.amount_paid_ars = payment_data.amount_paid
+                payment.amount_paid_usd = (Decimal(str(payment_data.amount_paid)) / Decimal(str(tc))).quantize(Decimal("0.01"))
+        else:
+            if payment_data.currency_paid.value == "USD":
+                payment.amount_paid_usd = payment_data.amount_paid
+            else:
+                payment.amount_paid_ars = payment_data.amount_paid
 
     # Auto-approve if: individual project OR user is project admin
     if is_individual or user_is_admin:

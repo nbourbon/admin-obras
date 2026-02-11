@@ -9,7 +9,7 @@ from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
 from app.models.user import User
-from app.models.expense import Expense, Currency
+from app.models.expense import Expense, Currency, CurrencyMode
 from app.models.provider import Provider
 from app.models.category import Category
 from app.models.payment import ParticipantPayment
@@ -115,16 +115,48 @@ async def create_expense(
             detail="Category does not belong to this project",
         )
 
-    # Get current exchange rate
-    exchange_rate = fetch_blue_dollar_rate_sync()
-    log_exchange_rate(db, exchange_rate)
+    # Determine currency mode from project
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
-    # Convert to both currencies
-    amount_usd, amount_ars = convert_currency(
-        expense_data.amount_original,
-        expense_data.currency_original.value,
-        exchange_rate,
-    )
+    # Validate currency compatibility with project mode
+    if currency_mode == "ARS" and expense_data.currency_original != Currency.ARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este proyecto solo permite gastos en ARS",
+        )
+    if currency_mode == "USD" and expense_data.currency_original != Currency.USD:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este proyecto solo permite gastos en USD",
+        )
+
+    # Calculate amounts based on currency mode
+    if currency_mode in ("ARS", "USD"):
+        # Single currency mode - no exchange rate needed
+        if currency_mode == "ARS":
+            amount_usd = Decimal("0")
+            amount_ars = expense_data.amount_original
+        else:
+            amount_usd = expense_data.amount_original
+            amount_ars = Decimal("0")
+        exchange_rate = Decimal("0")
+        exchange_rate_source = None
+    else:
+        # DUAL mode - need exchange rate
+        if expense_data.exchange_rate_override:
+            exchange_rate = expense_data.exchange_rate_override
+            exchange_rate_source = "manual"
+        else:
+            exchange_rate = fetch_blue_dollar_rate_sync()
+            exchange_rate_source = "auto"
+        log_exchange_rate(db, exchange_rate)
+
+        # Convert to both currencies
+        amount_usd, amount_ars = convert_currency(
+            expense_data.amount_original,
+            expense_data.currency_original.value,
+            exchange_rate,
+        )
 
     # Create expense
     expense = Expense(
@@ -134,6 +166,7 @@ async def create_expense(
         amount_usd=amount_usd,
         amount_ars=amount_ars,
         exchange_rate_used=exchange_rate,
+        exchange_rate_source=exchange_rate_source,
         provider_id=expense_data.provider_id,
         category_id=expense_data.category_id,
         created_by=current_user.id,
@@ -145,7 +178,7 @@ async def create_expense(
     db.refresh(expense)
 
     # Create participant payments for project members
-    payments = create_participant_payments(db, expense)
+    payments = create_participant_payments(db, expense, currency_mode)
 
     # Build response with payments
     payment_summaries = []
@@ -227,6 +260,8 @@ async def get_expense(
     payment_summaries = []
     total_paid_usd = Decimal("0")
     total_pending_usd = Decimal("0")
+    total_actual_paid_usd = Decimal("0")
+    total_actual_paid_ars = Decimal("0")
 
     for p in payments:
         user = db.query(User).filter(User.id == p.user_id).first()
@@ -240,6 +275,10 @@ async def get_expense(
         ))
         if p.is_paid:
             total_paid_usd += Decimal(str(p.amount_due_usd))
+            if p.amount_paid_usd:
+                total_actual_paid_usd += Decimal(str(p.amount_paid_usd))
+            if p.amount_paid_ars:
+                total_actual_paid_ars += Decimal(str(p.amount_paid_ars))
         else:
             total_pending_usd += Decimal(str(p.amount_due_usd))
 
@@ -251,6 +290,7 @@ async def get_expense(
         "amount_usd": expense.amount_usd,
         "amount_ars": expense.amount_ars,
         "exchange_rate_used": expense.exchange_rate_used,
+        "exchange_rate_source": expense.exchange_rate_source,
         "provider_id": expense.provider_id,
         "category_id": expense.category_id,
         "created_by": expense.created_by,
@@ -264,6 +304,8 @@ async def get_expense(
         "participant_payments": payment_summaries,
         "total_paid_usd": total_paid_usd,
         "total_pending_usd": total_pending_usd,
+        "total_actual_paid_usd": total_actual_paid_usd if total_actual_paid_usd > 0 else None,
+        "total_actual_paid_ars": total_actual_paid_ars if total_actual_paid_ars > 0 else None,
     }
 
     return ExpenseWithPayments(**response_data)
@@ -296,17 +338,40 @@ async def update_expense(
 
     update_data = expense_data.model_dump(exclude_unset=True)
 
+    # Extract exchange_rate_override before setting attributes
+    exchange_rate_override = update_data.pop("exchange_rate_override", None)
+
     # If amount or currency is being updated, recalculate conversions
-    if "amount_original" in update_data or "currency_original" in update_data:
+    if "amount_original" in update_data or "currency_original" in update_data or exchange_rate_override:
         amount = update_data.get("amount_original", expense.amount_original)
         currency = update_data.get("currency_original", expense.currency_original)
 
-        exchange_rate = fetch_blue_dollar_rate_sync()
-        amount_usd, amount_ars = convert_currency(amount, currency.value, exchange_rate)
+        # Determine currency mode from project
+        project = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
-        update_data["amount_usd"] = amount_usd
-        update_data["amount_ars"] = amount_ars
-        update_data["exchange_rate_used"] = exchange_rate
+        if currency_mode in ("ARS", "USD"):
+            if currency_mode == "ARS":
+                update_data["amount_usd"] = Decimal("0")
+                update_data["amount_ars"] = amount
+            else:
+                update_data["amount_usd"] = amount
+                update_data["amount_ars"] = Decimal("0")
+            update_data["exchange_rate_used"] = Decimal("0")
+        else:
+            if exchange_rate_override:
+                exchange_rate = exchange_rate_override
+                update_data["exchange_rate_source"] = "manual"
+            else:
+                exchange_rate = fetch_blue_dollar_rate_sync()
+                update_data["exchange_rate_source"] = "auto"
+
+            currency_value = currency.value if hasattr(currency, 'value') else currency
+            amount_usd, amount_ars = convert_currency(amount, currency_value, exchange_rate)
+
+            update_data["amount_usd"] = amount_usd
+            update_data["amount_ars"] = amount_ars
+            update_data["exchange_rate_used"] = exchange_rate
 
     for field, value in update_data.items():
         setattr(expense, field, value)

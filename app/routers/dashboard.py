@@ -95,10 +95,16 @@ async def get_dashboard_summary(
             .count()
         )
 
-    # Get current exchange rate
-    try:
-        current_rate = fetch_blue_dollar_rate_sync()
-    except Exception:
+    # Get currency_mode from project
+    currency_mode = getattr(project, 'currency_mode', None) or "DUAL" if project else "DUAL"
+
+    # Get current exchange rate (skip for single-currency projects)
+    if currency_mode == "DUAL":
+        try:
+            current_rate = fetch_blue_dollar_rate_sync()
+        except Exception:
+            current_rate = Decimal("0")
+    else:
         current_rate = Decimal("0")
 
     return DashboardSummary(
@@ -111,6 +117,7 @@ async def get_dashboard_summary(
         expenses_count=expenses_count,
         participants_count=participants_count,
         current_exchange_rate=current_rate,
+        currency_mode=currency_mode,
     )
 
 
@@ -289,6 +296,9 @@ async def get_expense_payment_status(
             paid_at=payment.paid_at,
             submitted_at=payment.submitted_at,
             rejection_reason=payment.rejection_reason,
+            exchange_rate_at_payment=Decimal(str(payment.exchange_rate_at_payment)) if payment.exchange_rate_at_payment else None,
+            amount_paid_usd=Decimal(str(payment.amount_paid_usd)) if payment.amount_paid_usd else None,
+            amount_paid_ars=Decimal(str(payment.amount_paid_ars)) if payment.amount_paid_ars else None,
         ))
 
         if payment.is_paid:
@@ -348,12 +358,22 @@ async def export_project_excel(
         bottom=Side(style='thin')
     )
 
+    # Determine currency mode
+    currency_mode = getattr(project, 'currency_mode', None) or "DUAL"
+
     # === SHEET 1: GASTOS ===
     ws_expenses = wb.create_sheet("Gastos")
 
-    # Headers
-    headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
-               "Monto USD", "Monto ARS", "Estado", "Pagado", "Pendiente"]
+    # Headers adapt to currency mode
+    if currency_mode == "ARS":
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+                   "Monto ARS", "Estado", "Pagado", "Pendiente"]
+    elif currency_mode == "USD":
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+                   "Monto USD", "Estado", "Pagado", "Pendiente"]
+    else:
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+                   "Monto USD", "Monto ARS", "Estado", "Pagado", "Pendiente"]
     ws_expenses.append(headers)
 
     # Style header row
@@ -383,29 +403,44 @@ async def export_project_excel(
         # Remove timezone from date for Excel compatibility
         expense_date = expense.expense_date.replace(tzinfo=None) if expense.expense_date else None
 
-        row = [
-            expense.id,
-            expense_date,
-            expense.description,
-            expense.provider.name if expense.provider else "-",
-            expense.category.name if expense.category else "-",
-            float(expense.amount_usd),
-            float(expense.amount_ars),
-            status,
-            paid_count,
-            pending_count,
-        ]
+        if currency_mode == "ARS":
+            row = [
+                expense.id, expense_date, expense.description,
+                expense.provider.name if expense.provider else "-",
+                expense.category.name if expense.category else "-",
+                float(expense.amount_ars), status, paid_count, pending_count,
+            ]
+        elif currency_mode == "USD":
+            row = [
+                expense.id, expense_date, expense.description,
+                expense.provider.name if expense.provider else "-",
+                expense.category.name if expense.category else "-",
+                float(expense.amount_usd), status, paid_count, pending_count,
+            ]
+        else:
+            row = [
+                expense.id, expense_date, expense.description,
+                expense.provider.name if expense.provider else "-",
+                expense.category.name if expense.category else "-",
+                float(expense.amount_usd), float(expense.amount_ars),
+                status, paid_count, pending_count,
+            ]
         ws_expenses.append(row)
 
     # Format columns
     for row in ws_expenses.iter_rows(min_row=2, max_row=ws_expenses.max_row):
         row[0].alignment = center_align  # ID
         row[1].number_format = date_format  # Fecha
-        row[5].number_format = currency_format  # USD
-        row[6].number_format = currency_format  # ARS
-        row[7].alignment = center_align  # Estado
-        row[8].alignment = center_align  # Pagado
-        row[9].alignment = center_align  # Pendiente
+        row[5].number_format = currency_format  # Amount
+        if currency_mode == "DUAL":
+            row[6].number_format = currency_format  # ARS
+            row[7].alignment = center_align  # Estado
+            row[8].alignment = center_align  # Pagado
+            row[9].alignment = center_align  # Pendiente
+        else:
+            row[6].alignment = center_align  # Estado
+            row[7].alignment = center_align  # Pagado
+            row[8].alignment = center_align  # Pendiente
         for cell in row:
             cell.border = thin_border
 
@@ -468,9 +503,16 @@ async def export_project_excel(
     # === SHEET 3: POR PARTICIPANTE ===
     ws_participants = wb.create_sheet("Por Participante")
 
-    # Headers
-    part_headers = ["Participante", "Email", "% Participación", "Total a pagar USD",
-                    "Pagado USD", "Pendiente USD"]
+    # Headers adapt to currency mode
+    if currency_mode == "ARS":
+        part_headers = ["Participante", "Email", "% Participación", "Total a pagar ARS",
+                        "Pagado ARS", "Pendiente ARS"]
+    elif currency_mode == "USD":
+        part_headers = ["Participante", "Email", "% Participación", "Total a pagar USD",
+                        "Pagado USD", "Pendiente USD"]
+    else:
+        part_headers = ["Participante", "Email", "% Participación", "Total a pagar USD",
+                        "Pagado USD", "Pendiente USD"]
     ws_participants.append(part_headers)
 
     # Style header
@@ -492,14 +534,18 @@ async def export_project_excel(
         user = member.user
         summary = get_user_payment_summary(db, user.id, project.id)
 
-        row = [
-            user.full_name,
-            user.email,
-            float(member.participation_percentage),
-            float(summary["total_due_usd"]),
-            float(summary["total_paid_usd"]),
-            float(summary["pending_usd"]),
-        ]
+        if currency_mode == "ARS":
+            row = [
+                user.full_name, user.email, float(member.participation_percentage),
+                float(summary["total_due_ars"]), float(summary["total_paid_ars"]),
+                float(summary["pending_ars"]),
+            ]
+        else:
+            row = [
+                user.full_name, user.email, float(member.participation_percentage),
+                float(summary["total_due_usd"]), float(summary["total_paid_usd"]),
+                float(summary["pending_usd"]),
+            ]
         ws_participants.append(row)
 
     # Format columns
