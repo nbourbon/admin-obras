@@ -3,10 +3,17 @@ import { useProject } from '../context/ProjectContext'
 import { projectsAPI } from '../api/client'
 import { Briefcase, Plus, Check, X, Settings } from 'lucide-react'
 
+const CURRENCY_MODE_OPTIONS = [
+  { value: 'DUAL', label: 'Doble Moneda (USD + ARS)', description: 'Registra gastos en ambas monedas con tipo de cambio' },
+  { value: 'ARS', label: 'Solo Pesos (ARS)', description: 'Proyecto solo en pesos argentinos' },
+  { value: 'USD', label: 'Solo Dolares (USD)', description: 'Proyecto solo en dolares' },
+]
+
 function CreateProjectModal({ isOpen, onClose, onCreated }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    currency_mode: 'DUAL',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -72,6 +79,24 @@ function CreateProjectModal({ isOpen, onClose, onCreated }) {
               rows={3}
               placeholder="Descripcion del proyecto"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Moneda del Proyecto
+            </label>
+            <select
+              value={formData.currency_mode}
+              onChange={(e) => setFormData({ ...formData, currency_mode: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {CURRENCY_MODE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              {CURRENCY_MODE_OPTIONS.find(o => o.value === formData.currency_mode)?.description}
+            </p>
           </div>
 
           <div className="flex gap-3 pt-4">

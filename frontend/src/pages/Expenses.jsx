@@ -261,14 +261,16 @@ function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories }) {
+function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, currencyMode = 'DUAL' }) {
+  const defaultCurrency = currencyMode === 'ARS' ? 'ARS' : 'USD'
   const [formData, setFormData] = useState({
     description: '',
     amount_original: '',
-    currency_original: 'USD',
+    currency_original: defaultCurrency,
     provider_id: '',
     category_id: '',
     expense_date: new Date().toISOString().split('T')[0], // Default to today
+    exchange_rate_override: '',
   })
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -300,13 +302,19 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
     try {
       // Create expense first
-      const response = await expensesAPI.create({
-        ...formData,
+      const payload = {
+        description: formData.description,
         amount_original: parseFloat(formData.amount_original),
+        currency_original: formData.currency_original,
         provider_id: parseInt(formData.provider_id),
         category_id: parseInt(formData.category_id),
         expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
-      })
+      }
+      // Only send exchange_rate_override if user entered a value (DUAL mode)
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        payload.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+      const response = await expensesAPI.create(payload)
 
       // Upload invoice if selected
       if (invoiceFile && response.data?.id) {
@@ -323,10 +331,11 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
       setFormData({
         description: '',
         amount_original: '',
-        currency_original: 'USD',
+        currency_original: defaultCurrency,
         provider_id: '',
         category_id: '',
         expense_date: new Date().toISOString().split('T')[0],
+        exchange_rate_override: '',
       })
       setInvoiceFile(null)
     } catch (err) {
@@ -388,16 +397,44 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Moneda
               </label>
-              <select
-                value={formData.currency_original}
-                onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="USD">USD</option>
-                <option value="ARS">ARS</option>
-              </select>
+              {currencyMode === 'DUAL' ? (
+                <select
+                  value={formData.currency_original}
+                  onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="USD">USD</option>
+                  <option value="ARS">ARS</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value={currencyMode}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                />
+              )}
             </div>
           </div>
+
+          {currencyMode === 'DUAL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Cambio (opcional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchange_rate_override}
+                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Dejar vacio para usar TC automatico"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Si no se especifica, se usa el dolar blue actual
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -531,7 +568,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 }
 
 function Expenses() {
-  const { isProjectAdmin } = useProject()
+  const { isProjectAdmin, currencyMode } = useProject()
   const [expenses, setExpenses] = useState([])
   const [providers, setProviders] = useState([])
   const [categories, setCategories] = useState([])
@@ -667,10 +704,18 @@ function Expenses() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
-                      <div className="text-sm text-gray-500">
-                        {formatCurrency(expense.amount_ars, 'ARS')}
-                      </div>
+                      {currencyMode === 'ARS' ? (
+                        <div className="font-medium">{formatCurrency(expense.amount_ars, 'ARS')}</div>
+                      ) : currencyMode === 'USD' ? (
+                        <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
+                      ) : (
+                        <>
+                          <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
+                          <div className="text-sm text-gray-500">
+                            {formatCurrency(expense.amount_ars, 'ARS')}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-600">
                       {expense.provider?.name || '-'}
@@ -713,6 +758,7 @@ function Expenses() {
         onCreated={loadData}
         providers={providers}
         categories={categories}
+        currencyMode={currencyMode}
       />
     </div>
   )

@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react'
 import { projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Briefcase, Plus, Edit2, Trash2, X, Shield } from 'lucide-react'
+import { Briefcase, Plus, Edit2, Trash2, X, Shield, DollarSign } from 'lucide-react'
+
+const CURRENCY_MODE_OPTIONS = [
+  { value: 'DUAL', label: 'Doble Moneda (USD + ARS)', description: 'Registra gastos en ambas monedas con tipo de cambio' },
+  { value: 'ARS', label: 'Solo Pesos (ARS)', description: 'Proyecto solo en pesos argentinos' },
+  { value: 'USD', label: 'Solo Dolares (USD)', description: 'Proyecto solo en dolares' },
+]
 
 function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    currency_mode: 'DUAL',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -16,9 +23,10 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
       setFormData({
         name: project.name,
         description: project.description || '',
+        currency_mode: project.currency_mode || 'DUAL',
       })
     } else {
-      setFormData({ name: '', description: '' })
+      setFormData({ name: '', description: '', currency_mode: 'DUAL' })
     }
   }, [project])
 
@@ -89,6 +97,26 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
               placeholder="Descripcion del proyecto"
             />
           </div>
+
+          {!project && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Moneda del Proyecto
+              </label>
+              <select
+                value={formData.currency_mode}
+                onChange={(e) => setFormData({ ...formData, currency_mode: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {CURRENCY_MODE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                {CURRENCY_MODE_OPTIONS.find(o => o.value === formData.currency_mode)?.description}
+              </p>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <button
@@ -248,13 +276,18 @@ function Projects() {
                     </div>
                   )}
                 </div>
-                <div className="mt-4 pt-4 border-t flex items-center gap-2">
+                <div className="mt-4 pt-4 border-t flex items-center gap-2 flex-wrap">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     project.is_active
                       ? 'bg-green-100 text-green-700'
                       : 'bg-red-100 text-red-700'
                   }`}>
                     {project.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                    <DollarSign size={10} />
+                    {project.currency_mode === 'ARS' ? 'Solo ARS' :
+                     project.currency_mode === 'USD' ? 'Solo USD' : 'USD + ARS'}
                   </span>
                   {project.current_user_is_admin && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
