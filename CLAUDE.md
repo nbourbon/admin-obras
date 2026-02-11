@@ -48,17 +48,18 @@ construccion-edificio/
 
 ## Key Models
 - **User**: System users (global `is_admin` flag is now legacy, unused)
-- **Project**: With `is_individual` flag (defaults to True for new projects)
+- **Project**: With `is_individual` flag (defaults to True) and `currency_mode` (ARS/USD/DUAL, defaults to DUAL)
 - **ProjectMember**: Links users to projects with `participation_percentage` and `is_admin` (per-project admin)
 - **Provider**: Construction suppliers (per project)
 - **Category**: Expense categories (per project)
-- **Expense**: Records with dual currency (USD + ARS)
-- **ParticipantPayment**: Individual payment tracking per expense per user
+- **Expense**: Records with dual currency (USD + ARS), `exchange_rate_source` tracks auto vs manual TC
+- **ParticipantPayment**: Individual payment tracking per expense per user, with `exchange_rate_at_payment`, `amount_paid_usd`, `amount_paid_ars` for TC tracking
 - **Note**: Meeting minutes with `note_type` (regular/voting)
 - **NoteParticipant**: Users present in meeting
 - **NoteComment**: Comments on notes
 - **VoteOption**: Voting options for voting notes
 - **UserVote**: Individual votes (irreversible, project admin can reset)
+- **CurrencyMode** (enum): ARS (solo pesos), USD (solo dólares), DUAL (doble moneda con TC)
 
 ## Running the Project
 
@@ -127,18 +128,33 @@ The app uses a custom migration system in `database.py` (`_run_migrations()`) th
 - Project admin endpoints use `get_project_admin_user` dependency
 - Helper function `is_project_admin(db, user_id, project_id)` for checking admin status
 - All monetary values stored as `Decimal(15,2)`
-- Exchange rate fetched from bluelytics, cached for 60 min
+- Exchange rate fetched from bluelytics, cached for 60 min (only in DUAL mode; skipped for single-currency projects)
 - Files stored with UUID names in `uploads/invoices/` and `uploads/receipts/`
 - Soft deletes via `is_active` flag (preserve history)
 - Frontend uses `/api` proxy to backend (configured in vite.config.js)
 
+## Currency Mode System
+Projects can operate in three currency modes:
+
+| Mode | Description | Exchange Rate | Expense currencies | Payment tracking |
+|------|-------------|---------------|-------------------|-----------------|
+| **ARS** | Solo pesos | Not used | Only ARS | `amount_paid_ars` only |
+| **USD** | Solo dólares | Not used | Only USD | `amount_paid_usd` only |
+| **DUAL** | Doble moneda | Auto (bluelytics) or manual override | USD or ARS | Both + `exchange_rate_at_payment` |
+
+- Default is DUAL (backwards compatible with existing projects)
+- Cannot change currency_mode after project has expenses
+- Single-currency modes skip exchange rate fetch (faster, simpler)
+
 ## Expense Flow
-1. Project admin creates expense with amount + currency (USD or ARS) and optionally specifies expense date
-2. System fetches current blue dollar rate
-3. Converts amount to both USD and ARS
+1. Project admin creates expense with amount + currency (validated against project's `currency_mode`)
+2. **DUAL mode**: System fetches current blue dollar rate (or uses admin's manual override via `exchange_rate_override`)
+3. **DUAL mode**: Converts amount to both USD and ARS. **Single-currency mode**: stores amount in the project's currency, 0 in the other
 4. Creates `ParticipantPayment` for each active project member (amount × their %)
 5. Users mark their payments as paid + upload receipts, optionally specifying payment date
-6. For non-individual projects, payments require project admin approval
+6. **DUAL mode**: At payment time, system records `exchange_rate_at_payment` and calculates `amount_paid_usd`/`amount_paid_ars` equivalents
+7. For non-individual projects, payments require project admin approval
+8. `exchange_rate_source` field tracks whether TC was "auto" (API) or "manual" (admin override) for both expenses and payments
 
 ## Date Tracking
 The system distinguishes between **event dates** (when something actually happened) and **audit timestamps** (when it was recorded in the system):
@@ -187,6 +203,7 @@ This separation allows users to backfill historical expenses and payments with c
 ## Project Creation Flow
 **New projects are individual (single-user) by default:**
 - `is_individual=True` by default
+- `currency_mode=DUAL` by default (user can choose ARS, USD, or DUAL at creation)
 - Creator gets 100% participation automatically
 - Payments are auto-approved (no admin review needed)
 - "Por Aprobar" navigation item is hidden
@@ -196,6 +213,11 @@ This separation allows users to backfill historical expenses and payments with c
 - Must recalculate percentages to sum to 100%
 - Can toggle `is_individual` flag off to require payment approvals
 - Toggle available in Participantes page (only for project admins)
+
+**Currency mode restrictions:**
+- Cannot change `currency_mode` once the project has expenses
+- ARS/USD modes: simpler UI, no exchange rate fields, single currency display
+- DUAL mode: full dual-currency support with editable exchange rate
 
 This approach simplifies onboarding - users start simple and grow complexity as needed.
 

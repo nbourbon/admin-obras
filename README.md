@@ -8,8 +8,10 @@ A full-stack application for managing construction expenses among multiple parti
 - **Individual projects**: Simplified UX for single-user projects with auto-approved payments
 - **Project-based participant management**: Each project has independent participation percentages
 - **Automatic expense splitting**: When an expense is created, it's automatically split based on each project member's percentage
-- **Dual currency support**: All amounts stored in both USD and ARS
+- **Flexible currency modes**: Each project can operate in ARS-only, USD-only, or Dual Currency (USD + ARS) mode
 - **Blue dollar exchange rate**: Automatic fetching of the blue dollar rate from bluelytics.com.ar
+- **Editable exchange rate**: Override the auto-fetched rate when creating expenses or payments (for historical data entry)
+- **Payment exchange rate tracking**: In Dual mode, tracks the actual exchange rate at payment time vs the estimated rate at expense creation
 - **Payment approval workflow**: Participants submit payments for admin approval
 - **File uploads**: Attach invoices to expenses and receipts to payments with preview support
 - **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution per project
@@ -115,7 +117,10 @@ Open http://localhost:3000 and log in with the admin credentials.
 
 ### 3. Set up the basics
 
-1. **Create a Project**: Go to Projects and create your first construction project
+1. **Create a Project**: Go to Projects and create your first construction project. Choose the currency mode:
+   - **Solo Pesos (ARS)**: For projects that only use Argentine pesos
+   - **Solo Dólares (USD)**: For projects that only use US dollars
+   - **Doble Moneda (DUAL)**: For projects that track both currencies with exchange rate conversion (default)
 2. **Add Participants**: Go to Participants and add users to the project with their ownership percentages (must sum to 100%)
 3. **Add Categories**: Go to Categories and add expense categories (e.g., Materials, Salaries, Taxes)
 4. **Add Providers**: Go to Providers and add your construction suppliers
@@ -124,14 +129,17 @@ Open http://localhost:3000 and log in with the admin credentials.
 
 1. Go to Expenses and click "Nuevo Gasto"
 2. Enter the expense details (amount, currency, provider, category)
+   - In **ARS/USD mode**: Currency is fixed to the project's currency, no exchange rate needed
+   - In **DUAL mode**: Choose currency (USD or ARS). The exchange rate is auto-fetched but can be manually overridden (useful for historical expenses)
 3. The system will automatically split the expense among all participants
 
 ### 5. Track payments
 
 Each participant can:
 - View their pending payments in "Mis Pagos"
-- Mark payments as paid
+- Mark payments as paid (in DUAL mode, the exchange rate at payment time is recorded)
 - Upload payment receipts
+- In DUAL mode: view the difference between estimated and actual amounts paid (due to exchange rate fluctuations)
 
 ### 6. Meeting notes and voting
 
