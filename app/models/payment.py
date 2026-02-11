@@ -27,6 +27,12 @@ class ParticipantPayment(Base):
     paid_at = Column(DateTime(timezone=True), nullable=True)  # When marked as paid in system
     submitted_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Exchange rate tracking at payment time (for DUAL mode)
+    exchange_rate_at_payment = Column(Numeric(15, 4), nullable=True)
+    amount_paid_usd = Column(Numeric(15, 2), nullable=True)
+    amount_paid_ars = Column(Numeric(15, 2), nullable=True)
+    exchange_rate_source = Column(String(50), nullable=True)  # "auto" or "manual"
+
     # Approval info
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)

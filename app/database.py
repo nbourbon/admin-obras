@@ -140,6 +140,45 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (payment_date): {e}")
 
+    # Migration: Add currency_mode to projects table
+    if 'projects' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('projects')]
+        if 'currency_mode' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE projects ADD COLUMN currency_mode VARCHAR(10) DEFAULT 'DUAL'"))
+                    conn.commit()
+                    print("Migration: Added currency_mode column to projects table")
+                except Exception as e:
+                    print(f"Migration warning (currency_mode): {e}")
+
+    # Migration: Add exchange_rate_source to expenses table
+    if 'expenses' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('expenses')]
+        if 'exchange_rate_source' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE expenses ADD COLUMN exchange_rate_source VARCHAR(50)'))
+                    conn.commit()
+                    print("Migration: Added exchange_rate_source column to expenses table")
+                except Exception as e:
+                    print(f"Migration warning (exchange_rate_source): {e}")
+
+    # Migration: Add exchange rate tracking columns to participant_payments table
+    if 'participant_payments' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
+        if 'exchange_rate_at_payment' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN exchange_rate_at_payment NUMERIC(15,4)'))
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN amount_paid_usd NUMERIC(15,2)'))
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN amount_paid_ars NUMERIC(15,2)'))
+                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN exchange_rate_source VARCHAR(50)'))
+                    conn.commit()
+                    print("Migration: Added exchange rate tracking columns to participant_payments table")
+                except Exception as e:
+                    print(f"Migration warning (payment exchange rate): {e}")
+
     # Migration: Update single-member projects to 100% participation
     if 'project_members' in inspector.get_table_names():
         with engine.connect() as conn:

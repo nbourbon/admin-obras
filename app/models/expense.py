@@ -10,6 +10,12 @@ class Currency(str, enum.Enum):
     ARS = "ARS"
 
 
+class CurrencyMode(str, enum.Enum):
+    ARS = "ARS"     # Solo pesos
+    USD = "USD"     # Solo dólares
+    DUAL = "DUAL"   # Doble moneda con tipo de cambio
+
+
 class ExpenseStatus(str, enum.Enum):
     PENDING = "pending"
     PARTIAL = "partial"
@@ -32,6 +38,9 @@ class Expense(Base):
 
     # Exchange rate used for conversion
     exchange_rate_used = Column(Numeric(15, 4), nullable=False)
+
+    # Exchange rate source: "auto" (API) or "manual" (override)
+    exchange_rate_source = Column(String(50), nullable=True)
 
     # Foreign keys
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)

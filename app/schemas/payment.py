@@ -25,6 +25,10 @@ class PaymentResponse(PaymentBase):
     approved_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
     receipt_file_path: Optional[str] = None
+    exchange_rate_at_payment: Optional[Decimal] = None
+    amount_paid_usd: Optional[Decimal] = None
+    amount_paid_ars: Optional[Decimal] = None
+    exchange_rate_source: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -36,6 +40,7 @@ class PaymentMarkPaid(BaseModel):
     amount_paid: Decimal
     currency_paid: Currency
     payment_date: Optional[datetime] = None
+    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
 
 
 class PaymentApproval(BaseModel):
@@ -51,6 +56,7 @@ class ExpenseInfo(BaseModel):
     expense_date: datetime
     provider_name: Optional[str] = None
     category_name: Optional[str] = None
+    currency_mode: Optional[str] = None
 
     class Config:
         from_attributes = True

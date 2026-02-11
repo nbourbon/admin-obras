@@ -17,7 +17,7 @@ class ExpenseBase(BaseModel):
 
 
 class ExpenseCreate(ExpenseBase):
-    pass
+    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
 
 
 class ExpenseUpdate(BaseModel):
@@ -27,6 +27,7 @@ class ExpenseUpdate(BaseModel):
     provider_id: Optional[int] = None
     category_id: Optional[int] = None
     expense_date: Optional[datetime] = None
+    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
 
 
 class ExpenseResponse(BaseModel):
@@ -37,6 +38,7 @@ class ExpenseResponse(BaseModel):
     amount_usd: Decimal
     amount_ars: Decimal
     exchange_rate_used: Decimal
+    exchange_rate_source: Optional[str] = None
     provider_id: int
     category_id: int
     created_by: int
@@ -70,3 +72,5 @@ class ExpenseWithPayments(ExpenseResponse):
     participant_payments: List[PaymentSummary] = []
     total_paid_usd: Decimal = Decimal("0")
     total_pending_usd: Decimal = Decimal("0")
+    total_actual_paid_usd: Optional[Decimal] = None  # Sum of amount_paid_usd from payments
+    total_actual_paid_ars: Optional[Decimal] = None  # Sum of amount_paid_ars from payments

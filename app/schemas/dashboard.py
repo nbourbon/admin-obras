@@ -14,6 +14,7 @@ class DashboardSummary(BaseModel):
     expenses_count: int
     participants_count: int
     current_exchange_rate: Decimal
+    currency_mode: Optional[str] = None
 
 
 class MonthlyExpense(BaseModel):
@@ -54,6 +55,9 @@ class ParticipantStatus(BaseModel):
     paid_at: Optional[datetime] = None
     submitted_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
+    exchange_rate_at_payment: Optional[Decimal] = None
+    amount_paid_usd: Optional[Decimal] = None
+    amount_paid_ars: Optional[Decimal] = None
 
 
 class ExpensePaymentStatus(BaseModel):
