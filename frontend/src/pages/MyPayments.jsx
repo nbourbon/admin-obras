@@ -66,9 +66,10 @@ function PaymentStatusBadge({ payment }) {
   )
 }
 
-function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual = false }) {
+function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual = false, currencyMode = 'DUAL' }) {
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split('T')[0], // Default to today
+    exchange_rate_override: '',
   })
   const [receiptFile, setReceiptFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -78,6 +79,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
     if (payment) {
       setFormData({
         payment_date: new Date().toISOString().split('T')[0],
+        exchange_rate_override: '',
       })
       setReceiptFile(null)
     }
@@ -89,12 +91,29 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
     setLoading(true)
 
     try {
-      // Submit payment with full amount due
-      await paymentsAPI.submitPayment(payment.id, {
-        amount_paid: payment.amount_due_usd,
-        currency_paid: 'USD',
+      // Determine amount and currency based on currency mode
+      let amountPaid, currencyPaid
+      if (currencyMode === 'ARS') {
+        amountPaid = payment.amount_due_ars
+        currencyPaid = 'ARS'
+      } else {
+        amountPaid = payment.amount_due_usd
+        currencyPaid = 'USD'
+      }
+
+      const submitData = {
+        amount_paid: amountPaid,
+        currency_paid: currencyPaid,
         payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
-      })
+      }
+
+      // Include exchange rate override for DUAL mode
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+
+      // Submit payment
+      await paymentsAPI.submitPayment(payment.id, submitData)
 
       // Upload receipt if provided
       if (receiptFile) {
@@ -142,7 +161,12 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
           <p className="font-medium">{payment.expense?.description}</p>
           <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
           <p className="font-semibold text-blue-600">
-            {formatCurrency(payment.amount_due_usd)} / {formatCurrency(payment.amount_due_ars, 'ARS')}
+            {currencyMode === 'ARS'
+              ? formatCurrency(payment.amount_due_ars, 'ARS')
+              : currencyMode === 'USD'
+              ? formatCurrency(payment.amount_due_usd)
+              : `${formatCurrency(payment.amount_due_usd)} / ${formatCurrency(payment.amount_due_ars, 'ARS')}`
+            }
           </p>
         </div>
 
@@ -165,6 +189,25 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {currencyMode === 'DUAL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Cambio al momento de pagar (opcional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchange_rate_override}
+                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Dejar vacio para usar TC automatico"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Si no se especifica, se registra el dolar blue actual
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -220,7 +263,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
 }
 
 function MyPayments() {
-  const { currentProject } = useProject()
+  const { currentProject, currencyMode } = useProject()
   const [allPayments, setAllPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all', 'pending', 'pending_approval', 'paid'
@@ -432,12 +475,16 @@ function MyPayments() {
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <p className="text-lg font-bold">
-                    {formatCurrency(payment.amount_due_usd)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {formatCurrency(payment.amount_due_ars, 'ARS')}
-                  </p>
+                  {currencyMode === 'ARS' ? (
+                    <p className="text-lg font-bold">{formatCurrency(payment.amount_due_ars, 'ARS')}</p>
+                  ) : currencyMode === 'USD' ? (
+                    <p className="text-lg font-bold">{formatCurrency(payment.amount_due_usd)}</p>
+                  ) : (
+                    <>
+                      <p className="text-lg font-bold">{formatCurrency(payment.amount_due_usd)}</p>
+                      <p className="text-sm text-gray-500">{formatCurrency(payment.amount_due_ars, 'ARS')}</p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -606,6 +653,7 @@ function MyPayments() {
         payment={selectedPayment}
         onSuccess={loadPayments}
         isIndividual={isIndividual}
+        currencyMode={currencyMode}
       />
 
       {/* Delete Confirmation Modal */}

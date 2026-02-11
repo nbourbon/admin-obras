@@ -25,7 +25,7 @@ function formatCurrency(amount, currency = 'USD') {
 
 function Dashboard() {
   const { user } = useAuth()
-  const { currentProject } = useProject()
+  const { currentProject, currencyMode } = useProject()
   const isIndividual = currentProject?.is_individual
   const [summary, setSummary] = useState(null)
   const [myStatus, setMyStatus] = useState(null)
@@ -116,6 +116,9 @@ function Dashboard() {
     name: `${monthNames[item.month - 1]} ${item.year}`,
     USD: parseFloat(item.total_usd),
     ARS: parseFloat(item.total_ars) / 1000, // Show in thousands for readability
+    amount: currencyMode === 'ARS'
+      ? parseFloat(item.total_ars) / 1000
+      : parseFloat(item.total_usd),
   })) || []
 
   return (
@@ -123,7 +126,7 @@ function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {exchangeRate && (
+          {currencyMode === 'DUAL' && exchangeRate && (
             <div className="text-sm text-gray-500">
               Dolar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span>
             </div>
@@ -140,7 +143,7 @@ function Dashboard() {
       </div>
 
       {/* Personal Status Alert - hide for individual projects */}
-      {!isIndividual && myStatus && parseFloat(myStatus.pending_usd) > 0 && (
+      {!isIndividual && myStatus && (currencyMode === 'ARS' ? parseFloat(myStatus.pending_ars) > 0 : parseFloat(myStatus.pending_usd) > 0) && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-4">
           <AlertCircle className="text-yellow-600 flex-shrink-0" size={24} />
           <div className="flex-1">
@@ -148,7 +151,12 @@ function Dashboard() {
               Tenes {myStatus.pending_payments_count} pagos pendientes
             </p>
             <p className="text-sm text-yellow-600">
-              Total: {formatCurrency(myStatus.pending_usd)} / {formatCurrency(myStatus.pending_ars, 'ARS')}
+              Total: {currencyMode === 'ARS'
+                ? formatCurrency(myStatus.pending_ars, 'ARS')
+                : currencyMode === 'USD'
+                ? formatCurrency(myStatus.pending_usd)
+                : `${formatCurrency(myStatus.pending_usd)} / ${formatCurrency(myStatus.pending_ars, 'ARS')}`
+              }
             </p>
           </div>
           <Link
@@ -164,15 +172,27 @@ function Dashboard() {
       <div className="bg-white rounded-xl shadow-sm divide-y">
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Total Gastos ({summary?.expenses_count || 0})</span>
-          <span className="text-blue-700 font-bold">{formatCurrency(summary?.total_expenses_usd || 0)}</span>
+          <span className="text-blue-700 font-bold">
+            {currencyMode === 'ARS'
+              ? formatCurrency(summary?.total_expenses_ars || 0, 'ARS')
+              : formatCurrency(summary?.total_expenses_usd || 0)}
+          </span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Pagado</span>
-          <span className="text-green-700 font-bold">{formatCurrency(summary?.total_paid_usd || 0)}</span>
+          <span className="text-green-700 font-bold">
+            {currencyMode === 'ARS'
+              ? formatCurrency(summary?.total_paid_ars || 0, 'ARS')
+              : formatCurrency(summary?.total_paid_usd || 0)}
+          </span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Pendiente</span>
-          <span className="text-yellow-700 font-bold">{formatCurrency(summary?.total_pending_usd || 0)}</span>
+          <span className="text-yellow-700 font-bold">
+            {currencyMode === 'ARS'
+              ? formatCurrency(summary?.total_pending_ars || 0, 'ARS')
+              : formatCurrency(summary?.total_pending_usd || 0)}
+          </span>
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Participantes</span>
@@ -189,15 +209,27 @@ function Dashboard() {
           <div className="divide-y">
             <div className="flex items-center justify-between px-4 py-3">
               <span className="text-gray-600">Me corresponde</span>
-              <span className="font-bold text-gray-900">{formatCurrency(myStatus.total_due_usd)}</span>
+              <span className="font-bold text-gray-900">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(myStatus.total_due_ars, 'ARS')
+                  : formatCurrency(myStatus.total_due_usd)}
+              </span>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <span className="text-gray-600">Ya pague</span>
-              <span className="font-bold text-green-600">{formatCurrency(myStatus.total_paid_usd)}</span>
+              <span className="font-bold text-green-600">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(myStatus.total_paid_ars, 'ARS')
+                  : formatCurrency(myStatus.total_paid_usd)}
+              </span>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <span className="text-gray-600">Me falta</span>
-              <span className="font-bold text-yellow-600">{formatCurrency(myStatus.pending_usd)}</span>
+              <span className="font-bold text-yellow-600">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(myStatus.pending_ars, 'ARS')
+                  : formatCurrency(myStatus.pending_usd)}
+              </span>
             </div>
           </div>
         </div>
@@ -214,24 +246,30 @@ function Dashboard() {
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip
-                  formatter={(value, name) =>
-                    name === 'USD'
-                      ? formatCurrency(value)
-                      : `ARS ${(value * 1000).toLocaleString()}`
-                  }
+                  formatter={(value, name) => {
+                    if (currencyMode === 'ARS') return `ARS ${(value * 1000).toLocaleString()}`
+                    if (currencyMode === 'USD') return formatCurrency(value)
+                    return name === 'USD' ? formatCurrency(value) : `ARS ${(value * 1000).toLocaleString()}`
+                  }}
                 />
                 <Line
                   type="monotone"
-                  dataKey="USD"
+                  dataKey={currencyMode === 'ARS' ? 'amount' : 'USD'}
                   stroke="#2563eb"
                   strokeWidth={2}
                   dot={{ fill: '#2563eb' }}
+                  name={currencyMode === 'ARS' ? 'ARS (miles)' : 'USD'}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-4 text-center text-sm text-gray-500">
-            Total acumulado: {formatCurrency(evolution?.cumulative_usd || 0)} / {formatCurrency(evolution?.cumulative_ars || 0, 'ARS')}
+            Total acumulado: {currencyMode === 'ARS'
+              ? formatCurrency(evolution?.cumulative_ars || 0, 'ARS')
+              : currencyMode === 'USD'
+              ? formatCurrency(evolution?.cumulative_usd || 0)
+              : `${formatCurrency(evolution?.cumulative_usd || 0)} / ${formatCurrency(evolution?.cumulative_ars || 0, 'ARS')}`
+            }
           </div>
         </div>
       )}

@@ -26,7 +26,7 @@ function ExpenseDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { isProjectAdmin } = useProject()
+  const { isProjectAdmin, currencyMode } = useProject()
   const [expense, setExpense] = useState(null)
   const [paymentStatus, setPaymentStatus] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -201,22 +201,37 @@ function ExpenseDetail() {
                   {formatCurrency(expense.amount_original, expense.currency_original)}
                 </dd>
               </div>
-              <div>
-                <dt className="text-sm text-gray-500">Tipo de Cambio</dt>
-                <dd className="text-lg font-semibold">${expense.exchange_rate_used}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Monto USD</dt>
-                <dd className="text-lg font-semibold text-blue-600">
-                  {formatCurrency(expense.amount_usd)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Monto ARS</dt>
-                <dd className="text-lg font-semibold text-green-600">
-                  {formatCurrency(expense.amount_ars, 'ARS')}
-                </dd>
-              </div>
+              {currencyMode === 'DUAL' && (
+                <div>
+                  <dt className="text-sm text-gray-500">Tipo de Cambio</dt>
+                  <dd className="text-lg font-semibold">
+                    ${expense.exchange_rate_used}
+                    {expense.exchange_rate_source && (
+                      <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                        expense.exchange_rate_source === 'manual' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {expense.exchange_rate_source === 'manual' ? 'Manual' : 'Auto'}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {(currencyMode === 'USD' || currencyMode === 'DUAL') && (
+                <div>
+                  <dt className="text-sm text-gray-500">Monto USD</dt>
+                  <dd className="text-lg font-semibold text-blue-600">
+                    {formatCurrency(expense.amount_usd)}
+                  </dd>
+                </div>
+              )}
+              {(currencyMode === 'ARS' || currencyMode === 'DUAL') && (
+                <div>
+                  <dt className="text-sm text-gray-500">Monto ARS</dt>
+                  <dd className="text-lg font-semibold text-green-600">
+                    {formatCurrency(expense.amount_ars, 'ARS')}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-sm text-gray-500">Proveedor</dt>
                 <dd className="font-medium">{expense.provider?.name || '-'}</dd>
@@ -243,6 +258,30 @@ function ExpenseDetail() {
                 </dd>
               </div>
             </dl>
+
+            {/* Pagos Reales vs Estimado (DUAL mode only) */}
+            {currencyMode === 'DUAL' && expense.total_actual_paid_ars != null && parseFloat(expense.total_actual_paid_ars) > 0 && (
+              <div className="mt-6 pt-4 border-t">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Pagos Reales vs Estimado</h3>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <dt className="text-gray-500">Estimado ARS</dt>
+                    <dd className="font-medium">{formatCurrency(expense.amount_ars, 'ARS')}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Pagado Real ARS</dt>
+                    <dd className="font-medium">{formatCurrency(expense.total_actual_paid_ars, 'ARS')}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Diferencia</dt>
+                    <dd className={`font-medium ${parseFloat(expense.total_actual_paid_ars) - parseFloat(expense.amount_ars) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(Math.abs(parseFloat(expense.total_actual_paid_ars) - parseFloat(expense.amount_ars)), 'ARS')}
+                      {parseFloat(expense.total_actual_paid_ars) > parseFloat(expense.amount_ars) ? ' (+)' : ' (-)'}
+                    </dd>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Invoice */}
@@ -355,8 +394,16 @@ function ExpenseDetail() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_usd)}</p>
-                    <p className="text-sm text-gray-500">{formatCurrency(myPayment.amount_due_ars, 'ARS')}</p>
+                    {currencyMode === 'ARS' ? (
+                      <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_ars, 'ARS')}</p>
+                    ) : currencyMode === 'USD' ? (
+                      <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_usd)}</p>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_usd)}</p>
+                        <p className="text-sm text-gray-500">{formatCurrency(myPayment.amount_due_ars, 'ARS')}</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -436,8 +483,13 @@ function ExpenseDetail() {
                           </div>
                           <div className="text-right">
                             <p className="font-semibold text-sm">
-                              {formatCurrency(p.amount_due_usd)}
+                              {currencyMode === 'ARS'
+                                ? formatCurrency(p.amount_due_ars, 'ARS')
+                                : formatCurrency(p.amount_due_usd)}
                             </p>
+                            {currencyMode === 'DUAL' && p.exchange_rate_at_payment && (
+                              <p className="text-xs text-gray-400">TC: ${p.exchange_rate_at_payment}</p>
+                            )}
                           </div>
                           {showMarkPaidButton && (
                             <button
