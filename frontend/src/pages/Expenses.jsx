@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette, RotateCcw, Eye, EyeOff } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette, RotateCcw, Eye, EyeOff, Edit2 } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -261,6 +261,267 @@ function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
   )
 }
 
+function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: initialProviders, categories: initialCategories, currencyMode = 'DUAL' }) {
+  const [formData, setFormData] = useState({
+    description: '',
+    amount_original: '',
+    currency_original: 'USD',
+    provider_id: '',
+    category_id: '',
+    expense_date: '',
+    exchange_rate_override: '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [providers, setProviders] = useState(initialProviders)
+  const [categories, setCategories] = useState(initialCategories)
+  const [showProviderModal, setShowProviderModal] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+
+  useEffect(() => {
+    setProviders(initialProviders)
+    setCategories(initialCategories)
+  }, [initialProviders, initialCategories])
+
+  useEffect(() => {
+    if (expense) {
+      setFormData({
+        description: expense.description || '',
+        amount_original: expense.amount_original || '',
+        currency_original: expense.currency_original || 'USD',
+        provider_id: expense.provider_id || '',
+        category_id: expense.category_id || '',
+        expense_date: expense.expense_date ? new Date(expense.expense_date).toISOString().split('T')[0] : '',
+        exchange_rate_override: '',
+      })
+    }
+  }, [expense])
+
+  const handleProviderCreated = (newProvider) => {
+    setProviders([...providers, newProvider])
+    setFormData({ ...formData, provider_id: newProvider.id.toString() })
+  }
+
+  const handleCategoryCreated = (newCategory) => {
+    setCategories([...categories, newCategory])
+    setFormData({ ...formData, category_id: newCategory.id.toString() })
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const payload = {
+        description: formData.description,
+        amount_original: parseFloat(formData.amount_original),
+        currency_original: formData.currency_original,
+        provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
+      }
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        payload.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+      await expensesAPI.update(expense.id, payload)
+      onUpdated()
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al actualizar gasto')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen || !expense) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Editar Gasto</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Descripcion
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Monto
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={formData.amount_original}
+                onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Moneda
+              </label>
+              {currencyMode === 'DUAL' ? (
+                <select
+                  value={formData.currency_original}
+                  onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="USD">USD</option>
+                  <option value="ARS">ARS</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value={currencyMode}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                />
+              )}
+            </div>
+          </div>
+
+          {currencyMode === 'DUAL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Cambio (opcional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchange_rate_override}
+                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Dejar vacio para usar TC automatico"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Si no se especifica, se usa el dolar blue actual
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Proveedor (opcional)
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.provider_id}
+                onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowProviderModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nuevo proveedor"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Categoria (opcional)
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nueva categoria"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha del Gasto
+            </label>
+            <input
+              type="date"
+              required
+              value={formData.expense_date}
+              onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
+
+        <QuickCreateProviderModal
+          isOpen={showProviderModal}
+          onClose={() => setShowProviderModal(false)}
+          onCreated={handleProviderCreated}
+        />
+
+        <QuickCreateCategoryModal
+          isOpen={showCategoryModal}
+          onClose={() => setShowCategoryModal(false)}
+          onCreated={handleCategoryCreated}
+        />
+      </div>
+    </div>
+  )
+}
+
 function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, currencyMode = 'DUAL' }) {
   const defaultCurrency = currencyMode === 'ARS' ? 'ARS' : 'USD'
   const [formData, setFormData] = useState({
@@ -306,8 +567,8 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         description: formData.description,
         amount_original: parseFloat(formData.amount_original),
         currency_original: formData.currency_original,
-        provider_id: parseInt(formData.provider_id),
-        category_id: parseInt(formData.category_id),
+        provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
         expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
       }
       // Only send exchange_rate_override if user entered a value (DUAL mode)
@@ -438,16 +699,15 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Proveedor
+              Proveedor (opcional)
             </label>
             <div className="flex gap-2">
               <select
-                required
                 value={formData.provider_id}
                 onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Seleccionar proveedor</option>
+                <option value="">Sin definir</option>
                 {providers.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -465,16 +725,15 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria
+              Categoria (opcional)
             </label>
             <div className="flex gap-2">
               <select
-                required
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Seleccionar categoria</option>
+                <option value="">Sin definir</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -574,6 +833,8 @@ function Expenses() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [expenseToEdit, setExpenseToEdit] = useState(null)
   const [showDeleted, setShowDeleted] = useState(false)
 
   useEffect(() => {
@@ -605,6 +866,11 @@ function Expenses() {
       console.error('Error restoring expense:', err)
       alert('Error al restaurar el gasto')
     }
+  }
+
+  const handleEditExpense = (expense) => {
+    setExpenseToEdit(expense)
+    setShowEditModal(true)
   }
 
   if (loading) {
@@ -671,8 +937,8 @@ function Expenses() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
-                  {showDeleted && isProjectAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {isProjectAdmin && (
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
                     </th>
                   )}
@@ -718,11 +984,11 @@ function Expenses() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-gray-600">
-                      {expense.provider?.name || '-'}
+                      {expense.provider?.name || 'Sin definir'}
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-medium text-gray-700">
-                        {expense.category?.name || '-'}
+                        {expense.category?.name || 'Sin definir'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-600">
@@ -731,17 +997,28 @@ function Expenses() {
                     <td className="px-6 py-4">
                       <StatusBadge status={expense.status} />
                     </td>
-                    {showDeleted && isProjectAdmin && (
+                    {isProjectAdmin && (
                       <td className="px-6 py-4">
-                        {expense.is_deleted && (
-                          <button
-                            onClick={() => handleRestoreExpense(expense.id)}
-                            className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                          >
-                            <RotateCcw size={14} />
-                            Restaurar
-                          </button>
-                        )}
+                        <div className="flex items-center justify-center gap-2">
+                          {!expense.is_deleted && (
+                            <button
+                              onClick={() => handleEditExpense(expense)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Editar gasto"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
+                          {showDeleted && expense.is_deleted && (
+                            <button
+                              onClick={() => handleRestoreExpense(expense.id)}
+                              className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                            >
+                              <RotateCcw size={14} />
+                              Restaurar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -756,6 +1033,19 @@ function Expenses() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onCreated={loadData}
+        providers={providers}
+        categories={categories}
+        currencyMode={currencyMode}
+      />
+
+      <EditExpenseModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setExpenseToEdit(null)
+        }}
+        onUpdated={loadData}
+        expense={expenseToEdit}
         providers={providers}
         categories={categories}
         currencyMode={currencyMode}

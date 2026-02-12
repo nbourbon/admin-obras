@@ -138,8 +138,8 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
   if (!isOpen || !payment) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6 my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Enviar Pago</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -156,11 +156,11 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
           </div>
         )}
 
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          <p className="text-sm text-gray-500">Gasto</p>
-          <p className="font-medium">{payment.expense?.description}</p>
-          <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
-          <p className="font-semibold text-blue-600">
+        <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
+          <p className="text-xs sm:text-sm text-gray-500">Gasto</p>
+          <p className="font-medium text-sm sm:text-base break-words">{payment.expense?.description}</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-2">Monto que te corresponde</p>
+          <p className="font-semibold text-blue-600 text-sm sm:text-base">
             {currencyMode === 'ARS'
               ? formatCurrency(payment.amount_due_ars, 'ARS')
               : currencyMode === 'USD'
@@ -176,9 +176,9 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Fecha del Pago
             </label>
             <input
@@ -186,13 +186,13 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
               required
               value={formData.payment_date}
               onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {currencyMode === 'DUAL' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Tipo de Cambio al momento de pagar (opcional)
               </label>
               <input
@@ -200,7 +200,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
                 step="0.01"
                 value={formData.exchange_rate_override}
                 onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Dejar vacio para usar TC automatico"
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -210,25 +210,25 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
               Comprobante de pago (opcional)
             </label>
             {receiptFile ? (
-              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="text-green-600 flex-shrink-0" size={20} />
-                <span className="flex-1 text-sm text-green-700 truncate">{receiptFile.name}</span>
+              <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="text-green-600 flex-shrink-0" size={18} />
+                <span className="flex-1 text-xs sm:text-sm text-green-700 truncate">{receiptFile.name}</span>
                 <button
                   type="button"
                   onClick={() => setReceiptFile(null)}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-500 hover:text-red-700 flex-shrink-0"
                 >
                   <X size={18} />
                 </button>
               </div>
             ) : (
-              <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                <Upload className="text-gray-400" size={20} />
-                <span className="text-gray-600 text-sm">Click para subir comprobante</span>
+              <label className="flex flex-col sm:flex-row items-center justify-center gap-2 p-3 sm:p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <Upload className="text-gray-400 flex-shrink-0" size={20} />
+                <span className="text-gray-600 text-xs sm:text-sm text-center">Click para subir comprobante</span>
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
@@ -240,18 +240,18 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
             <p className="text-xs text-gray-500 mt-1">PDF, JPG o PNG</p>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-2 sm:gap-3 pt-3 sm:pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? 'Enviando...' : 'Enviar para Aprobacion'}
             </button>
@@ -468,8 +468,8 @@ function MyPayments() {
                     <PaymentStatusBadge payment={payment} />
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <span>{payment.expense?.provider_name}</span>
-                    <span>{payment.expense?.category_name}</span>
+                    <span>{payment.expense?.provider_name || 'Sin definir'}</span>
+                    <span>{payment.expense?.category_name || 'Sin definir'}</span>
                     <span>{formatDate(payment.expense?.expense_date)}</span>
                   </div>
                 </div>

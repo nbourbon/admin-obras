@@ -234,11 +234,11 @@ function ExpenseDetail() {
               )}
               <div>
                 <dt className="text-sm text-gray-500">Proveedor</dt>
-                <dd className="font-medium">{expense.provider?.name || '-'}</dd>
+                <dd className="font-medium">{expense.provider?.name || 'Sin definir'}</dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">Categoria</dt>
-                <dd className="font-medium">{expense.category?.name || '-'}</dd>
+                <dd className="font-medium">{expense.category?.name || 'Sin definir'}</dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">Fecha</dt>

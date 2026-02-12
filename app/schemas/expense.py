@@ -11,8 +11,8 @@ class ExpenseBase(BaseModel):
     description: str
     amount_original: Decimal
     currency_original: Currency
-    provider_id: int
-    category_id: int
+    provider_id: Optional[int] = None
+    category_id: Optional[int] = None
     expense_date: Optional[datetime] = None
 
 
@@ -39,8 +39,8 @@ class ExpenseResponse(BaseModel):
     amount_ars: Decimal
     exchange_rate_used: Decimal
     exchange_rate_source: Optional[str] = None
-    provider_id: int
-    category_id: int
+    provider_id: Optional[int] = None
+    category_id: Optional[int] = None
     created_by: int
     invoice_file_path: Optional[str] = None
     status: ExpenseStatus

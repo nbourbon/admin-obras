@@ -89,31 +89,33 @@ async def create_expense(
             detail="X-Project-ID header is required to create an expense",
         )
 
-    # Validate provider exists and belongs to project
-    provider = db.query(Provider).filter(Provider.id == expense_data.provider_id).first()
-    if not provider or not provider.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or inactive provider",
-        )
-    if provider.project_id and provider.project_id != project.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provider does not belong to this project",
-        )
+    # Validate provider exists and belongs to project (if provided)
+    if expense_data.provider_id:
+        provider = db.query(Provider).filter(Provider.id == expense_data.provider_id).first()
+        if not provider or not provider.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or inactive provider",
+            )
+        if provider.project_id and provider.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provider does not belong to this project",
+            )
 
-    # Validate category exists and belongs to project
-    category = db.query(Category).filter(Category.id == expense_data.category_id).first()
-    if not category or not category.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or inactive category",
-        )
-    if category.project_id and category.project_id != project.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Category does not belong to this project",
-        )
+    # Validate category exists and belongs to project (if provided)
+    if expense_data.category_id:
+        category = db.query(Category).filter(Category.id == expense_data.category_id).first()
+        if not category or not category.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or inactive category",
+            )
+        if category.project_id and category.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category does not belong to this project",
+            )
 
     # Determine currency mode from project
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'

@@ -43,8 +43,8 @@ class Expense(Base):
     exchange_rate_source = Column(String(50), nullable=True)
 
     # Foreign keys
-    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
 
