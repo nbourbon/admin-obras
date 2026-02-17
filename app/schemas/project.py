@@ -70,3 +70,22 @@ class ProjectMemberResponse(BaseModel):
 
 class ProjectWithMembers(ProjectResponse):
     members: List[ProjectMemberResponse] = []
+
+
+class ProjectMemberHistoryResponse(BaseModel):
+    id: int
+    project_id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    changed_by: int
+    changed_by_name: str
+    action: str
+    old_percentage: Optional[Decimal] = None
+    new_percentage: Optional[Decimal] = None
+    old_is_admin: Optional[bool] = None
+    new_is_admin: Optional[bool] = None
+    changed_at: datetime
+
+    class Config:
+        from_attributes = True

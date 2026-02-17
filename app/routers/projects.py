@@ -18,6 +18,8 @@ from app.models.user import User
 from app.models.expense import Expense
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.project_member_history import ProjectMemberHistory
+from app.schemas.project import ProjectMemberHistoryResponse
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -475,11 +477,24 @@ async def add_project_member_by_email(
                 detail=f"{user.full_name} ({user.email}) is already a member of this project",
             )
         # Reactivate
+        old_pct = existing.participation_percentage
+        old_admin = existing.is_admin
         existing.is_active = True
         existing.participation_percentage = Decimal(str(participation_percentage))
         existing.is_admin = is_admin
         db.commit()
         db.refresh(existing)
+        db.add(ProjectMemberHistory(
+            project_id=project_id,
+            user_id=user.id,
+            changed_by=current_user.id,
+            action="added",
+            old_percentage=old_pct,
+            new_percentage=existing.participation_percentage,
+            old_is_admin=old_admin,
+            new_is_admin=is_admin,
+        ))
+        db.commit()
         return ProjectMemberResponse(
             id=existing.id,
             project_id=existing.project_id,
@@ -502,6 +517,18 @@ async def add_project_member_by_email(
     db.add(member)
     db.commit()
     db.refresh(member)
+
+    db.add(ProjectMemberHistory(
+        project_id=project_id,
+        user_id=user.id,
+        changed_by=current_user.id,
+        action="added",
+        old_percentage=None,
+        new_percentage=member.participation_percentage,
+        old_is_admin=None,
+        new_is_admin=is_admin,
+    ))
+    db.commit()
 
     return ProjectMemberResponse(
         id=member.id,
@@ -536,12 +563,27 @@ async def update_project_member(
             detail="Member not found",
         )
 
+    old_percentage = member.participation_percentage
+    old_is_admin = member.is_admin
+
     update_data = member_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(member, field, value)
 
     db.commit()
     db.refresh(member)
+
+    db.add(ProjectMemberHistory(
+        project_id=project_id,
+        user_id=user_id,
+        changed_by=current_user.id,
+        action="updated",
+        old_percentage=old_percentage,
+        new_percentage=member.participation_percentage,
+        old_is_admin=old_is_admin,
+        new_is_admin=member.is_admin,
+    ))
+    db.commit()
 
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -577,9 +619,61 @@ async def remove_project_member(
             detail="Member not found",
         )
 
+    old_percentage = member.participation_percentage
+    old_is_admin = member.is_admin
     member.is_active = False
     db.commit()
+
+    db.add(ProjectMemberHistory(
+        project_id=project_id,
+        user_id=user_id,
+        changed_by=current_user.id,
+        action="removed",
+        old_percentage=old_percentage,
+        new_percentage=None,
+        old_is_admin=old_is_admin,
+        new_is_admin=None,
+    ))
+    db.commit()
+
     return {"message": "Member removed successfully"}
+
+
+@router.get("/{project_id}/members/history", response_model=List[ProjectMemberHistoryResponse])
+async def get_member_history(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+):
+    """Get full history of participation changes for a project (project admin only)."""
+    records = (
+        db.query(ProjectMemberHistory)
+        .filter(ProjectMemberHistory.project_id == project_id)
+        .order_by(ProjectMemberHistory.changed_at.desc())
+        .all()
+    )
+
+    result = []
+    for r in records:
+        member_user = db.query(User).filter(User.id == r.user_id).first()
+        changer = db.query(User).filter(User.id == r.changed_by).first()
+        result.append(ProjectMemberHistoryResponse(
+            id=r.id,
+            project_id=r.project_id,
+            user_id=r.user_id,
+            user_name=member_user.full_name if member_user else f"Usuario #{r.user_id}",
+            user_email=member_user.email if member_user else "",
+            changed_by=r.changed_by,
+            changed_by_name=changer.full_name if changer else f"Usuario #{r.changed_by}",
+            action=r.action,
+            old_percentage=r.old_percentage,
+            new_percentage=r.new_percentage,
+            old_is_admin=r.old_is_admin,
+            new_is_admin=r.new_is_admin,
+            changed_at=r.changed_at,
+        ))
+
+    return result
 
 
 @router.get("/{project_id}/participation-validation")

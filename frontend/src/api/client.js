@@ -146,6 +146,7 @@ export const projectsAPI = {
   updateMember: (id, userId, data) => client.put(`/projects/${id}/members/${userId}`, data),
   removeMember: (id, userId) => client.delete(`/projects/${id}/members/${userId}`),
   validateParticipation: (id) => client.get(`/projects/${id}/participation-validation`),
+  memberHistory: (id) => client.get(`/projects/${id}/members/history`),
 }
 
 // Notes API

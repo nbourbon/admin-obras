@@ -36,7 +36,7 @@ def get_db():
 
 def init_db():
     """Initialize database tables."""
-    from app.models import (
+    from app.models import (  # noqa: F401
         User,
         Provider,
         Category,
@@ -45,6 +45,7 @@ def init_db():
         ExchangeRateLog,
         Project,
         ProjectMember,
+        ProjectMemberHistory,
         Note,
         NoteParticipant,
         NoteComment,

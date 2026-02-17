@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { projectsAPI, authAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield } from 'lucide-react'
+import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield, History, ChevronDown, ChevronUp } from 'lucide-react'
 
 function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberIds }) {
   const [email, setEmail] = useState('')
@@ -57,9 +57,16 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
           </button>
         </div>
 
-        <p className="text-gray-600 text-sm mb-4">
+        <p className="text-gray-600 text-sm mb-3">
           Ingresa el email del participante. Si ya existe como usuario, se agregara al proyecto. Si no existe, se creara un usuario nuevo que debera configurar su contrasena en el primer inicio de sesion.
         </p>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4 flex items-start gap-2">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+          <span>
+            Una vez agregado, asegurate de que los porcentajes de todos los participantes sumen exactamente 100%.
+            Mientras no sumen 100%, los nuevos gastos no se distribuiran correctamente.
+          </span>
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
@@ -273,6 +280,8 @@ function ProjectMembers() {
   const [selectedMember, setSelectedMember] = useState(null)
   const [isIndividual, setIsIndividual] = useState(false)
   const [updatingIndividual, setUpdatingIndividual] = useState(false)
+  const [history, setHistory] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
 
   useEffect(() => {
     if (currentProject) {
@@ -280,6 +289,10 @@ function ProjectMembers() {
       setIsIndividual(currentProject.is_individual || false)
     }
   }, [currentProject])
+
+  useEffect(() => {
+    if (showHistory) loadHistory()
+  }, [showHistory])
 
   const loadData = async () => {
     if (!currentProject) return
@@ -295,6 +308,17 @@ function ProjectMembers() {
       console.error('Error loading members:', err)
     } finally {
       setLoading(false)
+    }
+    if (showHistory) loadHistory()
+  }
+
+  const loadHistory = async () => {
+    if (!currentProject || !isProjectAdmin) return
+    try {
+      const res = await projectsAPI.memberHistory(currentProject.id)
+      setHistory(res.data)
+    } catch (err) {
+      console.error('Error loading history:', err)
     }
   }
 
@@ -419,15 +443,21 @@ function ProjectMembers() {
 
       {/* Validation Alert */}
       {validation && !validation.is_valid && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-4">
-          <AlertCircle className="text-yellow-600 flex-shrink-0" size={24} />
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-4">
+          <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={24} />
           <div>
             <p className="font-medium text-yellow-800">
-              Los porcentajes no suman 100%
+              Los porcentajes no suman 100% (total actual: {totalPercentage}%)
             </p>
-            <p className="text-sm text-yellow-600">
-              Total actual: {totalPercentage}% - Deberia ser 100%
+            <p className="text-sm text-yellow-700 mt-1">
+              Los nuevos gastos no se distribuiran correctamente hasta que los porcentajes sumen exactamente 100%.
+              Los participantes con porcentaje incorrecto podrian recibir cuotas equivocadas.
             </p>
+            {isProjectAdmin && (
+              <p className="text-sm text-yellow-600 mt-1 font-medium">
+                Edita los porcentajes usando el boton de edicion en cada fila hasta llegar a 100%.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -530,6 +560,74 @@ function ProjectMembers() {
             </tfoot>
           </table>
           </div>
+        </div>
+      )}
+
+      {/* Participation History - admin only */}
+      {isProjectAdmin && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2 text-gray-700 font-medium">
+              <History size={18} />
+              Historial de cambios de participacion
+            </div>
+            {showHistory ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+          </button>
+
+          {showHistory && (
+            <div className="border-t border-gray-100 overflow-x-auto">
+              {history.length === 0 ? (
+                <p className="text-center text-gray-500 text-sm py-6">No hay cambios registrados aun.</p>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participante</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accion</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">% Anterior</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">% Nuevo</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Realizado por</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {history.map((h) => (
+                      <tr key={h.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {new Date(h.changed_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {h.user_name}
+                          <span className="block text-xs text-gray-400 font-normal">{h.user_email}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            h.action === 'added' ? 'bg-green-100 text-green-700' :
+                            h.action === 'removed' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {h.action === 'added' ? 'Agregado' : h.action === 'removed' ? 'Quitado' : 'Modificado'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {h.old_percentage != null ? `${parseFloat(h.old_percentage).toFixed(2)}%` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {h.new_percentage != null ? (
+                            <span className="font-semibold text-blue-600">{parseFloat(h.new_percentage).toFixed(2)}%</span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{h.changed_by_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
 
