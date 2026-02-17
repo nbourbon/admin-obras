@@ -25,7 +25,7 @@ function formatCurrency(amount, currency = 'USD') {
 
 function Dashboard() {
   const { user } = useAuth()
-  const { currentProject, currencyMode } = useProject()
+  const { currentProject, currencyMode, loading: projectLoading } = useProject()
   const isIndividual = currentProject?.is_individual
   const [summary, setSummary] = useState(null)
   const [myStatus, setMyStatus] = useState(null)
@@ -36,8 +36,11 @@ function Dashboard() {
   const [downloadingExcel, setDownloadingExcel] = useState(false)
 
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    // Wait until ProjectContext has finished loading and has a project selected
+    if (!projectLoading && currentProject) {
+      loadDashboardData()
+    }
+  }, [projectLoading, currentProject?.id])
 
   const loadDashboardData = async () => {
     try {
@@ -95,7 +98,7 @@ function Dashboard() {
     }
   }
 
-  if (loading) {
+  if (projectLoading || (loading && !error)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

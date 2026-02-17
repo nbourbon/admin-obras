@@ -88,6 +88,8 @@ export function ProjectProvider({ children }) {
     setCurrentProject(project)
     setIsProjectAdmin(project.current_user_is_admin || false)
     setCurrencyMode(project.currency_mode || 'DUAL')
+    // Always persist so axios interceptor always sends X-Project-ID
+    localStorage.setItem(LAST_PROJECT_KEY, project.id.toString())
   }
 
   const selectProject = (projectId) => {
