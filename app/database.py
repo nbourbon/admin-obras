@@ -179,6 +179,18 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (payment exchange rate): {e}")
 
+    # Migration: Add google_id to users table
+    if 'users' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('users')]
+        if 'google_id' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE users ADD COLUMN google_id VARCHAR(255)'))
+                    conn.commit()
+                    print("Migration: Added google_id column to users table")
+                except Exception as e:
+                    print(f"Migration warning (google_id): {e}")
+
     # Migration: Update single-member projects to 100% participation
     if 'project_members' in inspector.get_table_names():
         with engine.connect() as conn:

@@ -42,6 +42,7 @@ export const authAPI = {
     client.post('/auth/login', new URLSearchParams({ username: email, password }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     }),
+  googleLogin: (token) => client.post('/auth/google', { token }),
   me: () => client.get('/auth/me'),
   registerFirstAdmin: (data) => client.post('/auth/register-first-admin', data),
   register: (data) => client.post('/auth/register', data),

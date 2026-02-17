@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import { Building2 } from 'lucide-react'
 
@@ -7,11 +8,22 @@ function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [googleError, setGoogleError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const successMessage = location.state?.message
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setGoogleError('')
+    try {
+      await loginWithGoogle(credentialResponse.credential)
+      navigate('/dashboard')
+    } catch (err) {
+      setGoogleError(err.response?.data?.detail || 'Error al iniciar sesion con Google')
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -106,6 +118,29 @@ function Login() {
               Crear cuenta
             </Link>
           </p>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-50 text-gray-500">o</span>
+            </div>
+          </div>
+
+          {googleError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              {googleError}
+            </div>
+          )}
+
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setGoogleError('Error al iniciar sesion con Google')}
+              width="368"
+            />
+          </div>
         </form>
       </div>
     </div>

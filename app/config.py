@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
 
+    # Google OAuth
+    google_client_id: str = "204864874637-13m642q5imvo24phvl2ctc56t6s2u38k.apps.googleusercontent.com"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -2,9 +2,11 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 from app.database import get_db
-from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.user import UserCreate, UserResponse, Token, GoogleAuthRequest
 from app.services.auth import (
     authenticate_user,
     create_access_token,
@@ -113,6 +115,72 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is inactive",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email},
+        expires_delta=access_token_expires,
+    )
+    return Token(access_token=access_token)
+
+
+@router.post("/google", response_model=Token)
+async def google_login(
+    data: GoogleAuthRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Login or register with Google OAuth token.
+    """
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            data.token,
+            google_requests.Request(),
+            settings.google_client_id,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token de Google inválido: {str(e)}",
+        )
+
+    email = idinfo.get("email")
+    full_name = idinfo.get("name", email)
+    google_id = idinfo.get("sub")
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pudo obtener el email de la cuenta de Google",
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if user:
+        # Link google_id if not set yet
+        if not user.google_id:
+            user.google_id = google_id
+            db.commit()
+    else:
+        # Create new user without password
+        user = User(
+            email=email,
+            full_name=full_name,
+            google_id=google_id,
+            password_hash=None,
+            is_active=True,
+            participation_percentage=0,
+            is_admin=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La cuenta de usuario está inactiva",
         )
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)

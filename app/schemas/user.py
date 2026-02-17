@@ -50,3 +50,7 @@ class TokenData(BaseModel):
 
 class PasswordChange(BaseModel):
     new_password: str
+
+
+class GoogleAuthRequest(BaseModel):
+    token: str

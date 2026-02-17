@@ -9,8 +9,9 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)
     full_name = Column(String(255), nullable=False)
+    google_id = Column(String(255), unique=True, nullable=True)
     participation_percentage = Column(Numeric(5, 2), nullable=False, default=0)
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)

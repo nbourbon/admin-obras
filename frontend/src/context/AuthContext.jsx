@@ -38,13 +38,22 @@ export function AuthProvider({ children }) {
     return userResponse.data
   }
 
+  const loginWithGoogle = async (credential) => {
+    const response = await authAPI.googleLogin(credential)
+    const { access_token } = response.data
+    localStorage.setItem('token', access_token)
+    const userResponse = await authAPI.me()
+    setUser(userResponse.data)
+    return userResponse.data
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   )
