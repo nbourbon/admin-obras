@@ -179,7 +179,7 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (payment exchange rate): {e}")
 
-    # Migration: Add google_id to users table
+    # Migration: Add google_id to users table + make password_hash nullable
     if 'users' in inspector.get_table_names():
         columns = [col['name'] for col in inspector.get_columns('users')]
         if 'google_id' not in columns:
@@ -190,6 +190,15 @@ def _run_migrations():
                     print("Migration: Added google_id column to users table")
                 except Exception as e:
                     print(f"Migration warning (google_id): {e}")
+
+        # Make password_hash nullable for Google-only users (safe to run multiple times)
+        with engine.connect() as conn:
+            try:
+                conn.execute(text('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL'))
+                conn.commit()
+                print("Migration: Made password_hash nullable in users table")
+            except Exception:
+                pass  # Already nullable, nothing to do
 
     # Migration: Update single-member projects to 100% participation
     if 'project_members' in inspector.get_table_names():
