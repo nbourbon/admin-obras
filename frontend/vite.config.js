@@ -7,11 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['logo.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'Construccion - Gestión de Gastos',
-        short_name: 'Construccion',
-        description: 'Sistema de gestión de gastos de construcción',
+        name: 'Proyectos Compartidos',
+        short_name: 'Proyectos',
+        description: 'Gestión de gastos compartidos entre participantes',
         theme_color: '#2563eb',
         background_color: '#ffffff',
         display: 'standalone',

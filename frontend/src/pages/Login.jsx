@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
-import { Building2 } from 'lucide-react'
+import AppLogo from '../components/AppLogo'
 
 function Login() {
   const [email, setEmail] = useState('')
@@ -44,11 +44,11 @@ function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-blue-100">
-            <Building2 className="h-10 w-10 text-blue-600" />
+          <div className="mx-auto flex items-center justify-center">
+            <AppLogo size={72} />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Tus Proyectos
+            Proyectos Compartidos
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Gestion de gastos compartidos

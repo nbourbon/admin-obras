@@ -1,7 +1,7 @@
-# Construction Expense Management System
+# Proyectos Compartidos — Shared Expense Management System
 
 ## Project Overview
-Full-stack application for managing construction expenses among multiple participants. Each participant has a % ownership, and expenses are automatically split proportionally.
+Full-stack application for managing shared expenses among multiple participants across any type of project (construction, trips, events, etc.). Each participant has a % ownership, and expenses are automatically split proportionally.
 
 ## Tech Stack
 
