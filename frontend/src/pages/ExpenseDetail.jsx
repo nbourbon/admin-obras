@@ -33,9 +33,15 @@ function ExpenseDetail() {
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
-  const [markingPaid, setMarkingPaid] = useState(null) // { paymentId, userName }
+  const [markingPaid, setMarkingPaid] = useState(null) // { paymentId, userName, amountDue }
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentCurrency, setPaymentCurrency] = useState('USD')
+  const [paymentDate, setPaymentDate] = useState('')
+  const [paymentTC, setPaymentTC] = useState('')
+  const [markingAllPaid, setMarkingAllPaid] = useState(false)
+  const [allPaidDate, setAllPaidDate] = useState('')
+  const [allPaidTC, setAllPaidTC] = useState('')
+  const [allPaidCurrency, setAllPaidCurrency] = useState('USD')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -120,14 +126,36 @@ function ExpenseDetail() {
       await paymentsAPI.markPaid(paymentId, {
         amount_paid: parseFloat(paymentAmount),
         currency_paid: paymentCurrency,
+        payment_date: paymentDate ? new Date(paymentDate).toISOString() : undefined,
+        exchange_rate_override: paymentTC ? parseFloat(paymentTC) : undefined,
       })
       setMarkingPaid(null)
       setPaymentAmount('')
       setPaymentCurrency('USD')
+      setPaymentDate('')
+      setPaymentTC('')
       loadExpense()
     } catch (err) {
       console.error('Error marking payment as paid:', err)
-      alert('Error al marcar el pago')
+      alert(err.response?.data?.detail || 'Error al marcar el pago')
+    }
+  }
+
+  const handleMarkAllPaid = async () => {
+    try {
+      await expensesAPI.markAllPaid(id, {
+        payment_date: allPaidDate ? new Date(allPaidDate).toISOString() : undefined,
+        exchange_rate_override: allPaidTC ? parseFloat(allPaidTC) : undefined,
+        currency: currencyMode === 'DUAL' ? allPaidCurrency : undefined,
+      })
+      setMarkingAllPaid(false)
+      setAllPaidDate('')
+      setAllPaidTC('')
+      setAllPaidCurrency('USD')
+      loadExpense()
+    } catch (err) {
+      console.error('Error marking all payments as paid:', err)
+      alert(err.response?.data?.detail || 'Error al marcar los pagos')
     }
   }
 
@@ -421,7 +449,88 @@ function ExpenseDetail() {
 
           {/* Participants Status */}
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Todos los Participantes</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Todos los Participantes</h2>
+              {isProjectAdmin && paymentStatus?.pending_count > 0 && !markingAllPaid && (
+                <button
+                  onClick={() => {
+                    setMarkingAllPaid(true)
+                    setAllPaidDate(new Date().toISOString().split('T')[0])
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Marcar todos pagados
+                </button>
+              )}
+            </div>
+
+            {/* Mark all paid form */}
+            {markingAllPaid && (
+              <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm font-medium text-blue-800 mb-3">
+                  Registrar todos los pagos pendientes
+                </p>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Fecha de Pago</label>
+                    <input
+                      type="date"
+                      value={allPaidDate}
+                      onChange={(e) => setAllPaidDate(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                  {currencyMode === 'DUAL' && (
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Moneda</label>
+                      <select
+                        value={allPaidCurrency}
+                        onChange={(e) => setAllPaidCurrency(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      >
+                        <option value="USD">USD</option>
+                        <option value="ARS">ARS</option>
+                      </select>
+                    </div>
+                  )}
+                  {currencyMode === 'DUAL' && (
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">TC manual (opcional)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={allPaidTC}
+                        onChange={(e) => setAllPaidTC(e.target.value)}
+                        placeholder="Auto (bluelytics)"
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Se usará el monto adeudado de cada participante como monto pagado.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleMarkAllPaid}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMarkingAllPaid(false)
+                      setAllPaidDate('')
+                      setAllPaidTC('')
+                      setAllPaidCurrency('USD')
+                    }}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
 
             {paymentStatus && (
               <div className="space-y-4">
@@ -466,7 +575,7 @@ function ExpenseDetail() {
                     }
 
                     const style = getParticipantStyle()
-                    const showMarkPaidButton = isProjectAdmin && !p.is_paid && !isMe
+                    const showMarkPaidButton = isProjectAdmin && !p.is_paid && !p.is_pending_approval
 
                     return (
                       <div key={p.user_id}>
@@ -493,10 +602,18 @@ function ExpenseDetail() {
                           </div>
                           {showMarkPaidButton && (
                             <button
-                              onClick={() => setMarkingPaid({ paymentId: p.payment_id, userName: p.user_name, amountDue: p.amount_due_usd })}
+                              onClick={() => {
+                                const amountDue = currencyMode === 'ARS' ? p.amount_due_ars : p.amount_due_usd
+                                const defaultCurrency = currencyMode === 'ARS' ? 'ARS' : 'USD'
+                                setMarkingPaid({ paymentId: p.payment_id, userName: p.user_name, amountDue })
+                                setPaymentAmount(amountDue?.toString() || '')
+                                setPaymentCurrency(defaultCurrency)
+                                setPaymentDate(new Date().toISOString().split('T')[0])
+                                setPaymentTC('')
+                              }}
                               className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap"
                             >
-                              Marcar Pagado
+                              Registrar pago
                             </button>
                           )}
                         </div>
@@ -505,7 +622,7 @@ function ExpenseDetail() {
                         {markingPaid?.paymentId === p.payment_id && (
                           <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
                             <p className="text-sm font-medium mb-3">
-                              Marcar pago de <span className="text-blue-600">{markingPaid.userName}</span> como pagado
+                              Registrar pago de <span className="text-green-700">{markingPaid.userName}</span>
                             </p>
                             <div className="grid grid-cols-2 gap-3 mb-3">
                               <div>
@@ -516,20 +633,44 @@ function ExpenseDetail() {
                                   value={paymentAmount}
                                   onChange={(e) => setPaymentAmount(e.target.value)}
                                   placeholder={markingPaid.amountDue?.toString()}
-                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                                 />
                               </div>
+                              {currencyMode !== 'ARS' && currencyMode !== 'USD' && (
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Moneda</label>
+                                  <select
+                                    value={paymentCurrency}
+                                    onChange={(e) => setPaymentCurrency(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="USD">USD</option>
+                                    <option value="ARS">ARS</option>
+                                  </select>
+                                </div>
+                              )}
                               <div>
-                                <label className="block text-xs text-gray-600 mb-1">Moneda</label>
-                                <select
-                                  value={paymentCurrency}
-                                  onChange={(e) => setPaymentCurrency(e.target.value)}
-                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                                >
-                                  <option value="USD">USD</option>
-                                  <option value="ARS">ARS</option>
-                                </select>
+                                <label className="block text-xs text-gray-600 mb-1">Fecha de Pago</label>
+                                <input
+                                  type="date"
+                                  value={paymentDate}
+                                  onChange={(e) => setPaymentDate(e.target.value)}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                />
                               </div>
+                              {currencyMode === 'DUAL' && (
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">TC manual (opcional)</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={paymentTC}
+                                    onChange={(e) => setPaymentTC(e.target.value)}
+                                    placeholder="Auto (bluelytics)"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                  />
+                                </div>
+                              )}
                             </div>
                             <div className="flex gap-2">
                               <button
@@ -543,6 +684,8 @@ function ExpenseDetail() {
                                   setMarkingPaid(null)
                                   setPaymentAmount('')
                                   setPaymentCurrency('USD')
+                                  setPaymentDate('')
+                                  setPaymentTC('')
                                 }}
                                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium"
                               >

@@ -48,6 +48,12 @@ class PaymentApproval(BaseModel):
     rejection_reason: Optional[str] = None
 
 
+class AdminMarkAllPaid(BaseModel):
+    payment_date: Optional[datetime] = None
+    exchange_rate_override: Optional[Decimal] = None
+    currency: Optional[str] = None  # "USD" or "ARS" (for DUAL mode only)
+
+
 class ExpenseInfo(BaseModel):
     id: int
     description: str

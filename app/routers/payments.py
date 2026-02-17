@@ -442,8 +442,9 @@ async def mark_payment_as_paid(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Mark a payment as paid (legacy - redirects to submit-payment).
-    For backwards compatibility. Use submit-payment instead.
+    Mark a payment as paid (project admin only).
+    Admin can directly mark any participant's payment as paid, bypassing the approval flow.
+    Includes payment_date and exchange_rate support for historical backfilling.
     """
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
@@ -461,9 +462,60 @@ async def mark_payment_as_paid(
     if not is_admin:
         return await submit_payment(payment_id, payment_data, db, current_user)
 
-    # Project admins can directly mark as paid (bypass approval)
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already paid",
+        )
+
+    project = db.query(Project).filter(Project.id == expense.project_id).first() if expense and expense.project_id else None
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
+    payment.payment_date = payment_data.payment_date or datetime.utcnow()
+    payment.submitted_at = datetime.utcnow()
+    payment.rejection_reason = None
+
+    # Calculate exchange rates based on currency mode
+    if currency_mode == "ARS":
+        payment.amount_paid_ars = payment_data.amount_paid
+        payment.amount_paid_usd = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+    elif currency_mode == "USD":
+        payment.amount_paid_usd = payment_data.amount_paid
+        payment.amount_paid_ars = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+    else:  # DUAL
+        if payment_data.exchange_rate_override:
+            tc = payment_data.exchange_rate_override
+            payment.exchange_rate_source = "manual"
+        else:
+            try:
+                tc = fetch_blue_dollar_rate_sync()
+                payment.exchange_rate_source = "auto"
+            except Exception:
+                tc = None
+                payment.exchange_rate_source = None
+
+        payment.exchange_rate_at_payment = tc
+
+        if tc and tc > 0:
+            if payment_data.currency_paid.value == "USD":
+                payment.amount_paid_usd = payment_data.amount_paid
+                payment.amount_paid_ars = (Decimal(str(payment_data.amount_paid)) * Decimal(str(tc))).quantize(Decimal("0.01"))
+            else:  # ARS
+                payment.amount_paid_ars = payment_data.amount_paid
+                payment.amount_paid_usd = (Decimal(str(payment_data.amount_paid)) / Decimal(str(tc))).quantize(Decimal("0.01"))
+        else:
+            if payment_data.currency_paid.value == "USD":
+                payment.amount_paid_usd = payment_data.amount_paid
+            else:
+                payment.amount_paid_ars = payment_data.amount_paid
+
+    # Admin mark as paid = directly approved
     payment.is_pending_approval = False
     payment.is_paid = True
     payment.paid_at = datetime.utcnow()

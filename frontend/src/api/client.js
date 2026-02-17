@@ -90,6 +90,7 @@ export const expensesAPI = {
     })
   },
   downloadInvoice: (id) => client.get(`/expenses/${id}/invoice`, { responseType: 'blob' }),
+  markAllPaid: (id, data) => client.post(`/expenses/${id}/mark-all-paid`, data),
 }
 
 // Payments API

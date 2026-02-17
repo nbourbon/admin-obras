@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
+from app.schemas.payment import AdminMarkAllPaid
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense, Currency, CurrencyMode
@@ -534,6 +535,122 @@ async def delete_expense(
     db.commit()
 
     return {"message": "Gasto eliminado correctamente"}
+
+
+@router.post("/{expense_id}/mark-all-paid")
+async def mark_all_payments_as_paid(
+    expense_id: int,
+    data: AdminMarkAllPaid,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Mark all pending payments for an expense as paid (project admin only).
+    Uses each participant's amount_due as the paid amount.
+    Supports payment_date override for historical backfilling.
+    """
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.is_deleted == False,
+    ).first()
+
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    if not expense.project_id or not is_project_admin(db, current_user.id, expense.project_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be an admin of this project")
+
+    project = db.query(Project).filter(Project.id == expense.project_id).first()
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+    # For DUAL mode: determine TC once for all payments
+    tc = None
+    tc_source = None
+    if currency_mode == "DUAL":
+        if data.exchange_rate_override:
+            tc = data.exchange_rate_override
+            tc_source = "manual"
+        else:
+            try:
+                tc = fetch_blue_dollar_rate_sync()
+                tc_source = "auto"
+            except Exception:
+                tc = None
+                tc_source = None
+
+    # Determine which currency to use for DUAL mode (default USD)
+    dual_currency = data.currency or "USD"
+
+    pending_payments = db.query(ParticipantPayment).filter(
+        ParticipantPayment.expense_id == expense_id,
+        ParticipantPayment.is_paid == False,
+        ParticipantPayment.is_pending_approval == False,
+        ParticipantPayment.is_deleted == False,
+    ).all()
+
+    if not pending_payments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay pagos pendientes para marcar",
+        )
+
+    payment_date = data.payment_date or datetime.utcnow()
+    marked_count = 0
+
+    for payment in pending_payments:
+        if currency_mode == "ARS":
+            amount = payment.amount_due_ars
+            payment.amount_paid = amount
+            payment.currency_paid = Currency.ARS
+            payment.amount_paid_ars = amount
+            payment.amount_paid_usd = None
+            payment.exchange_rate_at_payment = None
+            payment.exchange_rate_source = None
+        elif currency_mode == "USD":
+            amount = payment.amount_due_usd
+            payment.amount_paid = amount
+            payment.currency_paid = Currency.USD
+            payment.amount_paid_usd = amount
+            payment.amount_paid_ars = None
+            payment.exchange_rate_at_payment = None
+            payment.exchange_rate_source = None
+        else:  # DUAL
+            if dual_currency == "ARS":
+                amount = payment.amount_due_ars
+                payment.currency_paid = Currency.ARS
+            else:
+                amount = payment.amount_due_usd
+                payment.currency_paid = Currency.USD
+            payment.amount_paid = amount
+            payment.exchange_rate_at_payment = tc
+            payment.exchange_rate_source = tc_source
+            if tc and tc > 0:
+                if dual_currency == "USD":
+                    payment.amount_paid_usd = amount
+                    payment.amount_paid_ars = (Decimal(str(amount)) * Decimal(str(tc))).quantize(Decimal("0.01"))
+                else:
+                    payment.amount_paid_ars = amount
+                    payment.amount_paid_usd = (Decimal(str(amount)) / Decimal(str(tc))).quantize(Decimal("0.01"))
+            else:
+                if dual_currency == "USD":
+                    payment.amount_paid_usd = amount
+                else:
+                    payment.amount_paid_ars = amount
+
+        payment.payment_date = payment_date
+        payment.submitted_at = datetime.utcnow()
+        payment.rejection_reason = None
+        payment.is_pending_approval = False
+        payment.is_paid = True
+        payment.paid_at = datetime.utcnow()
+        payment.approved_by = current_user.id
+        payment.approved_at = datetime.utcnow()
+        marked_count += 1
+
+    db.commit()
+    update_expense_status(db, expense_id)
+
+    return {"marked_count": marked_count, "message": f"Se marcaron {marked_count} pagos como pagados"}
 
 
 @router.put("/{expense_id}/restore")
