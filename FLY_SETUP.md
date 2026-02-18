@@ -83,7 +83,7 @@ Ahora cada push a `main` va a deployar automáticamente.
 
 1. Vercel → Project settings → Environment variables
 2. Busca `VITE_API_URL`
-3. Cambia el valor de la URL de Render a: `https://admin-obras-api.fly.dev`
+3. Cambia el valor de la URL de Render a: `https://proyectos-compartidos.fly.dev`
 4. (O el nombre que elegiste si no usaste `admin-obras-api`)
 5. Redeploy en Vercel
 

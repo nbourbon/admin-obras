@@ -245,7 +245,7 @@ Votes are weighted by each participant's ownership percentage:
 
 ### Recommended (Fly.io migration available)
 - **Frontend**: Vercel (no changes, keep as-is)
-- **Backend**: Fly.io (auto-deploys on push to main via GitHub Actions)
+- **Backend**: Fly.io → `https://proyectos-compartidos.fly.dev` (auto-deploys on push to main via GitHub Actions)
 - **File Storage**: Cloudinary (no changes, keep as-is)
 - **Database**: Supabase PostgreSQL (no changes, keep as-is)
 

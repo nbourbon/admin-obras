@@ -41,7 +41,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.onrender\.com\/.*/i,
+            urlPattern: /^https:\/\/proyectos-compartidos\.fly\.dev\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
