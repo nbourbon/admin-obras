@@ -12,7 +12,9 @@ import {
   AlertCircle,
   XCircle,
   Eye,
-  Trash2
+  Trash2,
+  Filter,
+  ChevronDown
 } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
 
@@ -276,6 +278,9 @@ function MyPayments() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [paymentToDelete, setPaymentToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
 
   const isIndividual = currentProject?.is_individual || false
 
@@ -403,11 +408,25 @@ function MyPayments() {
 
   // Apply filter to display
   const displayPayments = useMemo(() => {
-    if (filter === 'pending') return pendingPayments
-    if (filter === 'pending_approval') return pendingApprovalPayments
-    if (filter === 'paid') return paidPayments
-    return sortedPayments // 'all' - show everything
-  }, [filter, sortedPayments, pendingPayments, pendingApprovalPayments, paidPayments])
+    let base = sortedPayments
+    if (filter === 'pending') base = pendingPayments
+    else if (filter === 'pending_approval') base = pendingApprovalPayments
+    else if (filter === 'paid') base = paidPayments
+
+    return base.filter((payment) => {
+      const date = payment.expense?.expense_date
+      if (filterDateFrom && date && date < filterDateFrom) return false
+      if (filterDateTo && date && date > filterDateTo + 'T23:59:59') return false
+      return true
+    })
+  }, [filter, sortedPayments, pendingPayments, pendingApprovalPayments, paidPayments, filterDateFrom, filterDateTo])
+
+  const activeDateFilters = [filterDateFrom, filterDateTo].filter(Boolean).length
+
+  const clearDateFilters = () => {
+    setFilterDateFrom('')
+    setFilterDateTo('')
+  }
 
   if (loading) {
     return (
@@ -418,25 +437,69 @@ function MyPayments() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Mis Pagos</h1>
 
-        {/* Simple filter dropdown */}
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Filtrar:</label>
+          {/* Status filter */}
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             <option value="all">Todos ({sortedPayments.length})</option>
             <option value="pending">Pendientes ({pendingPayments.length})</option>
             {!isIndividual && <option value="pending_approval">En Revision ({pendingApprovalPayments.length})</option>}
             <option value="paid">Pagados ({paidPayments.length})</option>
           </select>
+
+          {/* Date filter toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Filter size={16} />
+            Fecha
+            {activeDateFilters > 0 && (
+              <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                {activeDateFilters}
+              </span>
+            )}
+            <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          {activeDateFilters > 0 && (
+            <button onClick={clearDateFilters} className="mt-2 text-sm text-red-600 hover:text-red-800">
+              Limpiar fechas
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Payments List */}
       {displayPayments.length === 0 ? (

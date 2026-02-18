@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, CheckCircle, Clock, AlertCircle, X, Upload, Palette, RotateCcw, Eye, EyeOff, Edit2 } from 'lucide-react'
+import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -610,7 +610,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Nuevo Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -836,6 +836,11 @@ function Expenses() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [expenseToEdit, setExpenseToEdit] = useState(null)
   const [showDeleted, setShowDeleted] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filterProvider, setFilterProvider] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
 
   useEffect(() => {
     loadData()
@@ -873,6 +878,26 @@ function Expenses() {
     setShowEditModal(true)
   }
 
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((expense) => {
+      if (filterProvider && String(expense.provider?.id ?? '') !== filterProvider) return false
+      if (filterCategory && String(expense.category?.id ?? '') !== filterCategory) return false
+      if (filterDateFrom && expense.expense_date < filterDateFrom) return false
+      if (filterDateTo && expense.expense_date > filterDateTo + 'T23:59:59') return false
+      return true
+    })
+  }, [expenses, filterProvider, filterCategory, filterDateFrom, filterDateTo])
+
+  const activeFilterCount = [filterProvider, filterCategory, filterDateFrom, filterDateTo, showDeleted ? '1' : ''].filter(Boolean).length
+
+  const clearFilters = () => {
+    setFilterProvider('')
+    setFilterCategory('')
+    setFilterDateFrom('')
+    setFilterDateTo('')
+    setShowDeleted(false)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -882,36 +907,125 @@ function Expenses() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-        <div className="flex flex-col sm:flex-row gap-2">
-          {isProjectAdmin && (
-            <button
-              onClick={() => setShowDeleted(!showDeleted)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-            >
-              {showDeleted ? <EyeOff size={20} /> : <Eye size={20} />}
-              {showDeleted ? 'Ocultar eliminados' : 'Ver eliminados'}
-            </button>
-          )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Filter size={18} />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown size={16} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
           {isProjectAdmin && (
             <button
               onClick={() => setShowModal(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               <Plus size={20} />
-              Nuevo Gasto
+              <span className="hidden sm:inline">Nuevo Gasto</span>
+              <span className="sm:hidden">Nuevo</span>
             </button>
           )}
         </div>
       </div>
+
+      {showFilters && (
+        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Proveedor</label>
+              <select
+                value={filterProvider}
+                onChange={(e) => setFilterProvider(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Categoria</label>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todas</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            {isProjectAdmin && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={(e) => setShowDeleted(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 flex items-center gap-1">
+                  {showDeleted ? <EyeOff size={15} /> : <Eye size={15} />}
+                  Ver eliminados
+                </span>
+              </label>
+            )}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-red-600 hover:text-red-800 ml-auto"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {expenses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">Sin gastos</h3>
           <p className="mt-2 text-gray-500">Todavia no hay gastos registrados.</p>
+        </div>
+      ) : filteredExpenses.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <Filter className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-4 text-lg font-medium text-gray-900">Sin resultados</h3>
+          <p className="mt-2 text-gray-500">Ningun gasto coincide con los filtros aplicados.</p>
+          <button onClick={clearFilters} className="mt-4 text-blue-600 hover:underline text-sm">
+            Limpiar filtros
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -945,7 +1059,7 @@ function Expenses() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {expenses.map((expense) => (
+                {filteredExpenses.map((expense) => (
                   <tr
                     key={expense.id}
                     className={`hover:opacity-80 transition-opacity ${expense.is_deleted ? 'opacity-50' : ''}`}
