@@ -344,9 +344,16 @@ function MyPayments() {
     }
   }
 
+  const fixCloudinaryPdfUrl = (url) => {
+    if (url && url.includes('/image/upload/') && url.toLowerCase().endsWith('.pdf')) {
+      return url.replace('/image/upload/', '/raw/upload/')
+    }
+    return url
+  }
+
   const handlePreviewReceipt = async (payment) => {
     try {
-      const filePath = payment.receipt_file_path || ''
+      const filePath = fixCloudinaryPdfUrl(payment.receipt_file_path || '')
       const fileName = filePath.split('/').pop() || `comprobante-${payment.id}`
 
       // Cloudinary URL — open directly without auth headers
@@ -376,7 +383,7 @@ function MyPayments() {
 
   const handleDownloadReceipt = async (paymentId, filePath) => {
     try {
-      const fp = filePath || ''
+      const fp = fixCloudinaryPdfUrl(filePath || '')
       const fileName = fp.split('/').pop() || `comprobante-${paymentId}`
 
       // Cloudinary URL — open in new tab (cross-origin download attribute is ignored by browsers)
