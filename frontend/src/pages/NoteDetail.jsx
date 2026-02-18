@@ -17,6 +17,7 @@ import {
   X,
   AlertCircle,
   Bell,
+  FileText,
 } from 'lucide-react'
 
 import ReactQuill from 'react-quill'
@@ -269,6 +270,10 @@ function NoteDetail() {
 
       {/* Content */}
       <div className="bg-white rounded-xl shadow-sm p-4">
+        <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+          <FileText size={18} />
+          Nota
+        </h3>
         {isEditing ? (
           <ReactQuill
             theme="snow"
