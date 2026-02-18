@@ -255,9 +255,10 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contenido
-            </label>
+            <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+              <FileText size={18} />
+              Nota
+            </h3>
             <ReactQuill
               theme="snow"
               value={content}
