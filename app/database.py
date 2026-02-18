@@ -192,7 +192,7 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (meeting_date): {e}")
 
-        # Add new enum values for PostgreSQL and migrate old values
+        # Normalize all note_type values to lowercase and convert column to VARCHAR
         with engine.connect() as conn:
             try:
                 if not database_url.startswith("sqlite"):
@@ -202,13 +202,12 @@ def _run_migrations():
                             conn.commit()
                         except Exception:
                             conn.rollback()
-                # Use ::text cast to bypass PostgreSQL enum validation in WHERE clause
-                # This handles both uppercase (REGULAR/VOTING from old SQLAlchemy .name behavior)
-                # and lowercase (regular/voting) variants
-                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type::text IN ('regular', 'REGULAR')"))
-                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type::text IN ('voting', 'VOTING')"))
+                # Normalize all variants to lowercase using ::text cast to bypass enum validation
+                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type::text IN ('regular', 'REGULAR', 'REUNION')"))
+                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type::text IN ('voting', 'VOTING', 'VOTACION')"))
+                conn.execute(text("UPDATE notes SET note_type = 'notificacion' WHERE note_type::text = 'NOTIFICACION'"))
                 conn.commit()
-                print("Migration: Updated note_type values to new naming")
+                print("Migration: Normalized note_type values to lowercase")
             except Exception as e:
                 print(f"Migration warning (note_types): {e}")
 
@@ -216,11 +215,12 @@ def _run_migrations():
         with engine.connect() as conn:
             try:
                 if not database_url.startswith("sqlite"):
-                    conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50)"))
+                    # USING note_type::text is required to cast enum values to text
+                    conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50) USING note_type::text"))
                     conn.commit()
                     print("Migration: Converted note_type column to VARCHAR")
             except Exception as e:
-                # Already VARCHAR or other non-critical error
+                # Already VARCHAR - safe to ignore
                 print(f"Migration info (note_type to varchar): {e}")
 
     # Migration: Add google_id to users table + make password_hash nullable

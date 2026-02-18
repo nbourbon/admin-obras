@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -21,7 +21,7 @@ class Note(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=True)
-    note_type = Column(Enum(NoteType, native_enum=False), default=NoteType.REUNION)
+    note_type = Column(String(50), default='reunion')
     meeting_date = Column(DateTime(timezone=True), nullable=True)  # For reunion notes
     voting_description = Column(Text, nullable=True)  # For votacion notes
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
