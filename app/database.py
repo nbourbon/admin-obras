@@ -202,8 +202,9 @@ def _run_migrations():
                             conn.commit()
                         except Exception:
                             conn.rollback()
-                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type = 'regular'"))
-                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type = 'voting'"))
+                # Migrate both lowercase (regular/voting) and uppercase (REGULAR/VOTING) variants
+                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type IN ('regular', 'REGULAR')"))
+                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type IN ('voting', 'VOTING')"))
                 conn.commit()
                 print("Migration: Updated note_type values to new naming")
             except Exception as e:
