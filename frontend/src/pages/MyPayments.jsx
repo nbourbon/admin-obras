@@ -346,20 +346,27 @@ function MyPayments() {
 
   const handlePreviewReceipt = async (payment) => {
     try {
-      const response = await paymentsAPI.downloadReceipt(payment.id)
-      // Determine MIME type from file extension
-      const fileName = payment.receipt_file_path?.split('/').pop() || ''
-      let mimeType = 'application/octet-stream'
-      if (fileName.toLowerCase().endsWith('.pdf')) {
-        mimeType = 'application/pdf'
-      } else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) {
-        mimeType = 'image/jpeg'
-      } else if (fileName.toLowerCase().endsWith('.png')) {
-        mimeType = 'image/png'
+      const filePath = payment.receipt_file_path || ''
+      const fileName = filePath.split('/').pop() || `comprobante-${payment.id}`
+
+      // Cloudinary URL — open directly without auth headers
+      if (filePath.startsWith('http')) {
+        setPreviewUrl(filePath)
+        setPreviewFileName(fileName)
+        setPreviewPaymentId(payment.id)
+        setShowPreview(true)
+        return
       }
+
+      // Local file — download as blob
+      const response = await paymentsAPI.downloadReceipt(payment.id)
+      let mimeType = 'application/octet-stream'
+      if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
+      else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) mimeType = 'image/jpeg'
+      else if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png'
       const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
       setPreviewUrl(url)
-      setPreviewFileName(fileName || `comprobante-${payment.id}`)
+      setPreviewFileName(fileName)
       setPreviewPaymentId(payment.id)
       setShowPreview(true)
     } catch (err) {
@@ -367,13 +374,29 @@ function MyPayments() {
     }
   }
 
-  const handleDownloadReceipt = async (paymentId) => {
+  const handleDownloadReceipt = async (paymentId, filePath) => {
     try {
+      const fp = filePath || ''
+      const fileName = fp.split('/').pop() || `comprobante-${paymentId}`
+
+      // Cloudinary URL — open in new tab directly
+      if (fp.startsWith('http')) {
+        const link = document.createElement('a')
+        link.href = fp
+        link.setAttribute('download', fileName)
+        link.target = '_blank'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        return
+      }
+
+      // Local file — blob download
       const response = await paymentsAPI.downloadReceipt(paymentId)
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `comprobante-${paymentId}`)
+      link.setAttribute('download', fileName)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -666,7 +689,7 @@ function MyPayments() {
                           Ver
                         </button>
                         <button
-                          onClick={() => handleDownloadReceipt(payment.id)}
+                          onClick={() => handleDownloadReceipt(payment.id, payment.receipt_file_path)}
                           className="flex items-center gap-1 px-2 py-1 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
                         >
                           <Download size={16} />
@@ -775,7 +798,7 @@ function MyPayments() {
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
-        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId)}
+        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId, previewUrl)}
       />
     </div>
   )

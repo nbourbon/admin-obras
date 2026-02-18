@@ -81,17 +81,22 @@ function ExpenseDetail() {
 
   const handlePreviewInvoice = async () => {
     try {
-      const response = await expensesAPI.downloadInvoice(id)
-      // Determine MIME type from file extension
-      const fileName = expense?.invoice_file_path?.split('/').pop() || ''
-      let mimeType = 'application/octet-stream'
-      if (fileName.toLowerCase().endsWith('.pdf')) {
-        mimeType = 'application/pdf'
-      } else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) {
-        mimeType = 'image/jpeg'
-      } else if (fileName.toLowerCase().endsWith('.png')) {
-        mimeType = 'image/png'
+      const filePath = expense?.invoice_file_path || ''
+      const fileName = filePath.split('/').pop() || `invoice-${id}`
+
+      // Cloudinary URL — open directly without auth headers
+      if (filePath.startsWith('http')) {
+        setPreviewUrl(filePath)
+        setShowPreview(true)
+        return
       }
+
+      // Local file — download as blob
+      const response = await expensesAPI.downloadInvoice(id)
+      let mimeType = 'application/octet-stream'
+      if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
+      else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) mimeType = 'image/jpeg'
+      else if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png'
       const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
       setPreviewUrl(url)
       setShowPreview(true)
@@ -102,11 +107,26 @@ function ExpenseDetail() {
 
   const handleDownloadInvoice = async () => {
     try {
+      const filePath = expense?.invoice_file_path || ''
+      const fileName = filePath.split('/').pop() || `invoice-${id}.pdf`
+
+      // Cloudinary URL — open in new tab directly
+      if (filePath.startsWith('http')) {
+        const link = document.createElement('a')
+        link.href = filePath
+        link.setAttribute('download', fileName)
+        link.target = '_blank'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        return
+      }
+
+      // Local file — blob download
       const response = await expensesAPI.downloadInvoice(id)
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      const fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}.pdf`
       link.setAttribute('download', fileName)
       document.body.appendChild(link)
       link.click()
