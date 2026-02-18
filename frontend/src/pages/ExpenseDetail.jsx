@@ -261,7 +261,7 @@ function ExpenseDetail() {
                           ? 'bg-green-100 text-green-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {expense.currency_original === 'ARS' ? '🟢 ARS — monto fijo' : '🔵 USD — monto fijo'}
+                        {expense.currency_original === 'ARS' ? '🟢 ARS' : '🔵 USD'}
                       </span>
                       <p className="text-xs text-gray-400 mt-1">
                         El monto en {expense.currency_original} es exacto. El otro es su equivalente al TC del momento.
@@ -297,29 +297,6 @@ function ExpenseDetail() {
               </div>
             </dl>
 
-            {/* Pagos Reales vs Estimado (DUAL mode only) */}
-            {currencyMode === 'DUAL' && expense.total_actual_paid_ars != null && parseFloat(expense.total_actual_paid_ars) > 0 && (
-              <div className="mt-6 pt-4 border-t">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Pagos Reales vs Estimado</h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <dt className="text-gray-500">Estimado ARS</dt>
-                    <dd className="font-medium">{formatCurrency(expense.amount_ars, 'ARS')}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-gray-500">Pagado Real ARS</dt>
-                    <dd className="font-medium">{formatCurrency(expense.total_actual_paid_ars, 'ARS')}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-gray-500">Diferencia</dt>
-                    <dd className={`font-medium ${parseFloat(expense.total_actual_paid_ars) - parseFloat(expense.amount_ars) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(Math.abs(parseFloat(expense.total_actual_paid_ars) - parseFloat(expense.amount_ars)), 'ARS')}
-                      {parseFloat(expense.total_actual_paid_ars) > parseFloat(expense.amount_ars) ? ' (+)' : ' (-)'}
-                    </dd>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Invoice */}
