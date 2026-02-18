@@ -44,6 +44,7 @@ def build_note_response(note: Note, db: Session) -> NoteResponse:
         title=note.title,
         content=note.content,
         note_type=note.note_type,
+        meeting_date=note.meeting_date,
         voting_description=note.voting_description,
         created_by=note.created_by,
         creator_name=creator.full_name if creator else "Unknown",
@@ -130,6 +131,7 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
         title=note.title,
         content=note.content,
         note_type=note.note_type,
+        meeting_date=note.meeting_date,
         voting_description=note.voting_description,
         created_by=note.created_by,
         creator_name=creator.full_name if creator else "Unknown",
@@ -180,28 +182,33 @@ async def create_note(
     if not project_id:
         raise HTTPException(status_code=400, detail="Project ID required")
 
+    is_votacion = note_data.note_type in (NoteType.VOTACION, NoteType.VOTING)
+    is_reunion = note_data.note_type in (NoteType.REUNION, NoteType.REGULAR)
+
     # Create the note
     note = Note(
         project_id=project_id,
         title=note_data.title,
         content=note_data.content,
         note_type=note_data.note_type,
-        voting_description=note_data.voting_description if note_data.note_type == NoteType.VOTING else None,
+        meeting_date=note_data.meeting_date if is_reunion else None,
+        voting_description=note_data.voting_description if is_votacion else None,
         created_by=current_user.id,
     )
     db.add(note)
     db.flush()  # Get the note ID
 
-    # Add participants
-    for user_id in note_data.participant_ids:
-        participant = NoteParticipant(
-            note_id=note.id,
-            user_id=user_id,
-        )
-        db.add(participant)
+    # Participants only for reunion type
+    if is_reunion:
+        for user_id in note_data.participant_ids:
+            participant = NoteParticipant(
+                note_id=note.id,
+                user_id=user_id,
+            )
+            db.add(participant)
 
-    # Add vote options for voting notes
-    if note_data.note_type == NoteType.VOTING:
+    # Vote options only for votacion type
+    if is_votacion:
         for i, option_text in enumerate(note_data.vote_options):
             option = VoteOption(
                 note_id=note.id,
@@ -252,7 +259,9 @@ async def update_note(
         note.title = note_data.title
     if note_data.content is not None:
         note.content = note_data.content
-    if note_data.voting_description is not None and note.note_type == NoteType.VOTING:
+    if note_data.meeting_date is not None and note.note_type in (NoteType.REUNION, NoteType.REGULAR):
+        note.meeting_date = note_data.meeting_date
+    if note_data.voting_description is not None and note.note_type in (NoteType.VOTACION, NoteType.VOTING):
         note.voting_description = note_data.voting_description
 
     db.commit()
@@ -358,7 +367,7 @@ async def cast_vote(
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    if note.note_type != NoteType.VOTING:
+    if note.note_type not in (NoteType.VOTACION, NoteType.VOTING):
         raise HTTPException(status_code=400, detail="This note is not a voting note")
 
     # Check if option belongs to this note

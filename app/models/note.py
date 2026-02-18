@@ -6,6 +6,10 @@ from app.database import Base
 
 
 class NoteType(str, enum.Enum):
+    REUNION = "reunion"          # Meeting minutes: participants + meeting_date
+    NOTIFICACION = "notificacion"  # Notification: no participants needed
+    VOTACION = "votacion"        # Voting: vote options + weighted results
+    # Legacy values kept for backwards compatibility
     REGULAR = "regular"
     VOTING = "voting"
 
@@ -17,8 +21,9 @@ class Note(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=True)
-    note_type = Column(Enum(NoteType), default=NoteType.REGULAR)
-    voting_description = Column(Text, nullable=True)  # For voting notes
+    note_type = Column(Enum(NoteType), default=NoteType.REUNION)
+    meeting_date = Column(DateTime(timezone=True), nullable=True)  # For reunion notes
+    voting_description = Column(Text, nullable=True)  # For votacion notes
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

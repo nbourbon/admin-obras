@@ -79,15 +79,17 @@ class NoteBase(BaseModel):
 
 
 class NoteCreate(NoteBase):
-    note_type: NoteType = NoteType.REGULAR
-    participant_ids: List[int] = []
-    voting_description: Optional[str] = None
-    vote_options: List[str] = []  # Only for voting notes
+    note_type: NoteType = NoteType.REUNION
+    meeting_date: Optional[datetime] = None  # For reunion notes
+    participant_ids: List[int] = []           # Only for reunion notes
+    voting_description: Optional[str] = None  # Only for votacion notes
+    vote_options: List[str] = []              # Only for votacion notes
 
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    meeting_date: Optional[datetime] = None
     voting_description: Optional[str] = None
 
 
@@ -95,6 +97,7 @@ class NoteResponse(NoteBase):
     id: int
     project_id: int
     note_type: NoteType
+    meeting_date: Optional[datetime] = None
     voting_description: Optional[str] = None
     created_by: int
     creator_name: str

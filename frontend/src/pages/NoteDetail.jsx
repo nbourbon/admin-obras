@@ -16,9 +16,19 @@ import {
   Edit2,
   X,
   AlertCircle,
+  Bell,
 } from 'lucide-react'
+
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
+
+const NOTE_TYPE_CONFIG = {
+  reunion: { label: 'Reunión', icon: Users, badgeClass: 'bg-blue-100 text-blue-700' },
+  notificacion: { label: 'Notificación', icon: Bell, badgeClass: 'bg-yellow-100 text-yellow-700' },
+  votacion: { label: 'Votación', icon: Vote, badgeClass: 'bg-purple-100 text-purple-700' },
+  regular: { label: 'Reunión', icon: Users, badgeClass: 'bg-blue-100 text-blue-700' },
+  voting: { label: 'Votación', icon: Vote, badgeClass: 'bg-purple-100 text-purple-700' },
+}
 
 function NoteDetail() {
   const { id } = useParams()
@@ -62,6 +72,15 @@ function NoteDetail() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+    })
+  }
+
+  const formatMeetingDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('es-AR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
     })
   }
 
@@ -147,6 +166,9 @@ function NoteDetail() {
   }
 
   const canEdit = note && (note.created_by === user?.id || isProjectAdmin)
+  const typeConfig = note ? (NOTE_TYPE_CONFIG[note.note_type] || NOTE_TYPE_CONFIG.reunion) : NOTE_TYPE_CONFIG.reunion
+  const TypeIcon = typeConfig.icon
+  const isVoting = note && (note.note_type === 'votacion' || note.note_type === 'voting')
   const totalVotes = note?.vote_options?.reduce((sum, opt) => sum + opt.vote_count, 0) || 0
   const totalParticipation = note?.vote_options?.reduce((sum, opt) => sum + opt.participation_percentage, 0) || 0
 
@@ -201,18 +223,23 @@ function NoteDetail() {
             <>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{note.title}</h1>
-                {note.note_type === 'voting' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                    <Vote size={12} />
-                    Votacion
-                  </span>
-                )}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.badgeClass}`}>
+                  <TypeIcon size={12} />
+                  {typeConfig.label}
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
-                <span className="flex items-center gap-1">
-                  <Calendar size={14} />
-                  {formatDate(note.created_at)}
-                </span>
+                {note.meeting_date ? (
+                  <span className="flex items-center gap-1">
+                    <Calendar size={14} />
+                    {formatMeetingDate(note.meeting_date)}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Calendar size={14} />
+                    {formatDate(note.created_at)}
+                  </span>
+                )}
                 <span>· {note.creator_name}</span>
               </div>
             </>
@@ -298,7 +325,7 @@ function NoteDetail() {
       )}
 
       {/* Voting Section */}
-      {note.note_type === 'voting' && (
+      {isVoting && (
         <div className="bg-white rounded-xl shadow-sm p-4">
           <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
             <Vote size={18} />

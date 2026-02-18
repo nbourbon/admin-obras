@@ -180,6 +180,35 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (payment exchange rate): {e}")
 
+    # Migration: Add meeting_date column to notes + migrate note_type values
+    if 'notes' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('notes')]
+        if 'meeting_date' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE notes ADD COLUMN meeting_date TIMESTAMP WITH TIME ZONE'))
+                    conn.commit()
+                    print("Migration: Added meeting_date column to notes table")
+                except Exception as e:
+                    print(f"Migration warning (meeting_date): {e}")
+
+        # Add new enum values for PostgreSQL and migrate old values
+        with engine.connect() as conn:
+            try:
+                if not database_url.startswith("sqlite"):
+                    for val in ['reunion', 'notificacion', 'votacion']:
+                        try:
+                            conn.execute(text(f"ALTER TYPE notetype ADD VALUE IF NOT EXISTS '{val}'"))
+                            conn.commit()
+                        except Exception:
+                            conn.rollback()
+                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type = 'regular'"))
+                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type = 'voting'"))
+                conn.commit()
+                print("Migration: Updated note_type values to new naming")
+            except Exception as e:
+                print(f"Migration warning (note_types): {e}")
+
     # Migration: Add google_id to users table + make password_hash nullable
     if 'users' in inspector.get_table_names():
         columns = [col['name'] for col in inspector.get_columns('users')]
