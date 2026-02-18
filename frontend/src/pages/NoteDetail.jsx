@@ -18,6 +18,8 @@ import {
   AlertCircle,
   Bell,
   FileText,
+  Lock,
+  Clock,
 } from 'lucide-react'
 
 import ReactQuill from 'react-quill'
@@ -124,6 +126,16 @@ function NoteDetail() {
       alert(err.response?.data?.detail || 'Error al votar')
     } finally {
       setVoting(false)
+    }
+  }
+
+  const handleCloseVoting = async () => {
+    if (!confirm('¿Cerrar la votación? Los participantes que no votaron ya no podrán hacerlo.')) return
+    try {
+      await notesAPI.closeVoting(id)
+      loadNote()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al cerrar la votación')
     }
   }
 
@@ -272,7 +284,7 @@ function NoteDetail() {
       <div className="bg-white rounded-xl shadow-sm p-4">
         <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
           <FileText size={18} />
-          Nota
+          Notas
         </h3>
         {isEditing ? (
           <ReactQuill
@@ -332,10 +344,35 @@ function NoteDetail() {
       {/* Voting Section */}
       {isVoting && (
         <div className="bg-white rounded-xl shadow-sm p-4">
-          <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-            <Vote size={18} />
-            Votación <span className="text-sm font-normal text-gray-400">(seleccionar la opción deseada)</span>
-          </h3>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h3 className="font-medium text-gray-900 flex items-center gap-2">
+              <Vote size={18} />
+              Votación <span className="text-sm font-normal text-gray-400">(seleccionar la opción deseada)</span>
+            </h3>
+            {isProjectAdmin && note.is_voting_open && (
+              <button
+                onClick={handleCloseVoting}
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 border border-red-200 transition-colors"
+              >
+                <Lock size={14} />
+                Cerrar votación
+              </button>
+            )}
+          </div>
+
+          {/* Voting status banner */}
+          {!note.is_voting_open ? (
+            <div className="flex items-center gap-2 px-3 py-2 mb-3 bg-gray-100 rounded-lg text-sm text-gray-600">
+              <Lock size={14} />
+              <span className="font-medium">Votación cerrada</span>
+            </div>
+          ) : note.voting_closes_at ? (
+            <div className="flex items-center gap-2 px-3 py-2 mb-3 bg-amber-50 rounded-lg text-sm text-amber-700 border border-amber-200">
+              <Clock size={14} />
+              <span>Cierra el {new Date(note.voting_closes_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          ) : null}
+
           {note.voting_description && (
             <p className="text-gray-600 mb-4">{note.voting_description}</p>
           )}
@@ -349,16 +386,16 @@ function NoteDetail() {
                 <div key={option.id} className="relative">
                   <button
                     onClick={() => handleVote(option.id)}
-                    disabled={note.user_has_voted || voting}
+                    disabled={note.user_has_voted || voting || !note.is_voting_open}
                     className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
                       isSelected
                         ? 'border-blue-600 bg-blue-50'
-                        : isWinning && note.user_has_voted
+                        : isWinning && (note.user_has_voted || !note.is_voting_open)
                         ? 'border-green-500 bg-green-50'
-                        : note.user_has_voted
+                        : note.user_has_voted || !note.is_voting_open
                         ? 'border-gray-200 bg-gray-50'
                         : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                    } ${!note.user_has_voted && !voting ? 'cursor-pointer' : 'cursor-default'}`}
+                    } ${!note.user_has_voted && !voting && note.is_voting_open ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium flex items-center gap-2">
@@ -419,7 +456,7 @@ function NoteDetail() {
             })}
           </div>
 
-          {!note.user_has_voted && (
+          {!note.user_has_voted && note.is_voting_open && (
             <p className="text-sm text-amber-600 mt-3 flex items-center gap-1">
               <AlertCircle size={14} />
               Tu voto es irreversible (solo admin puede resetearlo)

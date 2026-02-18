@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,15 @@ from app.utils.dependencies import get_current_user, is_project_admin
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
+def is_voting_effectively_closed(note: Note) -> bool:
+    """Returns True if voting is closed — either manually by admin or past the deadline."""
+    if note.is_voting_closed:
+        return True
+    if note.voting_closes_at and note.voting_closes_at < datetime.now(timezone.utc):
+        return True
+    return False
+
+
 def get_project_id(x_project_id: Optional[str] = Header(None)) -> Optional[int]:
     if x_project_id:
         try:
@@ -46,6 +56,9 @@ def build_note_response(note: Note, db: Session) -> NoteResponse:
         note_type=note.note_type,
         meeting_date=note.meeting_date,
         voting_description=note.voting_description,
+        voting_closes_at=note.voting_closes_at,
+        is_voting_closed=note.is_voting_closed or False,
+        is_voting_open=not is_voting_effectively_closed(note),
         created_by=note.created_by,
         creator_name=creator.full_name if creator else "Unknown",
         is_active=note.is_active,
@@ -133,6 +146,9 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
         note_type=note.note_type,
         meeting_date=note.meeting_date,
         voting_description=note.voting_description,
+        voting_closes_at=note.voting_closes_at,
+        is_voting_closed=note.is_voting_closed or False,
+        is_voting_open=not is_voting_effectively_closed(note),
         created_by=note.created_by,
         creator_name=creator.full_name if creator else "Unknown",
         is_active=note.is_active,
@@ -185,6 +201,11 @@ async def create_note(
     is_votacion = note_data.note_type in (NoteType.VOTACION, NoteType.VOTING)
     is_reunion = note_data.note_type in (NoteType.REUNION, NoteType.REGULAR)
 
+    # Calculate voting deadline for votacion notes
+    voting_closes_at = None
+    if is_votacion and note_data.voting_duration_days:
+        voting_closes_at = datetime.now(timezone.utc) + timedelta(days=note_data.voting_duration_days)
+
     # Create the note
     note = Note(
         project_id=project_id,
@@ -193,6 +214,8 @@ async def create_note(
         note_type=note_data.note_type,
         meeting_date=note_data.meeting_date if is_reunion else None,
         voting_description=note_data.voting_description if is_votacion else None,
+        voting_closes_at=voting_closes_at,
+        is_voting_closed=False,
         created_by=current_user.id,
     )
     db.add(note)
@@ -370,6 +393,10 @@ async def cast_vote(
     if note.note_type not in (NoteType.VOTACION, NoteType.VOTING):
         raise HTTPException(status_code=400, detail="This note is not a voting note")
 
+    # Check if voting is closed
+    if is_voting_effectively_closed(note):
+        raise HTTPException(status_code=400, detail="La votación ya está cerrada")
+
     # Check if option belongs to this note
     option = db.query(VoteOption).filter(
         VoteOption.id == vote_data.option_id,
@@ -430,3 +457,29 @@ async def reset_vote(
     db.commit()
 
     return {"message": "Vote reset successfully"}
+
+
+@router.post("/{note_id}/close-voting")
+async def close_voting(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Close voting on a voting note (project admin only)."""
+    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    if note.note_type not in (NoteType.VOTACION, NoteType.VOTING):
+        raise HTTPException(status_code=400, detail="This note is not a voting note")
+
+    if not note.project_id or not is_project_admin(db, current_user.id, note.project_id):
+        raise HTTPException(status_code=403, detail="You must be an admin of this project")
+
+    if is_voting_effectively_closed(note):
+        raise HTTPException(status_code=400, detail="La votación ya está cerrada")
+
+    note.is_voting_closed = True
+    db.commit()
+
+    return {"message": "Voting closed successfully"}

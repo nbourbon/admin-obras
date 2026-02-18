@@ -84,6 +84,7 @@ class NoteCreate(NoteBase):
     participant_ids: List[int] = []           # Only for reunion notes
     voting_description: Optional[str] = None  # Only for votacion notes
     vote_options: List[str] = []              # Only for votacion notes
+    voting_duration_days: Optional[int] = 1  # Days until voting closes (None = no limit)
 
 
 class NoteUpdate(BaseModel):
@@ -99,6 +100,9 @@ class NoteResponse(NoteBase):
     note_type: NoteType
     meeting_date: Optional[datetime] = None
     voting_description: Optional[str] = None
+    voting_closes_at: Optional[datetime] = None
+    is_voting_closed: bool = False
+    is_voting_open: bool = True
     created_by: int
     creator_name: str
     is_active: bool

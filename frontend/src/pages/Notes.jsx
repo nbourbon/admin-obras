@@ -46,6 +46,7 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
   const [meetingDate, setMeetingDate] = useState('')
   const [votingDescription, setVotingDescription] = useState('')
   const [voteOptions, setVoteOptions] = useState(['', ''])
+  const [votingDurationDays, setVotingDurationDays] = useState('1')
   const [participantIds, setParticipantIds] = useState([])
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(false)
@@ -90,6 +91,7 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
       if (noteType === 'votacion') {
         data.voting_description = votingDescription
         data.vote_options = voteOptions.filter((opt) => opt.trim() !== '')
+        data.voting_duration_days = votingDurationDays ? parseInt(votingDurationDays) : null
         if (data.vote_options.length < 2) {
           setError('Debes agregar al menos 2 opciones de votacion')
           setLoading(false)
@@ -318,6 +320,24 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
                 >
                   + Agregar opcion
                 </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duración de la votación
+                </label>
+                <select
+                  value={votingDurationDays}
+                  onChange={(e) => setVotingDurationDays(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="1">1 día</option>
+                  <option value="2">2 días</option>
+                  <option value="3">3 días</option>
+                  <option value="5">5 días</option>
+                  <option value="7">7 días</option>
+                  <option value="">Sin límite de tiempo</option>
+                </select>
               </div>
             </>
           )}

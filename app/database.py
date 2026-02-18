@@ -192,6 +192,16 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (meeting_date): {e}")
 
+        if 'voting_closes_at' not in columns:
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE notes ADD COLUMN voting_closes_at TIMESTAMP WITH TIME ZONE'))
+                    conn.execute(text('ALTER TABLE notes ADD COLUMN is_voting_closed BOOLEAN DEFAULT FALSE'))
+                    conn.commit()
+                    print("Migration: Added voting_closes_at and is_voting_closed columns to notes table")
+                except Exception as e:
+                    print(f"Migration warning (voting_closes_at): {e}")
+
         # Normalize all note_type values to lowercase and convert column to VARCHAR
         with engine.connect() as conn:
             try:

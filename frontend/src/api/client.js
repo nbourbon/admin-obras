@@ -160,6 +160,7 @@ export const notesAPI = {
   deleteComment: (noteId, commentId) => client.delete(`/notes/${noteId}/comments/${commentId}`),
   vote: (id, data) => client.post(`/notes/${id}/vote`, data),
   resetVote: (noteId, userId) => client.delete(`/notes/${noteId}/vote/${userId}`),
+  closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
 }
 
 export default client

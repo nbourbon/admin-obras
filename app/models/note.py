@@ -24,6 +24,8 @@ class Note(Base):
     note_type = Column(String(50), default='reunion')
     meeting_date = Column(DateTime(timezone=True), nullable=True)  # For reunion notes
     voting_description = Column(Text, nullable=True)  # For votacion notes
+    voting_closes_at = Column(DateTime(timezone=True), nullable=True)  # Optional voting deadline
+    is_voting_closed = Column(Boolean, default=False)  # Admin manually closed voting
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
