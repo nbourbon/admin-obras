@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, extract
 from io import BytesIO
 from datetime import datetime
@@ -276,6 +276,7 @@ async def get_expense_payment_status(
             ParticipantPayment.expense_id == expense_id,
             ParticipantPayment.is_deleted == False,
         )
+        .options(joinedload(ParticipantPayment.user))
         .all()
     )
 
@@ -284,7 +285,7 @@ async def get_expense_payment_status(
     pending_count = 0
 
     for payment in payments:
-        user = db.query(User).filter(User.id == payment.user_id).first()
+        user = payment.user
         participants.append(ParticipantStatus(
             payment_id=payment.id,
             user_id=payment.user_id,
@@ -390,11 +391,17 @@ async def export_project_excel(
         Expense.is_deleted == False,
     ).order_by(Expense.expense_date.desc()).all()
 
+    # Batch load all payments for the project to avoid N+1
+    all_expense_payments = db.query(ParticipantPayment).join(Expense).filter(
+        Expense.project_id == project.id,
+        ParticipantPayment.is_deleted == False,
+    ).all()
+    payments_by_expense_id = {}
+    for p in all_expense_payments:
+        payments_by_expense_id.setdefault(p.expense_id, []).append(p)
+
     for expense in expenses:
-        payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.expense_id == expense.id,
-            ParticipantPayment.is_deleted == False,
-        ).all()
+        payments = payments_by_expense_id.get(expense.id, [])
 
         paid_count = sum(1 for p in payments if p.is_paid)
         pending_count = len(payments) - paid_count

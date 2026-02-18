@@ -47,12 +47,18 @@ async def get_my_payments(
 
     payments = query.order_by(ParticipantPayment.created_at.desc()).all()
 
+    # Cache projects by id to avoid N+1 queries
+    project_cache: dict = {}
+
     result = []
     for payment in payments:
         expense = payment.expense
-        # Get currency_mode from project
-        project = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
-        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+        # Get currency_mode from project (cached)
+        project_id = expense.project_id
+        if project_id not in project_cache:
+            project_cache[project_id] = db.query(Project).filter(Project.id == project_id).first() if project_id else None
+        project_obj = project_cache[project_id]
+        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
 
         expense_info = ExpenseInfo(
             id=expense.id,
@@ -118,13 +124,19 @@ async def get_pending_approval_payments(
 
     payments = query.order_by(ParticipantPayment.submitted_at.desc()).all()
 
+    # Cache projects by id to avoid N+1 queries
+    project_cache: dict = {}
+
     result = []
     for payment in payments:
         expense = payment.expense
         user = payment.user
 
-        # Get currency_mode from project
-        project_obj = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+        # Get currency_mode from project (cached)
+        project_id = expense.project_id
+        if project_id not in project_cache:
+            project_cache[project_id] = db.query(Project).filter(Project.id == project_id).first() if project_id else None
+        project_obj = project_cache[project_id]
         currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
 
         expense_info = ExpenseInfo(

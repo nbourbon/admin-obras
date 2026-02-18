@@ -183,10 +183,12 @@ async def create_expense(
     # Create participant payments for project members
     payments = create_participant_payments(db, expense, currency_mode)
 
-    # Build response with payments
+    # Build response with payments — batch load users to avoid N+1
+    user_ids = [p.user_id for p in payments]
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
     payment_summaries = []
     for p in payments:
-        user = db.query(User).filter(User.id == p.user_id).first()
+        user = users_by_id.get(p.user_id)
         payment_summaries.append(PaymentSummary(
             user_id=p.user_id,
             user_name=user.full_name if user else "Unknown",
@@ -253,10 +255,11 @@ async def get_expense(
             detail="Expense not found",
         )
 
-    # Get payments
+    # Get payments with users preloaded to avoid N+1
     payments = (
         db.query(ParticipantPayment)
         .filter(ParticipantPayment.expense_id == expense_id)
+        .options(joinedload(ParticipantPayment.user))
         .all()
     )
 
@@ -267,10 +270,9 @@ async def get_expense(
     total_actual_paid_ars = Decimal("0")
 
     for p in payments:
-        user = db.query(User).filter(User.id == p.user_id).first()
         payment_summaries.append(PaymentSummary(
             user_id=p.user_id,
-            user_name=user.full_name if user else "Unknown",
+            user_name=p.user.full_name if p.user else "Unknown",
             amount_due_usd=p.amount_due_usd,
             amount_due_ars=p.amount_due_ars,
             is_paid=p.is_paid,
