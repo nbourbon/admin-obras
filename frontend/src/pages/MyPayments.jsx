@@ -379,15 +379,9 @@ function MyPayments() {
       const fp = filePath || ''
       const fileName = fp.split('/').pop() || `comprobante-${paymentId}`
 
-      // Cloudinary URL — open in new tab directly
+      // Cloudinary URL — open in new tab (cross-origin download attribute is ignored by browsers)
       if (fp.startsWith('http')) {
-        const link = document.createElement('a')
-        link.href = fp
-        link.setAttribute('download', fileName)
-        link.target = '_blank'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
+        window.open(fp, '_blank', 'noopener,noreferrer')
         return
       }
 

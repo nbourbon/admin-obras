@@ -110,15 +110,9 @@ function ExpenseDetail() {
       const filePath = expense?.invoice_file_path || ''
       const fileName = filePath.split('/').pop() || `invoice-${id}.pdf`
 
-      // Cloudinary URL — open in new tab directly
+      // Cloudinary URL — open in new tab (cross-origin download attribute is ignored by browsers)
       if (filePath.startsWith('http')) {
-        const link = document.createElement('a')
-        link.href = filePath
-        link.setAttribute('download', fileName)
-        link.target = '_blank'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
+        window.open(filePath, '_blank', 'noopener,noreferrer')
         return
       }
 
