@@ -334,7 +334,7 @@ function NoteDetail() {
         <div className="bg-white rounded-xl shadow-sm p-4">
           <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
             <Vote size={18} />
-            Votacion
+            Votación <span className="text-sm font-normal text-gray-400">(seleccionar la opción deseada)</span>
           </h3>
           {note.voting_description && (
             <p className="text-gray-600 mb-4">{note.voting_description}</p>
