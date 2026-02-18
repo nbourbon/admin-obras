@@ -236,14 +236,33 @@ Votes are weighted by each participant's ownership percentage:
 - The option with the highest accumulated percentage is marked as "GANADOR"
 
 ## Deployment Setup
+
+### Current (Render)
 - **Frontend**: Vercel (auto-deploys on push to main)
 - **Backend**: Render (may need manual redeploy or auto-deploys on push)
 - **File Storage**: Cloudinary
-- **Database**: SQLite on Render (or PostgreSQL if configured)
+- **Database**: Supabase PostgreSQL
 
-After pushing changes:
+### Recommended (Fly.io migration available)
+- **Frontend**: Vercel (no changes, keep as-is)
+- **Backend**: Fly.io (auto-deploys on push to main via GitHub Actions)
+- **File Storage**: Cloudinary (no changes, keep as-is)
+- **Database**: Supabase PostgreSQL (no changes, keep as-is)
+
+**Migration files ready:**
+- `Dockerfile` - Python 3.12 image, ready to build
+- `fly.toml` - Fly.io configuration (region: gru/São Paulo)
+- `.github/workflows/fly-deploy.yml` - Automatic GitHub Actions deployment
+- `FLY_SETUP.md` - Complete step-by-step migration guide
+
+**To migrate to Fly.io:**
+1. Create account at fly.io (free tier includes $5/month credit)
+2. Follow `FLY_SETUP.md` for detailed steps
+3. Cost: ~$0/month (512MB VM fits in free tier)
+
+After pushing changes (either Render or Fly.io):
 - Frontend changes → Vercel deploys automatically
-- Backend changes → Check Render for deployment status, redeploy if needed
+- Backend changes → Auto-deploys via GitHub Actions (if Fly.io) or manual `flyctl deploy`
 
 ## Workflow Preferences
 - **Always offer commit + push**: After completing any task, always offer to commit and push the changes so deployment can happen.
