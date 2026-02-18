@@ -121,7 +121,7 @@ function Layout() {
             )}
           </div>
 
-          <nav className="flex-1 p-4 space-y-1">
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
               <NavItem key={item.to} {...item} />
             ))}
@@ -140,7 +140,7 @@ function Layout() {
             )}
           </nav>
 
-          <div className="p-4 border-t">
+          <div className="p-4 border-t" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
             <div className="mb-3 px-4">
               <p className="font-medium text-gray-900">{user?.full_name}</p>
               <p className="text-sm text-gray-500">{user?.email}</p>
