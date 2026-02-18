@@ -202,13 +202,26 @@ def _run_migrations():
                             conn.commit()
                         except Exception:
                             conn.rollback()
-                # Migrate both lowercase (regular/voting) and uppercase (REGULAR/VOTING) variants
-                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type IN ('regular', 'REGULAR')"))
-                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type IN ('voting', 'VOTING')"))
+                # Use ::text cast to bypass PostgreSQL enum validation in WHERE clause
+                # This handles both uppercase (REGULAR/VOTING from old SQLAlchemy .name behavior)
+                # and lowercase (regular/voting) variants
+                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type::text IN ('regular', 'REGULAR')"))
+                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type::text IN ('voting', 'VOTING')"))
                 conn.commit()
                 print("Migration: Updated note_type values to new naming")
             except Exception as e:
                 print(f"Migration warning (note_types): {e}")
+
+        # Convert note_type column from native PostgreSQL enum to VARCHAR to avoid enum type issues
+        with engine.connect() as conn:
+            try:
+                if not database_url.startswith("sqlite"):
+                    conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50)"))
+                    conn.commit()
+                    print("Migration: Converted note_type column to VARCHAR")
+            except Exception as e:
+                # Already VARCHAR or other non-critical error
+                print(f"Migration info (note_type to varchar): {e}")
 
     # Migration: Add google_id to users table + make password_hash nullable
     if 'users' in inspector.get_table_names():
