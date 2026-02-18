@@ -1,0 +1,39 @@
+# Fly.io configuration for Proyectos Compartidos backend
+# Reference: https://fly.io/docs/reference/configuration/
+
+app = "admin-obras-api"
+primary_region = "gru"  # São Paulo, Brazil - closest to Argentina
+
+[build]
+  # Uses the Dockerfile in the project root
+
+[env]
+  # PORT must be 8080 for Fly.io's internal port mapping
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0  # Allows app to sleep when no traffic (free tier friendly)
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  # Shared CPU is sufficient for this FastAPI app
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Health check
+[checks]
+  [checks.http_endpoint]
+    protocol = "http"
+    method = "GET"
+    path = "/"
+    interval = "10s"
+    timeout = "5s"
