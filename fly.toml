@@ -28,11 +28,3 @@ primary_region = "gru"  # São Paulo, Brazil - closest to Argentina
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
-
-[[checks]]
-  type = "http"
-  port = 8080
-  method = "GET"
-  path = "/"
-  interval = "10s"
-  timeout = "5s"
