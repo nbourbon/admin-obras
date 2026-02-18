@@ -29,11 +29,10 @@ primary_region = "gru"  # São Paulo, Brazil - closest to Argentina
   cpu_kind = "shared"
   cpus = 1
 
-# Health check
-[checks]
-  [checks.http_endpoint]
-    protocol = "http"
-    method = "GET"
-    path = "/"
-    interval = "10s"
-    timeout = "5s"
+[[checks]]
+  type = "http"
+  port = 8080
+  method = "GET"
+  path = "/"
+  interval = "10s"
+  timeout = "5s"
