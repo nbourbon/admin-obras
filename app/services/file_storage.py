@@ -163,18 +163,11 @@ def get_file_url(stored_path: str) -> Optional[str]:
     Get the URL for a file.
     If stored_path is a URL (Cloudinary), return it directly.
     If it's a local path, return None (use FileResponse instead).
-
-    For Cloudinary PDFs uploaded with resource_type=auto (stored under /image/upload/),
-    rewrite to /raw/upload/ so the original PDF is served instead of a rendered image.
     """
     if not stored_path:
         return None
     if is_url(stored_path):
-        url = stored_path
-        # Fix old uploads: PDFs stored as /image/upload/ should be served as /raw/upload/
-        if '/image/upload/' in url and url.lower().endswith('.pdf'):
-            url = url.replace('/image/upload/', '/raw/upload/', 1)
-        return url
+        return stored_path
     return None
 
 
