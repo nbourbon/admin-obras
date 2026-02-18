@@ -80,7 +80,7 @@ async def upload_to_cloudinary(file: UploadFile, folder: str, public_id: str) ->
             contents,
             folder=f"construccion/{folder}",
             public_id=public_id,
-            resource_type="auto",
+            resource_type="raw",
         )
         return result["secure_url"]
     finally:
