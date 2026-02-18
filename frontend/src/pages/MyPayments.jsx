@@ -344,28 +344,9 @@ function MyPayments() {
     }
   }
 
-  const fixCloudinaryPdfUrl = (url) => {
-    if (url && url.includes('/image/upload/') && url.toLowerCase().endsWith('.pdf')) {
-      return url.replace('/image/upload/', '/raw/upload/')
-    }
-    return url
-  }
-
   const handlePreviewReceipt = async (payment) => {
     try {
-      const filePath = fixCloudinaryPdfUrl(payment.receipt_file_path || '')
-      const fileName = filePath.split('/').pop() || `comprobante-${payment.id}`
-
-      // Cloudinary URL — open directly without auth headers
-      if (filePath.startsWith('http')) {
-        setPreviewUrl(filePath)
-        setPreviewFileName(fileName)
-        setPreviewPaymentId(payment.id)
-        setShowPreview(true)
-        return
-      }
-
-      // Local file — download as blob
+      const fileName = payment.receipt_file_path?.split('/').pop() || `comprobante-${payment.id}`
       const response = await paymentsAPI.downloadReceipt(payment.id)
       let mimeType = 'application/octet-stream'
       if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
@@ -383,16 +364,7 @@ function MyPayments() {
 
   const handleDownloadReceipt = async (paymentId, filePath) => {
     try {
-      const fp = fixCloudinaryPdfUrl(filePath || '')
-      const fileName = fp.split('/').pop() || `comprobante-${paymentId}`
-
-      // Cloudinary URL — open in new tab (cross-origin download attribute is ignored by browsers)
-      if (fp.startsWith('http')) {
-        window.open(fp, '_blank', 'noopener,noreferrer')
-        return
-      }
-
-      // Local file — blob download
+      const fileName = (filePath || '').split('/').pop() || `comprobante-${paymentId}`
       const response = await paymentsAPI.downloadReceipt(paymentId)
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
@@ -799,7 +771,7 @@ function MyPayments() {
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
-        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId, previewUrl)}
+        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId, previewFileName)}
       />
     </div>
   )

@@ -79,26 +79,9 @@ function ExpenseDetail() {
     }
   }
 
-  const fixCloudinaryPdfUrl = (url) => {
-    if (url && url.includes('/image/upload/') && url.toLowerCase().endsWith('.pdf')) {
-      return url.replace('/image/upload/', '/raw/upload/')
-    }
-    return url
-  }
-
   const handlePreviewInvoice = async () => {
     try {
-      const filePath = fixCloudinaryPdfUrl(expense?.invoice_file_path || '')
-      const fileName = filePath.split('/').pop() || `invoice-${id}`
-
-      // Cloudinary URL — open directly without auth headers
-      if (filePath.startsWith('http')) {
-        setPreviewUrl(filePath)
-        setShowPreview(true)
-        return
-      }
-
-      // Local file — download as blob
+      const fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}`
       const response = await expensesAPI.downloadInvoice(id)
       let mimeType = 'application/octet-stream'
       if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
@@ -114,16 +97,7 @@ function ExpenseDetail() {
 
   const handleDownloadInvoice = async () => {
     try {
-      const filePath = fixCloudinaryPdfUrl(expense?.invoice_file_path || '')
-      const fileName = filePath.split('/').pop() || `invoice-${id}.pdf`
-
-      // Cloudinary URL — open in new tab (cross-origin download attribute is ignored by browsers)
-      if (filePath.startsWith('http')) {
-        window.open(filePath, '_blank', 'noopener,noreferrer')
-        return
-      }
-
-      // Local file — blob download
+      const fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}.pdf`
       const response = await expensesAPI.downloadInvoice(id)
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
@@ -132,6 +106,7 @@ function ExpenseDetail() {
       document.body.appendChild(link)
       link.click()
       link.remove()
+      window.URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Error downloading invoice:', err)
     }

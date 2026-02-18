@@ -2,7 +2,7 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -448,10 +448,22 @@ async def download_invoice(
             detail="No invoice uploaded for this expense",
         )
 
-    # Check if it's a Cloudinary URL
+    # Check if it's a Cloudinary URL — proxy instead of redirect to avoid CORS/Content-Type issues
     file_url = get_file_url(expense.invoice_file_path)
     if file_url:
-        return RedirectResponse(url=file_url)
+        import httpx
+        filename = expense.invoice_file_path.split('/')[-1].split('?')[0]
+        media_type = "application/pdf" if filename.lower().endswith('.pdf') else "application/octet-stream"
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(file_url, follow_redirects=True, timeout=30)
+            return Response(
+                content=resp.content,
+                media_type=media_type,
+                headers={"Content-Disposition": f"inline; filename=\"{filename}\""},
+            )
+        except Exception:
+            raise HTTPException(status_code=502, detail="Error fetching file from storage")
 
     # Local file
     file_path = get_file_path(expense.invoice_file_path)
