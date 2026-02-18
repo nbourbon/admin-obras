@@ -458,7 +458,7 @@ async def add_project_member_by_email(
         user = User(
             email=email.lower(),
             full_name=full_name,
-            hashed_password="",  # Empty password - user must set it on first login
+            password_hash=None,  # No password - user must login via Google or set password
         )
         db.add(user)
         db.commit()
