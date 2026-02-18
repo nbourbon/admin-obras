@@ -721,12 +721,7 @@ function ExpenseDetail() {
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Confirmar Eliminacion</h2>
             <p className="text-gray-600 mb-6">
-              ¿Estas seguro que queres eliminar este gasto? Esta accion solo se puede realizar si no hay pagos activos asociados.
-              {paymentStatus && paymentStatus.paid_count > 0 && (
-                <span className="block mt-2 text-red-600 font-medium">
-                  Atención: Este gasto tiene {paymentStatus.paid_count} pago(s) asociado(s). Los participantes deben eliminar sus pagos primero.
-                </span>
-              )}
+              ¿Estas seguro que queres eliminar este gasto? Los pagos sin comprobante se eliminaran automaticamente. Solo bloqueara si algun participante subio un comprobante propio.
             </p>
             <div className="flex gap-3">
               <button

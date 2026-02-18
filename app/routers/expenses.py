@@ -503,26 +503,25 @@ async def delete_expense(
         .all()
     )
 
-    # Check if there are paid payments or pending non-approval payments
+    # Only block if a participant uploaded their own receipt (comprobante).
+    # Everything else (pending, admin-registered, rejected without receipt) is auto-deleted.
     blocking_payments = []
-    pending_approvals = []
+    auto_delete_payments = []
 
     for payment in active_payments:
-        if payment.is_paid:
-            blocking_payments.append(f"{payment.user.full_name} (pagado)")
-        elif not payment.is_pending_approval and (payment.amount_paid is not None):
-            blocking_payments.append(f"{payment.user.full_name} (pendiente de eliminar)")
-        elif payment.is_pending_approval:
-            pending_approvals.append(payment)
+        if payment.receipt_file_path:
+            blocking_payments.append(payment.user.full_name)
+        else:
+            auto_delete_payments.append(payment)
 
     if blocking_payments:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se puede eliminar el gasto. Los siguientes participantes deben eliminar sus pagos primero: {', '.join(blocking_payments)}",
+            detail=f"No se puede eliminar el gasto. Los siguientes participantes deben eliminar su comprobante de pago primero: {', '.join(blocking_payments)}",
         )
 
-    # Auto-cancel payments that are pending approval
-    for payment in pending_approvals:
+    # Auto-delete all payments that don't have a participant-uploaded receipt
+    for payment in auto_delete_payments:
         payment.is_deleted = True
         payment.deleted_at = datetime.utcnow()
         payment.deleted_by = current_user.id
