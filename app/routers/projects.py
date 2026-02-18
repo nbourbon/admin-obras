@@ -567,6 +567,20 @@ async def update_project_member(
     old_is_admin = member.is_admin
 
     update_data = member_data.model_dump(exclude_unset=True)
+
+    # Prevent removing admin role if this is the last admin
+    if "is_admin" in update_data and not update_data["is_admin"] and member.is_admin:
+        admin_count = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.is_admin == True,
+            ProjectMember.is_active == True,
+        ).count()
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede quitar el rol de admin: debe haber al menos un admin en el proyecto",
+            )
+
     for field, value in update_data.items():
         setattr(member, field, value)
 
@@ -621,6 +635,20 @@ async def remove_project_member(
 
     old_percentage = member.participation_percentage
     old_is_admin = member.is_admin
+
+    # Prevent removing the last admin
+    if member.is_admin:
+        admin_count = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.is_admin == True,
+            ProjectMember.is_active == True,
+        ).count()
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar al único admin del proyecto. Asigná otro admin primero.",
+            )
+
     member.is_active = False
     db.commit()
 
