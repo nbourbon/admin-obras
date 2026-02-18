@@ -223,28 +223,15 @@ function ExpenseDetail() {
             <h2 className="text-lg font-semibold mb-4">Informacion del Gasto</h2>
 
             <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-gray-500">Monto Original</dt>
-                <dd className="text-lg font-semibold">
-                  {formatCurrency(expense.amount_original, expense.currency_original)}
-                </dd>
-              </div>
-              {currencyMode === 'DUAL' && (
+              {currencyMode === 'ARS' && (
                 <div>
-                  <dt className="text-sm text-gray-500">Tipo de Cambio</dt>
-                  <dd className="text-lg font-semibold">
-                    ${expense.exchange_rate_used}
-                    {expense.exchange_rate_source && (
-                      <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
-                        expense.exchange_rate_source === 'manual' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {expense.exchange_rate_source === 'manual' ? 'Manual' : 'Auto'}
-                      </span>
-                    )}
+                  <dt className="text-sm text-gray-500">Monto ARS</dt>
+                  <dd className="text-lg font-semibold text-green-600">
+                    {formatCurrency(expense.amount_ars, 'ARS')}
                   </dd>
                 </div>
               )}
-              {(currencyMode === 'USD' || currencyMode === 'DUAL') && (
+              {currencyMode === 'USD' && (
                 <div>
                   <dt className="text-sm text-gray-500">Monto USD</dt>
                   <dd className="text-lg font-semibold text-blue-600">
@@ -252,13 +239,36 @@ function ExpenseDetail() {
                   </dd>
                 </div>
               )}
-              {(currencyMode === 'ARS' || currencyMode === 'DUAL') && (
-                <div>
-                  <dt className="text-sm text-gray-500">Monto ARS</dt>
-                  <dd className="text-lg font-semibold text-green-600">
-                    {formatCurrency(expense.amount_ars, 'ARS')}
-                  </dd>
-                </div>
+              {currencyMode === 'DUAL' && (
+                <>
+                  <div>
+                    <dt className="text-sm text-gray-500">Monto ARS</dt>
+                    <dd className={`text-lg font-semibold ${expense.currency_original === 'ARS' ? 'text-green-600' : 'text-gray-500'}`}>
+                      {formatCurrency(expense.amount_ars, 'ARS')}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-gray-500">Monto USD</dt>
+                    <dd className={`text-lg font-semibold ${expense.currency_original === 'USD' ? 'text-blue-600' : 'text-gray-500'}`}>
+                      {formatCurrency(expense.amount_usd)}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-sm text-gray-500 mb-1">Pagado en</dt>
+                    <dd>
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
+                        expense.currency_original === 'ARS'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {expense.currency_original === 'ARS' ? '🟢 ARS — monto fijo' : '🔵 USD — monto fijo'}
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">
+                        El monto en {expense.currency_original} es exacto. El otro es su equivalente al TC del momento.
+                      </p>
+                    </dd>
+                  </div>
+                </>
               )}
               <div>
                 <dt className="text-sm text-gray-500">Proveedor</dt>
@@ -428,8 +438,12 @@ function ExpenseDetail() {
                       <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_usd)}</p>
                     ) : (
                       <>
-                        <p className="text-2xl font-bold">{formatCurrency(myPayment.amount_due_usd)}</p>
-                        <p className="text-sm text-gray-500">{formatCurrency(myPayment.amount_due_ars, 'ARS')}</p>
+                        <p className={`text-2xl font-bold ${expense.currency_original === 'ARS' ? 'text-green-600' : 'text-gray-400 text-lg'}`}>
+                          {formatCurrency(myPayment.amount_due_ars, 'ARS')}
+                        </p>
+                        <p className={`${expense.currency_original === 'USD' ? 'text-blue-600 font-bold text-xl' : 'text-sm text-gray-400'}`}>
+                          {formatCurrency(myPayment.amount_due_usd)}
+                        </p>
                       </>
                     )}
                   </div>
@@ -591,13 +605,19 @@ function ExpenseDetail() {
                             <p className="text-xs text-gray-500">{style.status}</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold text-sm">
-                              {currencyMode === 'ARS'
-                                ? formatCurrency(p.amount_due_ars, 'ARS')
-                                : formatCurrency(p.amount_due_usd)}
-                            </p>
-                            {currencyMode === 'DUAL' && p.exchange_rate_at_payment && (
-                              <p className="text-xs text-gray-400">TC: ${p.exchange_rate_at_payment}</p>
+                            {currencyMode === 'ARS' ? (
+                              <p className="font-semibold text-sm">{formatCurrency(p.amount_due_ars, 'ARS')}</p>
+                            ) : currencyMode === 'USD' ? (
+                              <p className="font-semibold text-sm">{formatCurrency(p.amount_due_usd)}</p>
+                            ) : (
+                              <>
+                                <p className={`font-semibold text-sm ${expense.currency_original === 'ARS' ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {formatCurrency(p.amount_due_ars, 'ARS')}
+                                </p>
+                                <p className={`text-xs ${expense.currency_original === 'USD' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
+                                  {formatCurrency(p.amount_due_usd)}
+                                </p>
+                              </>
                             )}
                           </div>
                           {showMarkPaidButton && (
