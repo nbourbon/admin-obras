@@ -59,226 +59,139 @@ def init_db():
 
 
 def _run_migrations():
-    """Add new columns to existing tables if they don't exist."""
+    """Add new columns to existing tables if they don't exist.
+
+    Optimized to minimize DB round-trips: reads column info once per table,
+    skips migrations that already ran, and uses a single connection.
+    """
     from sqlalchemy import text, inspect
 
     inspector = inspect(engine)
+    table_names = inspector.get_table_names()
 
-    # Migration: Add is_individual to projects table
-    if 'projects' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('projects')]
-        if 'is_individual' not in columns:
-            with engine.connect() as conn:
-                try:
-                    # Use FALSE for PostgreSQL compatibility (also works with SQLite)
-                    conn.execute(text('ALTER TABLE projects ADD COLUMN is_individual BOOLEAN DEFAULT FALSE'))
-                    conn.commit()
-                    print("Migration: Added is_individual column to projects table")
-                except Exception as e:
-                    print(f"Migration warning (is_individual): {e}")
+    # Cache column info per table (single DB query each)
+    def get_cols(table):
+        if table not in table_names:
+            return {}
+        return {col['name']: col for col in inspector.get_columns(table)}
 
-    # Migration: Add is_admin to project_members table
-    if 'project_members' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('project_members')]
-        if 'is_admin' not in columns:
-            with engine.connect() as conn:
-                try:
-                    # Add is_admin column with default FALSE
-                    conn.execute(text('ALTER TABLE project_members ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
-                    conn.commit()
-                    print("Migration: Added is_admin column to project_members table")
+    projects_cols = get_cols('projects')
+    members_cols = get_cols('project_members')
+    expenses_cols = get_cols('expenses')
+    payments_cols = get_cols('participant_payments')
+    notes_cols = get_cols('notes')
+    users_cols = get_cols('users')
 
-                    # Set is_admin=TRUE for members who are also the project creator
-                    conn.execute(text('''
-                        UPDATE project_members
-                        SET is_admin = TRUE
-                        WHERE user_id IN (
-                            SELECT created_by FROM projects WHERE projects.id = project_members.project_id
-                        )
-                    '''))
-                    conn.commit()
-                    print("Migration: Set is_admin=TRUE for project creators")
-                except Exception as e:
-                    print(f"Migration warning (is_admin): {e}")
+    # Collect all pending migrations, then execute in a single connection
+    pending = []
 
-    # Migration: Add soft delete columns to expenses table
-    if 'expenses' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('expenses')]
-        if 'is_deleted' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE expenses ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL'))
-                    conn.execute(text('ALTER TABLE expenses ADD COLUMN deleted_at TIMESTAMP'))
-                    conn.execute(text('ALTER TABLE expenses ADD COLUMN deleted_by INTEGER'))
-                    conn.commit()
-                    print("Migration: Added soft delete columns to expenses table")
-                except Exception as e:
-                    print(f"Migration warning (expenses soft delete): {e}")
+    # --- Projects table ---
+    if projects_cols:
+        if 'is_individual' not in projects_cols:
+            pending.append(('ALTER TABLE projects ADD COLUMN is_individual BOOLEAN DEFAULT FALSE',
+                            'Added is_individual to projects'))
+        if 'currency_mode' not in projects_cols:
+            pending.append(("ALTER TABLE projects ADD COLUMN currency_mode VARCHAR(10) DEFAULT 'DUAL'",
+                            'Added currency_mode to projects'))
 
-    # Migration: Add soft delete columns to participant_payments table
-    if 'participant_payments' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
-        if 'is_deleted' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL'))
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN deleted_at TIMESTAMP'))
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN deleted_by INTEGER'))
-                    conn.commit()
-                    print("Migration: Added soft delete columns to participant_payments table")
-                except Exception as e:
-                    print(f"Migration warning (participant_payments soft delete): {e}")
+    # --- Project members table ---
+    if members_cols:
+        if 'is_admin' not in members_cols:
+            pending.append(('ALTER TABLE project_members ADD COLUMN is_admin BOOLEAN DEFAULT FALSE',
+                            'Added is_admin to project_members'))
+            pending.append(('''
+                UPDATE project_members SET is_admin = TRUE
+                WHERE user_id IN (
+                    SELECT created_by FROM projects WHERE projects.id = project_members.project_id
+                )
+            ''', 'Set is_admin=TRUE for project creators'))
 
-    # Migration: Add payment_date to participant_payments table
-    if 'participant_payments' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
-        if 'payment_date' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN payment_date TIMESTAMP'))
-                    conn.commit()
-                    print("Migration: Added payment_date column to participant_payments table")
-                except Exception as e:
-                    print(f"Migration warning (payment_date): {e}")
+    # --- Expenses table ---
+    if expenses_cols:
+        if 'is_deleted' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL',
+                            'Added is_deleted to expenses'))
+            pending.append(('ALTER TABLE expenses ADD COLUMN deleted_at TIMESTAMP',
+                            'Added deleted_at to expenses'))
+            pending.append(('ALTER TABLE expenses ADD COLUMN deleted_by INTEGER',
+                            'Added deleted_by to expenses'))
+        if 'exchange_rate_source' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN exchange_rate_source VARCHAR(50)',
+                            'Added exchange_rate_source to expenses'))
 
-    # Migration: Add currency_mode to projects table
-    if 'projects' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('projects')]
-        if 'currency_mode' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text("ALTER TABLE projects ADD COLUMN currency_mode VARCHAR(10) DEFAULT 'DUAL'"))
-                    conn.commit()
-                    print("Migration: Added currency_mode column to projects table")
-                except Exception as e:
-                    print(f"Migration warning (currency_mode): {e}")
+    # --- Participant payments table ---
+    if payments_cols:
+        if 'is_deleted' not in payments_cols:
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL',
+                            'Added is_deleted to participant_payments'))
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN deleted_at TIMESTAMP',
+                            'Added deleted_at to participant_payments'))
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN deleted_by INTEGER',
+                            'Added deleted_by to participant_payments'))
+        if 'payment_date' not in payments_cols:
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN payment_date TIMESTAMP',
+                            'Added payment_date to participant_payments'))
+        if 'exchange_rate_at_payment' not in payments_cols:
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN exchange_rate_at_payment NUMERIC(15,4)',
+                            'Added exchange_rate_at_payment to participant_payments'))
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN amount_paid_usd NUMERIC(15,2)',
+                            'Added amount_paid_usd to participant_payments'))
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN amount_paid_ars NUMERIC(15,2)',
+                            'Added amount_paid_ars to participant_payments'))
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN exchange_rate_source VARCHAR(50)',
+                            'Added exchange_rate_source to participant_payments'))
 
-    # Migration: Add exchange_rate_source to expenses table
-    if 'expenses' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('expenses')]
-        if 'exchange_rate_source' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE expenses ADD COLUMN exchange_rate_source VARCHAR(50)'))
-                    conn.commit()
-                    print("Migration: Added exchange_rate_source column to expenses table")
-                except Exception as e:
-                    print(f"Migration warning (exchange_rate_source): {e}")
+    # --- Notes table ---
+    if notes_cols:
+        if 'meeting_date' not in notes_cols:
+            pending.append(('ALTER TABLE notes ADD COLUMN meeting_date TIMESTAMP WITH TIME ZONE',
+                            'Added meeting_date to notes'))
+        if 'voting_closes_at' not in notes_cols:
+            pending.append(('ALTER TABLE notes ADD COLUMN voting_closes_at TIMESTAMP WITH TIME ZONE',
+                            'Added voting_closes_at to notes'))
+            pending.append(('ALTER TABLE notes ADD COLUMN is_voting_closed BOOLEAN DEFAULT FALSE',
+                            'Added is_voting_closed to notes'))
 
-    # Migration: Add exchange rate tracking columns to participant_payments table
-    if 'participant_payments' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('participant_payments')]
-        if 'exchange_rate_at_payment' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN exchange_rate_at_payment NUMERIC(15,4)'))
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN amount_paid_usd NUMERIC(15,2)'))
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN amount_paid_ars NUMERIC(15,2)'))
-                    conn.execute(text('ALTER TABLE participant_payments ADD COLUMN exchange_rate_source VARCHAR(50)'))
-                    conn.commit()
-                    print("Migration: Added exchange rate tracking columns to participant_payments table")
-                except Exception as e:
-                    print(f"Migration warning (payment exchange rate): {e}")
-
-    # Migration: Add meeting_date column to notes + migrate note_type values
-    if 'notes' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('notes')]
-        if 'meeting_date' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE notes ADD COLUMN meeting_date TIMESTAMP WITH TIME ZONE'))
-                    conn.commit()
-                    print("Migration: Added meeting_date column to notes table")
-                except Exception as e:
-                    print(f"Migration warning (meeting_date): {e}")
-
-        if 'voting_closes_at' not in columns:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE notes ADD COLUMN voting_closes_at TIMESTAMP WITH TIME ZONE'))
-                    conn.execute(text('ALTER TABLE notes ADD COLUMN is_voting_closed BOOLEAN DEFAULT FALSE'))
-                    conn.commit()
-                    print("Migration: Added voting_closes_at and is_voting_closed columns to notes table")
-                except Exception as e:
-                    print(f"Migration warning (voting_closes_at): {e}")
-
-        # Normalize all note_type values to lowercase and convert column to VARCHAR
-        with engine.connect() as conn:
-            try:
-                if not database_url.startswith("sqlite"):
-                    for val in ['reunion', 'notificacion', 'votacion']:
-                        try:
-                            conn.execute(text(f"ALTER TYPE notetype ADD VALUE IF NOT EXISTS '{val}'"))
-                            conn.commit()
-                        except Exception:
-                            conn.rollback()
-                # Normalize all variants to lowercase using ::text cast to bypass enum validation
-                conn.execute(text("UPDATE notes SET note_type = 'reunion' WHERE note_type::text IN ('regular', 'REGULAR', 'REUNION')"))
-                conn.execute(text("UPDATE notes SET note_type = 'votacion' WHERE note_type::text IN ('voting', 'VOTING', 'VOTACION')"))
-                conn.execute(text("UPDATE notes SET note_type = 'notificacion' WHERE note_type::text = 'NOTIFICACION'"))
-                conn.commit()
-                print("Migration: Normalized note_type values to lowercase")
-            except Exception as e:
-                print(f"Migration warning (note_types): {e}")
-
-        # Convert note_type column from native PostgreSQL enum to VARCHAR to avoid enum type issues
+        # Convert note_type from PostgreSQL enum to VARCHAR (one-time migration)
         if not database_url.startswith("sqlite"):
-            note_type_col = next((col for col in inspector.get_columns('notes') if col['name'] == 'note_type'), None)
+            note_type_col = notes_cols.get('note_type')
             if note_type_col and 'varchar' not in str(note_type_col['type']).lower():
-                with engine.connect() as conn:
-                    try:
-                        # USING note_type::text is required to cast enum values to text
-                        conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50) USING note_type::text"))
-                        conn.commit()
-                        print("Migration: Converted note_type column to VARCHAR")
-                    except Exception as e:
-                        print(f"Migration info (note_type to varchar): {e}")
+                # First normalize enum values, then convert to VARCHAR
+                for val in ['reunion', 'notificacion', 'votacion']:
+                    pending.append((f"ALTER TYPE notetype ADD VALUE IF NOT EXISTS '{val}'",
+                                    f'Added enum value {val}'))
+                pending.append(("UPDATE notes SET note_type = 'reunion' WHERE note_type::text IN ('regular', 'REGULAR', 'REUNION')",
+                                'Normalized reunion note types'))
+                pending.append(("UPDATE notes SET note_type = 'votacion' WHERE note_type::text IN ('voting', 'VOTING', 'VOTACION')",
+                                'Normalized votacion note types'))
+                pending.append(("UPDATE notes SET note_type = 'notificacion' WHERE note_type::text = 'NOTIFICACION'",
+                                'Normalized notificacion note types'))
+                pending.append(("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50) USING note_type::text",
+                                'Converted note_type to VARCHAR'))
 
-    # Migration: Add google_id to users table + make password_hash nullable
-    if 'users' in inspector.get_table_names():
-        columns_info = inspector.get_columns('users')
-        column_names = [col['name'] for col in columns_info]
-
-        if 'google_id' not in column_names:
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE users ADD COLUMN google_id VARCHAR(255)'))
-                    conn.commit()
-                    print("Migration: Added google_id column to users table")
-                except Exception as e:
-                    print(f"Migration warning (google_id): {e}")
-
-        # Make password_hash nullable - only if it's still NOT NULL
-        password_hash_col = next((col for col in columns_info if col['name'] == 'password_hash'), None)
+    # --- Users table ---
+    if users_cols:
+        if 'google_id' not in users_cols:
+            pending.append(('ALTER TABLE users ADD COLUMN google_id VARCHAR(255)',
+                            'Added google_id to users'))
+        password_hash_col = users_cols.get('password_hash')
         if password_hash_col and not password_hash_col.get('nullable', True):
-            with engine.connect() as conn:
-                try:
-                    conn.execute(text('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL'))
-                    conn.commit()
-                    print("Migration: Made password_hash nullable in users table")
-                except Exception as e:
-                    print(f"Migration warning (password_hash nullable): {e}")
+            pending.append(('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL',
+                            'Made password_hash nullable'))
 
-    # Migration: Update single-member projects to 100% participation
-    if 'project_members' in inspector.get_table_names():
-        with engine.connect() as conn:
+    # Execute all pending migrations
+    if not pending:
+        print("Migrations: All up to date (0 queries)")
+        return
+
+    print(f"Migrations: Running {len(pending)} pending migration(s)...")
+    with engine.connect() as conn:
+        for sql, description in pending:
             try:
-                # For individual projects with only one member, set that member to 100%
-                conn.execute(text('''
-                    UPDATE project_members
-                    SET participation_percentage = 100
-                    WHERE project_id IN (
-                        SELECT p.id FROM projects p
-                        WHERE p.is_individual = TRUE
-                        AND (
-                            SELECT COUNT(*) FROM project_members pm
-                            WHERE pm.project_id = p.id AND pm.is_active = TRUE
-                        ) = 1
-                    )
-                    AND is_active = TRUE
-                    AND participation_percentage != 100
-                '''))
+                conn.execute(text(sql))
                 conn.commit()
-                print("Migration: Updated single-member individual projects to 100% participation")
+                print(f"  Migration: {description}")
             except Exception as e:
-                print(f"Migration warning (single-member projects): {e}")
+                conn.rollback()
+                print(f"  Migration warning ({description}): {e}")
+    print("Migrations: Complete")

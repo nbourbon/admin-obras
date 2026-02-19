@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 const client = axios.create({
   baseURL: API_URL,
+  timeout: 30000, // 30s timeout
   headers: {
     'Content-Type': 'application/json',
   },
@@ -24,14 +25,34 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// Handle auth errors
+// Retry on network errors (backend cold start) + handle auth errors
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config
+
+    // Retry on network errors or 502/503/504 (backend starting up)
+    const isNetworkError = !error.response
+    const isServerStarting = [502, 503, 504].includes(error.response?.status)
+
+    if ((isNetworkError || isServerStarting) && config && !config._retryCount) {
+      config._retryCount = 0
+    }
+
+    if ((isNetworkError || isServerStarting) && config && config._retryCount < 3) {
+      config._retryCount += 1
+      const delay = config._retryCount * 2000 // 2s, 4s, 6s
+      console.log(`Server unavailable, retrying in ${delay / 1000}s... (attempt ${config._retryCount}/3)`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return client(config)
+    }
+
+    // Handle auth errors (only on actual 401 responses, not network errors)
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
+
     return Promise.reject(error)
   }
 )
