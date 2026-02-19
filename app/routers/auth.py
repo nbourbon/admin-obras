@@ -74,14 +74,28 @@ async def self_register(
 ):
     """
     Self-register as a new admin user (no authentication required).
+    If the email was already added to a project by an admin but has no password,
+    this allows the user to claim the account by setting a password.
     """
+    from app.services.auth import get_password_hash
+
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
+        # If user exists but has no password (added by admin), allow them to claim it
+        if existing_user.password_hash is None:
+            existing_user.password_hash = get_password_hash(user_data.password)
+            existing_user.full_name = user_data.full_name  # Update name
+            existing_user.is_admin = True  # Self-registered users are admins
+            db.commit()
+            db.refresh(existing_user)
+            return existing_user
+        else:
+            # User already has a password
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El email ya está registrado. Usa el inicio de sesión normal.",
+            )
 
     user = create_user(
         db=db,
