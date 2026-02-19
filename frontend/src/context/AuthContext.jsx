@@ -22,7 +22,10 @@ export function AuthProvider({ children }) {
       const response = await authAPI.me()
       setUser(response.data)
     } catch (error) {
-      localStorage.removeItem('token')
+      // Only clear token on auth errors, not on network/cancel errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        localStorage.removeItem('token')
+      }
     } finally {
       setLoading(false)
     }
