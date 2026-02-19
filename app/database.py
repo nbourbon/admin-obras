@@ -222,21 +222,24 @@ def _run_migrations():
                 print(f"Migration warning (note_types): {e}")
 
         # Convert note_type column from native PostgreSQL enum to VARCHAR to avoid enum type issues
-        with engine.connect() as conn:
-            try:
-                if not database_url.startswith("sqlite"):
-                    # USING note_type::text is required to cast enum values to text
-                    conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50) USING note_type::text"))
-                    conn.commit()
-                    print("Migration: Converted note_type column to VARCHAR")
-            except Exception as e:
-                # Already VARCHAR - safe to ignore
-                print(f"Migration info (note_type to varchar): {e}")
+        if not database_url.startswith("sqlite"):
+            note_type_col = next((col for col in inspector.get_columns('notes') if col['name'] == 'note_type'), None)
+            if note_type_col and 'varchar' not in str(note_type_col['type']).lower():
+                with engine.connect() as conn:
+                    try:
+                        # USING note_type::text is required to cast enum values to text
+                        conn.execute(text("ALTER TABLE notes ALTER COLUMN note_type TYPE VARCHAR(50) USING note_type::text"))
+                        conn.commit()
+                        print("Migration: Converted note_type column to VARCHAR")
+                    except Exception as e:
+                        print(f"Migration info (note_type to varchar): {e}")
 
     # Migration: Add google_id to users table + make password_hash nullable
     if 'users' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('users')]
-        if 'google_id' not in columns:
+        columns_info = inspector.get_columns('users')
+        column_names = [col['name'] for col in columns_info]
+
+        if 'google_id' not in column_names:
             with engine.connect() as conn:
                 try:
                     conn.execute(text('ALTER TABLE users ADD COLUMN google_id VARCHAR(255)'))
@@ -245,14 +248,16 @@ def _run_migrations():
                 except Exception as e:
                     print(f"Migration warning (google_id): {e}")
 
-        # Make password_hash nullable for Google-only users (safe to run multiple times)
-        with engine.connect() as conn:
-            try:
-                conn.execute(text('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL'))
-                conn.commit()
-                print("Migration: Made password_hash nullable in users table")
-            except Exception:
-                pass  # Already nullable, nothing to do
+        # Make password_hash nullable - only if it's still NOT NULL
+        password_hash_col = next((col for col in columns_info if col['name'] == 'password_hash'), None)
+        if password_hash_col and not password_hash_col.get('nullable', True):
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL'))
+                    conn.commit()
+                    print("Migration: Made password_hash nullable in users table")
+                except Exception as e:
+                    print(f"Migration warning (password_hash nullable): {e}")
 
     # Migration: Update single-member projects to 100% participation
     if 'project_members' in inspector.get_table_names():
