@@ -11,7 +11,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -31,7 +35,6 @@ function Dashboard() {
   const [myStatus, setMyStatus] = useState(null)
   const [evolution, setEvolution] = useState(null)
   const [exchangeRate, setExchangeRate] = useState(null)
-  const [byProvider, setByProvider] = useState([])
   const [byCategory, setByCategory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -76,19 +79,17 @@ function Dashboard() {
       setLoading(true)
       const params = getDateParams()
 
-      const [summaryRes, myStatusRes, evolutionRes, rateRes, providerRes, categoryRes] = await Promise.all([
+      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes] = await Promise.all([
         dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
         dashboardAPI.evolution(params),
         exchangeRateAPI.current().catch(() => null),
-        dashboardAPI.expensesByProvider(params),
         dashboardAPI.expensesByCategory(params),
       ])
 
       setSummary(summaryRes.data)
       setMyStatus(myStatusRes.data)
       setEvolution(evolutionRes.data)
-      setByProvider(providerRes.data)
       setByCategory(categoryRes.data)
       if (rateRes) setExchangeRate(rateRes.data)
     } catch (err) {
@@ -353,70 +354,50 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Expenses by Provider and Category Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Provider */}
+      {/* Expenses by Category - Pie Chart */}
+      {byCategory.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gastos por Proveedor</h3>
-          {byProvider.length === 0 ? (
-            <p className="text-gray-500 text-sm">No hay gastos en el período seleccionado</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-gray-600 border-b">
-                    <th className="pb-2">Proveedor</th>
-                    <th className="pb-2 text-right">Total USD</th>
-                    <th className="pb-2 text-right">Cant.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byProvider.map((item, idx) => (
-                    <tr key={idx} className="border-b last:border-0">
-                      <td className="py-3 text-gray-900">{item.provider_name}</td>
-                      <td className="py-3 text-right font-medium text-gray-900">
-                        {formatCurrency(item.total_usd)}
-                      </td>
-                      <td className="py-3 text-right text-gray-600">{item.expenses_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Gastos por Categoría</h3>
+          <div className="w-full h-96">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={byCategory.map(cat => ({
+                    name: cat.category_name,
+                    value: parseFloat(cat.total_usd),
+                    count: cat.expenses_count,
+                  }))}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+                  outerRadius={120}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {byCategory.map((entry, index) => {
+                    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  })}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => formatCurrency(value)}
+                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value, entry) => {
+                    const total = byCategory.reduce((sum, cat) => sum + parseFloat(cat.total_usd), 0)
+                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
+                    return `${value} (${percent}%)`
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-
-        {/* By Category */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gastos por Categoría</h3>
-          {byCategory.length === 0 ? (
-            <p className="text-gray-500 text-sm">No hay gastos en el período seleccionado</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-gray-600 border-b">
-                    <th className="pb-2">Categoría</th>
-                    <th className="pb-2 text-right">Total USD</th>
-                    <th className="pb-2 text-right">Cant.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byCategory.map((item, idx) => (
-                    <tr key={idx} className="border-b last:border-0">
-                      <td className="py-3 text-gray-900">{item.category_name}</td>
-                      <td className="py-3 text-right font-medium text-gray-900">
-                        {formatCurrency(item.total_usd)}
-                      </td>
-                      <td className="py-3 text-right text-gray-600">{item.expenses_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
