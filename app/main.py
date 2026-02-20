@@ -1,5 +1,9 @@
-from fastapi import FastAPI
+import logging
+from datetime import datetime
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app.config import get_settings
 from app.database import init_db
@@ -16,6 +20,10 @@ from app.routers import (
     notes_router,
 )
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 settings = get_settings()
 
 app = FastAPI(
@@ -25,6 +33,26 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+# Middleware to prevent connection reuse when waking from suspend
+class ConnectionCloseMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Log incoming request with timestamp for diagnostics
+        timestamp = datetime.utcnow().isoformat()
+        logger.info(f"[{timestamp}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}")
+
+        response = await call_next(request)
+
+        # Force connection close to prevent zombie connections when Fly.io suspends
+        response.headers["Connection"] = "close"
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+
+        logger.info(f"[{timestamp}] {request.method} {request.url.path} - Response: {response.status_code}")
+        return response
+
+
+app.add_middleware(ConnectionCloseMiddleware)
 
 # CORS middleware - configure as needed for your frontend
 app.add_middleware(
