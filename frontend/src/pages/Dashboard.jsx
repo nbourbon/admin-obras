@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { dashboardAPI, exchangeRateAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
-import { AlertCircle, ArrowRight, Download } from 'lucide-react'
+import { AlertCircle, ArrowRight, Download, Calendar } from 'lucide-react'
 import {
   LineChart,
   Line,
@@ -31,30 +31,65 @@ function Dashboard() {
   const [myStatus, setMyStatus] = useState(null)
   const [evolution, setEvolution] = useState(null)
   const [exchangeRate, setExchangeRate] = useState(null)
+  const [byProvider, setByProvider] = useState([])
+  const [byCategory, setByCategory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
+  const [dateFilter, setDateFilter] = useState('all')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   useEffect(() => {
     // Wait until ProjectContext has finished loading and has a project selected
     if (!projectLoading && currentProject) {
       loadDashboardData()
     }
-  }, [projectLoading, currentProject?.id])
+  }, [projectLoading, currentProject?.id, dateFilter, startDate, endDate])
+
+  const getDateParams = () => {
+    const params = {}
+    const now = new Date()
+
+    if (dateFilter === 'today') {
+      const today = now.toISOString().split('T')[0]
+      params.start_date = today
+      params.end_date = today
+    } else if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      params.start_date = weekAgo.toISOString().split('T')[0]
+      params.end_date = now.toISOString().split('T')[0]
+    } else if (dateFilter === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      params.start_date = monthAgo.toISOString().split('T')[0]
+      params.end_date = now.toISOString().split('T')[0]
+    } else if (dateFilter === 'custom' && startDate && endDate) {
+      params.start_date = startDate
+      params.end_date = endDate
+    }
+
+    return params
+  }
 
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      const [summaryRes, myStatusRes, evolutionRes, rateRes] = await Promise.all([
-        dashboardAPI.summary(),
+      const params = getDateParams()
+
+      const [summaryRes, myStatusRes, evolutionRes, rateRes, providerRes, categoryRes] = await Promise.all([
+        dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
-        dashboardAPI.evolution(),
+        dashboardAPI.evolution(params),
         exchangeRateAPI.current().catch(() => null),
+        dashboardAPI.expensesByProvider(params),
+        dashboardAPI.expensesByCategory(params),
       ])
 
       setSummary(summaryRes.data)
       setMyStatus(myStatusRes.data)
       setEvolution(evolutionRes.data)
+      setByProvider(providerRes.data)
+      setByCategory(categoryRes.data)
       if (rateRes) setExchangeRate(rateRes.data)
     } catch (err) {
       setError('Error al cargar datos del dashboard')
@@ -143,6 +178,55 @@ function Dashboard() {
             <span>{downloadingExcel ? 'Descargando...' : 'Descargar Reporte Excel'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Date Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar size={20} className="text-gray-600" />
+          <h3 className="font-semibold text-gray-900">Filtrar por fecha</h3>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {['all', 'today', 'week', 'month', 'custom'].map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setDateFilter(filter)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                dateFilter === filter
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {filter === 'all' && 'Todo'}
+              {filter === 'today' && 'Hoy'}
+              {filter === 'week' && 'Semana'}
+              {filter === 'month' && 'Mes'}
+              {filter === 'custom' && 'Personalizado'}
+            </button>
+          ))}
+        </div>
+        {dateFilter === 'custom' && (
+          <div className="flex gap-3 items-center">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Personal Status Alert - hide for individual projects */}
@@ -276,6 +360,71 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Expenses by Provider and Category Tables */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* By Provider */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gastos por Proveedor</h3>
+          {byProvider.length === 0 ? (
+            <p className="text-gray-500 text-sm">No hay gastos en el período seleccionado</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-gray-600 border-b">
+                    <th className="pb-2">Proveedor</th>
+                    <th className="pb-2 text-right">Total USD</th>
+                    <th className="pb-2 text-right">Cant.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byProvider.map((item, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-3 text-gray-900">{item.provider_name}</td>
+                      <td className="py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(item.total_usd)}
+                      </td>
+                      <td className="py-3 text-right text-gray-600">{item.expenses_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* By Category */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gastos por Categoría</h3>
+          {byCategory.length === 0 ? (
+            <p className="text-gray-500 text-sm">No hay gastos en el período seleccionado</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-gray-600 border-b">
+                    <th className="pb-2">Categoría</th>
+                    <th className="pb-2 text-right">Total USD</th>
+                    <th className="pb-2 text-right">Cant.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byCategory.map((item, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-3 text-gray-900">{item.category_name}</td>
+                      <td className="py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(item.total_usd)}
+                      </td>
+                      <td className="py-3 text-right text-gray-600">{item.expenses_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
