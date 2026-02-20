@@ -137,12 +137,14 @@ export const paymentsAPI = {
 
 // Dashboard API
 export const dashboardAPI = {
-  summary: () => client.get('/dashboard/summary'),
-  evolution: () => client.get('/dashboard/evolution'),
+  summary: (params = {}) => client.get('/dashboard/summary', { params }),
+  evolution: (params = {}) => client.get('/dashboard/evolution', { params }),
   myStatus: () => client.get('/dashboard/my-status'),
   allUsersStatus: () => client.get('/dashboard/all-users-status'),
   expenseStatus: (id) => client.get(`/dashboard/expense-status/${id}`),
   exportExcel: () => client.get('/dashboard/export-excel', { responseType: 'blob' }),
+  expensesByProvider: (params = {}) => client.get('/dashboard/expenses-by-provider', { params }),
+  expensesByCategory: (params = {}) => client.get('/dashboard/expenses-by-category', { params }),
 }
 
 // Exchange Rate API

@@ -15,6 +15,8 @@ from app.schemas.dashboard import (
     UserPaymentStatus,
     ExpensePaymentStatus,
     ParticipantStatus,
+    ExpenseByProvider,
+    ExpenseByCategory,
 )
 from app.utils.dependencies import get_current_user, get_project_from_header
 from app.models.user import User
@@ -30,12 +32,15 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
     Get overall dashboard summary with totals for the current project.
+    Optionally filter by date range (expense_date).
     """
     # Build expense query (exclude deleted expenses)
     expense_query = db.query(
@@ -45,6 +50,12 @@ async def get_dashboard_summary(
     ).filter(Expense.is_deleted == False)
     if project:
         expense_query = expense_query.filter(Expense.project_id == project.id)
+
+    # Date filters
+    if start_date:
+        expense_query = expense_query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        expense_query = expense_query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
 
     expense_totals = expense_query.first()
 
@@ -56,16 +67,20 @@ async def get_dashboard_summary(
     paid_query = db.query(
         func.sum(ParticipantPayment.amount_due_usd).label("paid_usd"),
         func.sum(ParticipantPayment.amount_due_ars).label("paid_ars"),
-    ).filter(
+    ).join(Expense).filter(
         ParticipantPayment.is_paid == True,
         ParticipantPayment.is_deleted == False,
+        Expense.is_deleted == False,
     )
 
     if project:
-        paid_query = paid_query.join(Expense).filter(
-            Expense.project_id == project.id,
-            Expense.is_deleted == False,
-        )
+        paid_query = paid_query.filter(Expense.project_id == project.id)
+
+    # Date filters on payments
+    if start_date:
+        paid_query = paid_query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        paid_query = paid_query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
 
     paid_payments = paid_query.first()
 
@@ -123,12 +138,15 @@ async def get_dashboard_summary(
 
 @router.get("/evolution", response_model=ExpenseEvolution)
 async def get_expense_evolution(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     project: Optional[Project] = Depends(get_project_from_header),
 ):
     """
     Get monthly expense evolution for the current project.
+    Optionally filter by date range (expense_date).
     """
     # Group expenses by year and month (exclude deleted)
     query = db.query(
@@ -141,6 +159,12 @@ async def get_expense_evolution(
 
     if project:
         query = query.filter(Expense.project_id == project.id)
+
+    # Date filters
+    if start_date:
+        query = query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
 
     monthly_data = (
         query
@@ -586,3 +610,117 @@ async def export_project_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/expenses-by-provider", response_model=List[ExpenseByProvider])
+async def get_expenses_by_provider(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get total expenses grouped by provider, ordered by total descending.
+    Optionally filter by date range (expense_date).
+    """
+    from app.models.provider import Provider
+    from sqlalchemy import case
+
+    # Build expense query
+    query = db.query(
+        Expense.provider_id,
+        case(
+            (Expense.provider_id.is_(None), "Sin proveedor"),
+            else_=Provider.name
+        ).label("provider_name"),
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("expenses_count"),
+    ).outerjoin(Provider, Expense.provider_id == Provider.id)
+
+    # Filter by project
+    if project:
+        query = query.filter(Expense.project_id == project.id)
+
+    # Filter deleted expenses
+    query = query.filter(Expense.is_deleted == False)
+
+    # Date filters
+    if start_date:
+        query = query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
+
+    # Group and order
+    query = query.group_by(Expense.provider_id, Provider.name).order_by(func.sum(Expense.amount_usd).desc())
+
+    results = query.all()
+
+    return [
+        ExpenseByProvider(
+            provider_id=r.provider_id,
+            provider_name=r.provider_name,
+            total_usd=Decimal(str(r.total_usd or 0)),
+            total_ars=Decimal(str(r.total_ars or 0)),
+            expenses_count=r.expenses_count,
+        )
+        for r in results
+    ]
+
+
+@router.get("/expenses-by-category", response_model=List[ExpenseByCategory])
+async def get_expenses_by_category(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get total expenses grouped by category, ordered by total descending.
+    Optionally filter by date range (expense_date).
+    """
+    from app.models.category import Category
+    from sqlalchemy import case
+
+    # Build expense query
+    query = db.query(
+        Expense.category_id,
+        case(
+            (Expense.category_id.is_(None), "Sin categoría"),
+            else_=Category.name
+        ).label("category_name"),
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("expenses_count"),
+    ).outerjoin(Category, Expense.category_id == Category.id)
+
+    # Filter by project
+    if project:
+        query = query.filter(Expense.project_id == project.id)
+
+    # Filter deleted expenses
+    query = query.filter(Expense.is_deleted == False)
+
+    # Date filters
+    if start_date:
+        query = query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
+
+    # Group and order
+    query = query.group_by(Expense.category_id, Category.name).order_by(func.sum(Expense.amount_usd).desc())
+
+    results = query.all()
+
+    return [
+        ExpenseByCategory(
+            category_id=r.category_id,
+            category_name=r.category_name,
+            total_usd=Decimal(str(r.total_usd or 0)),
+            total_ars=Decimal(str(r.total_ars or 0)),
+            expenses_count=r.expenses_count,
+        )
+        for r in results
+    ]

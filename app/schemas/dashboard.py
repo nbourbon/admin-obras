@@ -69,3 +69,19 @@ class ExpensePaymentStatus(BaseModel):
     fully_paid: bool
     paid_count: int
     pending_count: int
+
+
+class ExpenseByProvider(BaseModel):
+    provider_id: Optional[int] = None
+    provider_name: str
+    total_usd: Decimal
+    total_ars: Decimal
+    expenses_count: int
+
+
+class ExpenseByCategory(BaseModel):
+    category_id: Optional[int] = None
+    category_name: str
+    total_usd: Decimal
+    total_ars: Decimal
+    expenses_count: int
