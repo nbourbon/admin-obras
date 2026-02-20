@@ -161,6 +161,7 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header with compact filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -169,88 +170,79 @@ function Dashboard() {
               Dolar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span>
             </div>
           )}
+          {/* Compact Date Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <Calendar size={18} className="text-gray-600" />
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">Todo</option>
+              <option value="today">Hoy</option>
+              <option value="week">Semana</option>
+              <option value="month">Mes</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
           <button
             onClick={handleDownloadExcel}
             disabled={downloadingExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
           >
             <Download size={18} />
-            <span>{downloadingExcel ? 'Descargando...' : 'Descargar Reporte Excel'}</span>
+            <span className="hidden sm:inline">{downloadingExcel ? 'Descargando...' : 'Descargar Reporte Excel'}</span>
+            <span className="sm:hidden">Excel</span>
           </button>
         </div>
       </div>
 
-      {/* Date Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar size={20} className="text-gray-600" />
-          <h3 className="font-semibold text-gray-900">Filtrar por fecha</h3>
-        </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {['all', 'today', 'week', 'month', 'custom'].map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setDateFilter(filter)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                dateFilter === filter
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {filter === 'all' && 'Todo'}
-              {filter === 'today' && 'Hoy'}
-              {filter === 'week' && 'Semana'}
-              {filter === 'month' && 'Mes'}
-              {filter === 'custom' && 'Personalizado'}
-            </button>
-          ))}
-        </div>
-        {dateFilter === 'custom' && (
-          <div className="flex gap-3 items-center">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+      {/* Custom Date Range (only when selected) */}
+      {dateFilter === 'custom' && (
+        <div className="flex flex-wrap gap-3 items-center bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Desde:</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
-        )}
-      </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Hasta:</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Personal Status Alert - hide for individual projects */}
+      {/* Personal Status Alert - COMPACT single line */}
       {!isIndividual && myStatus && (currencyMode === 'ARS' ? parseFloat(myStatus.pending_ars) > 0 : parseFloat(myStatus.pending_usd) > 0) && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-4">
-          <AlertCircle className="text-yellow-600 flex-shrink-0" size={24} />
-          <div className="flex-1">
-            <p className="font-medium text-yellow-800">
-              Tenes {myStatus.pending_payments_count} pagos pendientes
-            </p>
-            <p className="text-sm text-yellow-600">
-              Total: {currencyMode === 'ARS'
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 px-4 py-2 flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <AlertCircle className="text-yellow-600 flex-shrink-0" size={18} />
+            <span className="font-medium text-yellow-800">
+              {myStatus.pending_payments_count} {myStatus.pending_payments_count === 1 ? 'pago pendiente' : 'pagos pendientes'}
+            </span>
+            <span className="text-yellow-700 font-semibold">
+              {currencyMode === 'ARS'
                 ? formatCurrency(myStatus.pending_ars, 'ARS')
                 : currencyMode === 'USD'
                 ? formatCurrency(myStatus.pending_usd)
-                : `${formatCurrency(myStatus.pending_usd)} / ${formatCurrency(myStatus.pending_ars, 'ARS')}`
+                : `${formatCurrency(myStatus.pending_usd)}`
               }
-            </p>
+            </span>
           </div>
           <Link
             to="/my-payments"
-            className="flex items-center gap-1 text-yellow-700 hover:text-yellow-800 font-medium"
+            className="flex items-center gap-1 text-yellow-700 hover:text-yellow-800 font-medium whitespace-nowrap"
           >
-            Ver pagos <ArrowRight size={16} />
+            Ver pagos <ArrowRight size={14} />
           </Link>
         </div>
       )}
