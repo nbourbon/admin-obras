@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Users } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -23,18 +23,18 @@ function formatDate(dateString) {
 function StatusBadge({ status }) {
   const styles = {
     pending: 'bg-yellow-100 text-yellow-700',
-    partial: 'bg-blue-100 text-blue-700',
-    paid: 'bg-green-100 text-green-700',
+    approved: 'bg-green-100 text-green-700',
+    rejected: 'bg-red-100 text-red-700',
   }
   const labels = {
     pending: 'Pendiente',
-    partial: 'Parcial',
-    paid: 'Pagado',
+    approved: 'Aprobado',
+    rejected: 'Rechazado',
   }
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
+      {labels[status] || status}
     </span>
   )
 }
@@ -281,10 +281,16 @@ export default function Contributions() {
                     Descripción
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Monto
+                    Monto Total
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Mi Parte
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Estado
+                    Yo Pagué
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Completo
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                     Acciones
@@ -306,8 +312,27 @@ export default function Contributions() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
                       {formatCurrency(contribution.amount, contribution.currency)}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-semibold">
+                      {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <StatusBadge status={contribution.status} />
+                      {contribution.i_paid ? (
+                        <Check size={20} className="inline text-green-600" />
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {contribution.is_complete ? (
+                        <CheckCircle2 size={20} className="inline text-green-600" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-1">
+                          <Users size={16} className="text-gray-400" />
+                          <span className="text-xs text-gray-500">
+                            {contribution.paid_participants}/{contribution.total_participants}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <Link
@@ -331,20 +356,40 @@ export default function Contributions() {
                 to={`/contributions/${contribution.id}`}
                 className="block bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 flex-1">
                     <Coins size={18} className="text-green-600 flex-shrink-0" />
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-gray-900 truncate">
                       {contribution.description}
                     </span>
                   </div>
-                  <StatusBadge status={contribution.status} />
+                  <div className="flex items-center gap-2 ml-2">
+                    {contribution.i_paid && <Check size={18} className="text-green-600" />}
+                    {contribution.is_complete && <CheckCircle2 size={18} className="text-green-600" />}
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">{formatDate(contribution.created_at)}</span>
-                  <div className="font-semibold text-gray-900">
-                    {formatCurrency(contribution.amount, contribution.currency)}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Monto total:</span>
+                    <span className="font-semibold text-gray-900">
+                      {formatCurrency(contribution.amount, contribution.currency)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Mi parte:</span>
+                    <span className="font-semibold text-blue-600">
+                      {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <span className="text-gray-500">{formatDate(contribution.created_at)}</span>
+                    <div className="flex items-center gap-1 text-gray-500">
+                      <Users size={14} />
+                      <span className="text-xs">
+                        {contribution.paid_participants}/{contribution.total_participants}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </Link>
