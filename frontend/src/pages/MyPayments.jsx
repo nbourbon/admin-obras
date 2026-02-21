@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { paymentsAPI } from '../api/client'
+import { paymentsAPI, contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import {
   CreditCard,
@@ -123,16 +123,30 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
         submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
       }
 
-      // Submit payment
-      await paymentsAPI.submitPayment(payment.id, submitData)
+      // Submit payment - use correct API based on payment type
+      if (payment.payment_type === 'contribution') {
+        await contributionsAPI.submitPayment(payment.id, submitData)
 
-      // Upload receipt if provided
-      if (receiptFile) {
-        try {
-          await paymentsAPI.uploadReceipt(payment.id, receiptFile)
-        } catch (uploadErr) {
-          console.error('Error uploading receipt:', uploadErr)
-          // Don't fail the whole operation
+        // Upload receipt if provided
+        if (receiptFile) {
+          try {
+            await contributionsAPI.uploadReceipt(payment.id, receiptFile)
+          } catch (uploadErr) {
+            console.error('Error uploading receipt:', uploadErr)
+            // Don't fail the whole operation
+          }
+        }
+      } else {
+        await paymentsAPI.submitPayment(payment.id, submitData)
+
+        // Upload receipt if provided
+        if (receiptFile) {
+          try {
+            await paymentsAPI.uploadReceipt(payment.id, receiptFile)
+          } catch (uploadErr) {
+            console.error('Error uploading receipt:', uploadErr)
+            // Don't fail the whole operation
+          }
         }
       }
 

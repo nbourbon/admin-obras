@@ -120,6 +120,15 @@ export const contributionsAPI = {
   list: () => client.get('/contributions'),
   get: (id) => client.get(`/contributions/${id}`),
   create: (data) => client.post('/contributions', data),
+  submitPayment: (paymentId, data) => client.put(`/contributions/payments/${paymentId}/submit`, data),
+  uploadReceipt: (paymentId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/contributions/payments/${paymentId}/receipt`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  downloadReceipt: (paymentId) => client.get(`/contributions/payments/${paymentId}/receipt`, { responseType: 'blob' }),
 }
 
 // Payments API

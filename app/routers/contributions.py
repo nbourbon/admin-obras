@@ -1,7 +1,8 @@
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -13,6 +14,7 @@ from app.schemas.contribution import (
     ContributionDetailResponse,
     ContributionPaymentDetail,
 )
+from app.schemas.payment import PaymentMarkPaid
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.contribution import Contribution, Currency
@@ -172,5 +174,144 @@ async def create_contribution(
     db.refresh(contribution)
 
     return contribution
+
+
+@router.put("/payments/{payment_id}/submit", status_code=status.HTTP_200_OK)
+async def submit_contribution_payment(
+    payment_id: int,
+    payment_data: PaymentMarkPaid,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Submit a contribution payment (mark as paid).
+    For individual projects or if user is admin, auto-approves.
+    Otherwise, marks as pending approval.
+    """
+    from datetime import datetime
+    from app.utils.dependencies import is_project_admin
+
+    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution payment not found",
+        )
+
+    # Check access - only own payments
+    if payment.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to submit this payment",
+        )
+
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already approved and paid",
+        )
+
+    # Get contribution and project to check if individual or user is admin
+    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    if not contribution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution not found",
+        )
+
+    project_obj = db.query(Project).filter(Project.id == contribution.project_id).first()
+    is_individual = project_obj.is_individual if project_obj else False
+    user_is_admin = is_project_admin(db, current_user.id, contribution.project_id)
+
+    # Update payment info
+    payment.amount_paid = payment_data.amount_paid
+    payment.payment_date = payment_data.payment_date or datetime.utcnow()
+    payment.submitted_at = datetime.utcnow()
+
+    # Auto-approve for individual projects or if user is admin
+    if is_individual or user_is_admin:
+        payment.is_paid = True
+        payment.paid_at = datetime.utcnow()
+        payment.approved_at = datetime.utcnow()
+        payment.approved_by = current_user.id if user_is_admin else None
+    # Otherwise, mark as pending approval (would need approval endpoint)
+    # For now, since contributions don't have pending_approval field, auto-approve
+    else:
+        payment.is_paid = True
+        payment.paid_at = datetime.utcnow()
+        payment.approved_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(payment)
+
+    return {"message": "Payment submitted successfully", "is_paid": payment.is_paid}
+
+
+@router.post("/payments/{payment_id}/receipt", status_code=status.HTTP_200_OK)
+async def upload_contribution_receipt(
+    payment_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload receipt for a contribution payment"""
+    from app.services.file_storage import save_receipt
+
+    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution payment not found",
+        )
+
+    # Check access - only own payments
+    if payment.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to upload receipt for this payment",
+        )
+
+    # Save receipt file
+    file_path = await save_receipt(file, payment_id)
+    payment.receipt_file_path = file_path
+
+    db.commit()
+
+    return {"message": "Receipt uploaded successfully", "file_path": file_path}
+
+
+@router.get("/payments/{payment_id}/receipt")
+async def download_contribution_receipt(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download receipt for a contribution payment"""
+    from app.services.file_storage import get_file_path
+
+    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution payment not found",
+        )
+
+    if not payment.receipt_file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No receipt found for this payment",
+        )
+
+    file_path = get_file_path(payment.receipt_file_path)
+
+    return FileResponse(
+        path=file_path,
+        media_type='application/octet-stream',
+        filename=payment.receipt_file_path.split('/')[-1]
+    )
 
 
