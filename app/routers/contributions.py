@@ -224,11 +224,54 @@ async def submit_contribution_payment(
     project_obj = db.query(Project).filter(Project.id == contribution.project_id).first()
     is_individual = project_obj.is_individual if project_obj else False
     user_is_admin = is_project_admin(db, current_user.id, contribution.project_id)
+    currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
 
     # Update payment info
     payment.amount_paid = payment_data.amount_paid
     payment.payment_date = payment_data.payment_date or datetime.utcnow()
     payment.submitted_at = datetime.utcnow()
+
+    # Calculate dual currency equivalents based on currency_mode
+    if currency_mode == "DUAL":
+        # In DUAL mode, contributions are ALWAYS in ARS
+        payment.currency_paid = "ARS"
+        payment.amount_paid_ars = payment.amount_paid
+
+        # Get exchange rate to convert to USD for dashboard calculations
+        from app.services.exchange_rate import fetch_blue_dollar_rate_sync
+        if payment_data.exchange_rate_override:
+            exchange_rate = Decimal(str(payment_data.exchange_rate_override))
+            payment.exchange_rate_source = "manual"
+        else:
+            try:
+                exchange_rate = fetch_blue_dollar_rate_sync()
+                payment.exchange_rate_source = "auto"
+            except Exception:
+                # If exchange rate fetch fails, we can't calculate USD equivalent
+                exchange_rate = None
+                payment.exchange_rate_source = None
+
+        payment.exchange_rate_at_payment = exchange_rate
+        if exchange_rate and exchange_rate > 0:
+            payment.amount_paid_usd = (payment.amount_paid / exchange_rate).quantize(Decimal("0.01"))
+        else:
+            payment.amount_paid_usd = Decimal(0)
+
+    elif currency_mode == "USD":
+        # Single currency USD: contributions are in USD
+        payment.currency_paid = "USD"
+        payment.amount_paid_usd = payment.amount_paid
+        payment.amount_paid_ars = Decimal(0)
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+
+    else:  # ARS
+        # Single currency ARS: contributions are in ARS
+        payment.currency_paid = "ARS"
+        payment.amount_paid_ars = payment.amount_paid
+        payment.amount_paid_usd = Decimal(0)
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
 
     # Auto-approve for individual projects or if user is admin
     if is_individual or user_is_admin:

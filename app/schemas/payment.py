@@ -100,14 +100,30 @@ class MyPaymentItem(BaseModel):
     id: int
     payment_type: str  # "expense" or "contribution"
     description: str  # Expense or Contribution description
-    amount_due: Decimal  # How much user needs to pay (in the payment's currency)
-    currency: str  # "USD" or "ARS" - currency of the payment
+    amount_due: Decimal  # How much user needs to pay (in the payment's currency) - kept for backward compatibility
+    currency: str  # "USD" or "ARS" - currency of the payment - kept for backward compatibility
     is_paid: bool
     paid_at: Optional[datetime] = None
     created_at: datetime
 
+    # Dual currency amounts (for both expenses and contributions)
+    amount_due_usd: Optional[Decimal] = None
+    amount_due_ars: Optional[Decimal] = None
+
+    # Payment submission fields
+    is_pending_approval: bool = False
+    submitted_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+
+    # Payment details
+    amount_paid: Optional[Decimal] = None
+    currency_paid: Optional[str] = None
+    receipt_file_path: Optional[str] = None
+
     # Optional fields for expense payments
     expense_id: Optional[int] = None
+    expense: Optional[ExpenseInfo] = None
     provider_name: Optional[str] = None
     category_name: Optional[str] = None
     expense_date: Optional[datetime] = None

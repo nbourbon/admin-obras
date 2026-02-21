@@ -213,6 +213,25 @@ def _run_migrations():
             pending.append(('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL',
                             'Made password_hash nullable'))
 
+    # --- Contribution payments table ---
+    contribution_payments_cols = get_cols('contribution_payments')
+    if contribution_payments_cols:
+        if 'currency_paid' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN currency_paid VARCHAR(3)',
+                            'Added currency_paid to contribution_payments'))
+        if 'exchange_rate_at_payment' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN exchange_rate_at_payment NUMERIC(10,2)',
+                            'Added exchange_rate_at_payment to contribution_payments'))
+        if 'exchange_rate_source' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN exchange_rate_source VARCHAR(10)',
+                            'Added exchange_rate_source to contribution_payments'))
+        if 'amount_paid_usd' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN amount_paid_usd NUMERIC(15,2) DEFAULT 0',
+                            'Added amount_paid_usd to contribution_payments'))
+        if 'amount_paid_ars' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN amount_paid_ars NUMERIC(15,2) DEFAULT 0',
+                            'Added amount_paid_ars to contribution_payments'))
+
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')
     if contributions_cols:

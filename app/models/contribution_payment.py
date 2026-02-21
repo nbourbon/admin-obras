@@ -30,6 +30,13 @@ class ContributionPayment(Base):
     # Receipt file
     receipt_file_path = Column(String(500), nullable=True)
 
+    # Currency tracking at payment time (matching ParticipantPayment pattern)
+    currency_paid = Column(String(3), nullable=True)  # "USD" or "ARS"
+    exchange_rate_at_payment = Column(Numeric(10, 2), nullable=True)
+    exchange_rate_source = Column(String(10), nullable=True)  # "auto" or "manual"
+    amount_paid_usd = Column(Numeric(15, 2), nullable=True, default=0)
+    amount_paid_ars = Column(Numeric(15, 2), nullable=True, default=0)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

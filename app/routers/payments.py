@@ -149,7 +149,7 @@ async def get_all_my_payments(
         project_obj = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
         currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
 
-        # Determine amount and currency to display
+        # Determine amount and currency to display (for backward compatibility)
         if currency_mode == "USD":
             amount_due = payment.amount_due_usd
             currency = "USD"
@@ -170,6 +170,19 @@ async def get_all_my_payments(
             is_paid=payment.is_paid,
             paid_at=payment.paid_at,
             created_at=payment.created_at,
+            # Dual currency amounts
+            amount_due_usd=payment.amount_due_usd,
+            amount_due_ars=payment.amount_due_ars,
+            # Payment submission fields
+            is_pending_approval=payment.is_pending_approval,
+            submitted_at=payment.submitted_at,
+            approved_at=payment.approved_at,
+            rejection_reason=payment.rejection_reason,
+            # Payment details
+            amount_paid=payment.amount_paid,
+            currency_paid=payment.currency_paid.value if payment.currency_paid else None,
+            receipt_file_path=payment.receipt_file_path,
+            # Expense fields
             expense_id=expense.id,
             provider_name=expense.provider.name if expense.provider else None,
             category_name=expense.category.name if expense.category else None,
@@ -194,15 +207,52 @@ async def get_all_my_payments(
     # Convert contribution payments to MyPaymentItem
     for payment in contribution_payments:
         contribution = payment.contribution
+        # Get project to determine currency_mode
+        project_obj = db.query(Project).filter(Project.id == contribution.project_id).first()
+        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
+
+        # Determine dual currency amounts based on currency_mode
+        if currency_mode == "DUAL":
+            # DUAL mode: contributions are ALWAYS in ARS
+            amount_due_usd = Decimal(0)
+            amount_due_ars = payment.amount_due
+            amount_due = payment.amount_due
+            currency = "ARS"
+        elif currency_mode == "USD":
+            # Single currency USD
+            amount_due_usd = payment.amount_due
+            amount_due_ars = Decimal(0)
+            amount_due = payment.amount_due
+            currency = "USD"
+        else:  # ARS
+            # Single currency ARS
+            amount_due_usd = Decimal(0)
+            amount_due_ars = payment.amount_due
+            amount_due = payment.amount_due
+            currency = "ARS"
+
         result.append(MyPaymentItem(
             id=payment.id,
             payment_type="contribution",
             description=contribution.description,
-            amount_due=payment.amount_due,
-            currency=contribution.currency.value,
+            amount_due=amount_due,
+            currency=currency,
             is_paid=payment.is_paid,
             paid_at=payment.paid_at,
             created_at=payment.created_at,
+            # Dual currency amounts
+            amount_due_usd=amount_due_usd,
+            amount_due_ars=amount_due_ars,
+            # Payment submission fields (contributions auto-approve, so no pending approval)
+            is_pending_approval=False,
+            submitted_at=payment.submitted_at,
+            approved_at=payment.approved_at,
+            rejection_reason=None,
+            # Payment details
+            amount_paid=payment.amount_paid,
+            currency_paid=payment.currency_paid,
+            receipt_file_path=payment.receipt_file_path,
+            # Contribution fields
             contribution_id=contribution.id,
             created_by_name=contribution.created_by_user.full_name,
         ))

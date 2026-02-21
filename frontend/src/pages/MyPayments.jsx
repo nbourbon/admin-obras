@@ -118,8 +118,8 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
         payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
       }
 
-      // Include exchange rate override for DUAL mode (only for expenses)
-      if (payment.payment_type !== 'contribution' && currencyMode === 'DUAL' && formData.exchange_rate_override) {
+      // Include exchange rate override for DUAL mode (both expenses and contributions)
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
         submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
       }
 
@@ -221,7 +221,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
             />
           </div>
 
-          {payment.payment_type !== 'contribution' && currencyMode === 'DUAL' && (
+          {currencyMode === 'DUAL' && (
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Tipo de Cambio al momento de pagar (opcional)
