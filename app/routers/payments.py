@@ -6,7 +6,15 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.schemas.payment import PaymentResponse, PaymentMarkPaid, PaymentWithExpense, ExpenseInfo, UserInfo, PaymentApproval
+from app.schemas.payment import (
+    PaymentResponse,
+    PaymentMarkPaid,
+    PaymentWithExpense,
+    ExpenseInfo,
+    UserInfo,
+    PaymentApproval,
+    MyPaymentItem,
+)
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense
@@ -96,6 +104,111 @@ async def get_my_payments(
             expense=expense_info,
         )
         result.append(payment_with_expense)
+
+    return result
+
+
+@router.get("/my-all", response_model=List[MyPaymentItem])
+async def get_all_my_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+    pending_only: bool = False,
+):
+    """
+    Get ALL current user's payments (expenses + contributions) for the current project.
+    Returns a unified list sorted by creation date.
+    """
+    from app.models.contribution_payment import ContributionPayment
+    from app.models.contribution import Contribution
+
+    result = []
+
+    # Get expense payments
+    expense_payments_query = (
+        db.query(ParticipantPayment)
+        .filter(
+            ParticipantPayment.user_id == current_user.id,
+            ParticipantPayment.is_deleted == False,
+        )
+        .options(joinedload(ParticipantPayment.expense))
+    )
+
+    if project:
+        expense_payments_query = expense_payments_query.join(Expense).filter(Expense.project_id == project.id)
+
+    if pending_only:
+        expense_payments_query = expense_payments_query.filter(ParticipantPayment.is_paid == False)
+
+    expense_payments = expense_payments_query.all()
+
+    # Convert expense payments to MyPaymentItem
+    for payment in expense_payments:
+        expense = payment.expense
+        # Get currency mode to determine which amount to show
+        project_obj = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
+        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
+
+        # Determine amount and currency to display
+        if currency_mode == "USD":
+            amount_due = payment.amount_due_usd
+            currency = "USD"
+        elif currency_mode == "ARS":
+            amount_due = payment.amount_due_ars
+            currency = "ARS"
+        else:  # DUAL - show both, but for simplicity show primary currency
+            # Could show USD as primary or let frontend handle both
+            amount_due = payment.amount_due_usd
+            currency = "USD"
+
+        result.append(MyPaymentItem(
+            id=payment.id,
+            payment_type="expense",
+            description=expense.description,
+            amount_due=amount_due,
+            currency=currency,
+            is_paid=payment.is_paid,
+            paid_at=payment.paid_at,
+            created_at=payment.created_at,
+            expense_id=expense.id,
+            provider_name=expense.provider.name if expense.provider else None,
+            category_name=expense.category.name if expense.category else None,
+            expense_date=expense.expense_date,
+        ))
+
+    # Get contribution payments
+    contribution_payments_query = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(ContributionPayment.user_id == current_user.id)
+    )
+
+    if project:
+        contribution_payments_query = contribution_payments_query.filter(Contribution.project_id == project.id)
+
+    if pending_only:
+        contribution_payments_query = contribution_payments_query.filter(ContributionPayment.is_paid == False)
+
+    contribution_payments = contribution_payments_query.all()
+
+    # Convert contribution payments to MyPaymentItem
+    for payment in contribution_payments:
+        contribution = payment.contribution
+        result.append(MyPaymentItem(
+            id=payment.id,
+            payment_type="contribution",
+            description=contribution.description,
+            amount_due=payment.amount_due,
+            currency=contribution.currency.value,
+            is_paid=payment.is_paid,
+            paid_at=payment.paid_at,
+            created_at=payment.created_at,
+            contribution_id=contribution.id,
+            created_by_name=contribution.created_by_user.full_name,
+        ))
+
+    # Sort by created_at descending
+    result.sort(key=lambda x: x.created_at, reverse=True)
 
     return result
 

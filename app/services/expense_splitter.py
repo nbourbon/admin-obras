@@ -272,32 +272,70 @@ def get_user_pending_payments(db: Session, user_id: int) -> List[ParticipantPaym
 
 
 def get_user_payment_summary(db: Session, user_id: int, project_id: Optional[int] = None) -> dict:
-    """Get payment summary for a user, optionally filtered by project (excludes deleted payments and expenses)."""
-    query = db.query(ParticipantPayment).filter(
+    """
+    Get payment summary for a user, optionally filtered by project.
+    Includes BOTH expense payments (ParticipantPayment) AND contribution payments (ContributionPayment).
+    Excludes deleted payments and expenses.
+    """
+    from app.models.contribution_payment import ContributionPayment
+    from app.models.contribution import Contribution
+
+    # Query ParticipantPayment (expense payments)
+    expense_payments_query = db.query(ParticipantPayment).filter(
         ParticipantPayment.user_id == user_id,
         ParticipantPayment.is_deleted == False,
     )
 
     if project_id:
-        query = query.join(Expense).filter(
+        expense_payments_query = expense_payments_query.join(Expense).filter(
             Expense.project_id == project_id,
             Expense.is_deleted == False,
         )
     else:
         # Even without project filter, exclude deleted expenses
-        query = query.join(Expense).filter(Expense.is_deleted == False)
+        expense_payments_query = expense_payments_query.join(Expense).filter(Expense.is_deleted == False)
 
-    payments = query.all()
+    expense_payments = expense_payments_query.all()
 
-    total_due_usd = sum(Decimal(str(p.amount_due_usd)) for p in payments)
-    total_due_ars = sum(Decimal(str(p.amount_due_ars)) for p in payments)
+    # Query ContributionPayment (contribution payments)
+    contribution_payments_query = db.query(ContributionPayment).join(Contribution).filter(
+        ContributionPayment.user_id == user_id,
+    )
 
-    paid_payments = [p for p in payments if p.is_paid]
-    total_paid_usd = sum(Decimal(str(p.amount_due_usd)) for p in paid_payments)
-    total_paid_ars = sum(Decimal(str(p.amount_due_ars)) for p in paid_payments)
+    if project_id:
+        contribution_payments_query = contribution_payments_query.filter(
+            Contribution.project_id == project_id,
+        )
+
+    contribution_payments = contribution_payments_query.all()
+
+    # Sum expense payments (have amount_due_usd and amount_due_ars)
+    total_due_usd = sum(Decimal(str(p.amount_due_usd)) for p in expense_payments)
+    total_due_ars = sum(Decimal(str(p.amount_due_ars)) for p in expense_payments)
+
+    paid_expense_payments = [p for p in expense_payments if p.is_paid]
+    total_paid_usd = sum(Decimal(str(p.amount_due_usd)) for p in paid_expense_payments)
+    total_paid_ars = sum(Decimal(str(p.amount_due_ars)) for p in paid_expense_payments)
+
+    # Sum contribution payments (have amount_due + currency from parent Contribution)
+    for cp in contribution_payments:
+        contribution = cp.contribution
+        if contribution.currency.value == "USD":
+            total_due_usd += Decimal(str(cp.amount_due))
+            if cp.is_paid:
+                total_paid_usd += Decimal(str(cp.amount_due))
+        else:  # ARS
+            total_due_ars += Decimal(str(cp.amount_due))
+            if cp.is_paid:
+                total_paid_ars += Decimal(str(cp.amount_due))
 
     pending_usd = total_due_usd - total_paid_usd
     pending_ars = total_due_ars - total_paid_ars
+
+    total_pending_count = (
+        len([p for p in expense_payments if not p.is_paid]) +
+        len([cp for cp in contribution_payments if not cp.is_paid])
+    )
 
     return {
         "total_due_usd": total_due_usd,
@@ -306,5 +344,5 @@ def get_user_payment_summary(db: Session, user_id: int, project_id: Optional[int
         "total_paid_ars": total_paid_ars,
         "pending_usd": pending_usd,
         "pending_ars": pending_ars,
-        "pending_payments_count": len(payments) - len(paid_payments),
+        "pending_payments_count": total_pending_count,
     }

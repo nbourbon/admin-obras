@@ -38,6 +38,47 @@ class ContributionWithDetails(ContributionResponse):
         from_attributes = True
 
 
+class ContributionWithMyPayment(ContributionResponse):
+    """Contribution with current user's payment info"""
+    created_by_name: Optional[str] = None
+    created_by_email: Optional[str] = None
+    my_amount_due: Decimal = Decimal("0")  # Cuánto debe pagar el usuario actual
+    i_paid: bool = False  # Si el usuario actual ya pagó
+    is_complete: bool = False  # Si todos los participantes pagaron
+    total_participants: int = 0
+    paid_participants: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ContributionPaymentDetail(BaseModel):
+    """Details of a single contribution payment (for detail view)"""
+    payment_id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    amount_due: Decimal
+    is_paid: bool
+    paid_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ContributionDetailResponse(ContributionResponse):
+    """Full contribution details with all participants' payment status"""
+    created_by_name: Optional[str] = None
+    created_by_email: Optional[str] = None
+    payments: list[ContributionPaymentDetail] = []
+    total_participants: int = 0
+    paid_participants: int = 0
+    is_complete: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class MemberBalanceResponse(BaseModel):
     """Member balance for dashboard display"""
     user_id: int

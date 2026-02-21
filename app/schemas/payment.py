@@ -80,3 +80,41 @@ class UserInfo(BaseModel):
 class PaymentWithExpense(PaymentResponse):
     expense: ExpenseInfo
     user: Optional[UserInfo] = None
+
+
+class ContributionInfo(BaseModel):
+    """Info about a contribution for payment display"""
+    id: int
+    description: str
+    amount: Decimal
+    currency: Currency
+    created_at: datetime
+    created_by_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class MyPaymentItem(BaseModel):
+    """Unified payment item for both expense payments and contribution payments"""
+    id: int
+    payment_type: str  # "expense" or "contribution"
+    description: str  # Expense or Contribution description
+    amount_due: Decimal  # How much user needs to pay (in the payment's currency)
+    currency: str  # "USD" or "ARS" - currency of the payment
+    is_paid: bool
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+    # Optional fields for expense payments
+    expense_id: Optional[int] = None
+    provider_name: Optional[str] = None
+    category_name: Optional[str] = None
+    expense_date: Optional[datetime] = None
+
+    # Optional fields for contribution payments
+    contribution_id: Optional[int] = None
+    created_by_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
