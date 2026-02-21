@@ -6,9 +6,9 @@ import enum
 
 
 class ContributionStatus(str, enum.Enum):
-    PENDING = "pending"  # Waiting for participants to pay
-    PARTIAL = "partial"  # Some participants paid
-    PAID = "paid"        # All participants paid
+    PENDING = "pending"    # Waiting for admin approval
+    APPROVED = "approved"  # Approved, balance credited
+    REJECTED = "rejected"  # Rejected, no balance credit
 
 
 class Currency(str, enum.Enum):
