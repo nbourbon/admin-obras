@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { expensesAPI, categoriesAPI } from '../api/client'
+import { expensesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Coins, TrendingUp, Plus, X, Upload } from 'lucide-react'
 
@@ -39,112 +39,14 @@ function StatusBadge({ status }) {
   )
 }
 
-function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      const response = await categoriesAPI.create({ name })
-      onCreated(response.data)
-      onClose()
-      setName('')
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear categoria')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">Nueva Categoria</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={20} />
-          </button>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ej: Materiales"
-            />
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Creando...' : 'Crear'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
-  const [categories, setCategories] = useState([])
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     description: '',
     amount_original: '',
-    currency_original: currencyMode === 'DUAL' ? 'USD' : currencyMode,
-    category_id: '',
-    expense_date: new Date().toISOString().split('T')[0],
-    exchange_rate_override: '',
   })
-
-  useEffect(() => {
-    if (isOpen) {
-      loadCategories()
-    }
-  }, [isOpen])
-
-  const loadCategories = async () => {
-    try {
-      const response = await categoriesAPI.list()
-      setCategories(response.data || [])
-    } catch (err) {
-      console.error('Error loading categories:', err)
-    }
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -153,14 +55,15 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
 
     try {
       // Create contribution (expense with is_contribution=true)
+      // Contributions are always in ARS and use current date
       const expenseData = {
-        ...formData,
-        is_contribution: true, // Always true for contributions
+        description: formData.description,
         amount_original: parseFloat(formData.amount_original),
-        exchange_rate_override: formData.exchange_rate_override
-          ? parseFloat(formData.exchange_rate_override)
-          : null,
-        category_id: formData.category_id || null,
+        currency_original: 'ARS', // Always ARS for contributions
+        is_contribution: true,
+        expense_date: new Date().toISOString(), // Use current date
+        category_id: null, // No category for contributions
+        provider_id: null, // No provider for contributions
       }
 
       const response = await expensesAPI.create(expenseData)
@@ -176,10 +79,6 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
       setFormData({
         description: '',
         amount_original: '',
-        currency_original: currencyMode === 'DUAL' ? 'USD' : currencyMode,
-        category_id: '',
-        expense_date: new Date().toISOString().split('T')[0],
-        exchange_rate_override: '',
       })
       setInvoiceFile(null)
     } catch (err) {
@@ -192,196 +91,106 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
   if (!isOpen) return null
 
   return (
-    <>
-      <QuickCreateCategoryModal
-        isOpen={showCategoryModal}
-        onClose={() => setShowCategoryModal(false)}
-        onCreated={(newCategory) => {
-          setCategories([...categories, newCategory])
-          setFormData({ ...formData, category_id: newCategory.id })
-        }}
-      />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Nueva Solicitud de Aporte</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
 
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Nueva Solicitud de Aporte</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X size={24} />
-            </button>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs mb-4">
+          Los aportes se dividen entre participantes. Al aprobar los pagos, el monto se acredita al saldo de cada uno.
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Descripcion
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej: Aporte para caja común"
+            />
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
-              {error}
-            </div>
-          )}
-
-          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs mb-4">
-            Los aportes se dividen entre participantes. Al aprobar los pagos, el monto se acredita al saldo de cada uno.
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Monto (ARS)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={formData.amount_original}
+              onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Los aportes siempre se solicitan en pesos
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripcion
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ej: Aporte para caja común"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monto
-                </label>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Comprobante (opcional)
+            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                <Upload size={20} className="mr-2 text-gray-400" />
+                <span className="text-sm text-gray-600">
+                  {invoiceFile ? invoiceFile.name : 'Seleccionar archivo'}
+                </span>
                 <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.amount_original}
-                  onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
+                  type="file"
+                  onChange={(e) => setInvoiceFile(e.target.files[0])}
+                  className="hidden"
+                  accept="image/*,.pdf"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Moneda
-                </label>
-                {currencyMode === 'DUAL' ? (
-                  <select
-                    value={formData.currency_original}
-                    onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="ARS">ARS</option>
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    disabled
-                    value={currencyMode}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
-                  />
-                )}
-              </div>
-            </div>
-
-            {currencyMode === 'DUAL' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Cambio (opcional)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.exchange_rate_override}
-                  onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Dejar vacio para usar TC automatico"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Si no se especifica, se usa el dolar blue actual
-                </p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoria (opcional)
               </label>
-              <div className="flex gap-2">
-                <select
-                  value={formData.category_id}
-                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Sin definir</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+              {invoiceFile && (
                 <button
                   type="button"
-                  onClick={() => setShowCategoryModal(true)}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  title="Crear nueva categoria"
+                  onClick={() => setInvoiceFile(null)}
+                  className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
-                  <Plus size={20} />
+                  <X size={20} />
                 </button>
-              </div>
+              )}
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha del Aporte
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.expense_date}
-                onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Comprobante (opcional)
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
-                  <Upload size={20} className="mr-2 text-gray-400" />
-                  <span className="text-sm text-gray-600">
-                    {invoiceFile ? invoiceFile.name : 'Seleccionar archivo'}
-                  </span>
-                  <input
-                    type="file"
-                    onChange={(e) => setInvoiceFile(e.target.files[0])}
-                    className="hidden"
-                    accept="image/*,.pdf"
-                  />
-                </label>
-                {invoiceFile && (
-                  <button
-                    type="button"
-                    onClick={() => setInvoiceFile(null)}
-                    className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Creando...' : 'Crear Aporte'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear Aporte'}
+            </button>
+          </div>
+        </form>
       </div>
-    </>
+    </div>
   )
 }
 
