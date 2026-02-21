@@ -99,7 +99,6 @@ export const categoriesAPI = {
 // Expenses API
 export const expensesAPI = {
   list: (filters = {}) => client.get('/expenses', { params: filters }),
-  listContributions: (filters = {}) => client.get('/expenses/contributions/list', { params: filters }),
   get: (id) => client.get(`/expenses/${id}`),
   create: (data) => client.post('/expenses', data),
   update: (id, data) => client.put(`/expenses/${id}`, data),
@@ -114,6 +113,13 @@ export const expensesAPI = {
   },
   downloadInvoice: (id) => client.get(`/expenses/${id}/invoice`, { responseType: 'blob' }),
   markAllPaid: (id, data) => client.post(`/expenses/${id}/mark-all-paid`, data),
+}
+
+// Contributions API
+export const contributionsAPI = {
+  list: () => client.get('/contributions'),
+  get: (id) => client.get(`/contributions/${id}`),
+  create: (data) => client.post('/contributions', data),
 }
 
 // Payments API
@@ -187,24 +193,6 @@ export const notesAPI = {
   vote: (id, data) => client.post(`/notes/${id}/vote`, data),
   resetVote: (noteId, userId) => client.delete(`/notes/${noteId}/vote/${userId}`),
   closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
-}
-
-// Contributions API
-export const contributionsAPI = {
-  create: (data) => client.post('/contributions', data),
-  getMyContributions: () => client.get('/contributions/my'),
-  getPendingContributions: () => client.get('/contributions/pending'),
-  listAll: (statusFilter) => client.get(`/contributions${statusFilter ? `?status_filter=${statusFilter}` : ''}`),
-  approve: (id) => client.put(`/contributions/${id}/approve`),
-  reject: (id, data) => client.put(`/contributions/${id}/reject`, data),
-  uploadReceipt: (id, file) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    return client.post(`/contributions/${id}/receipt`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-  },
-  downloadReceipt: (id) => client.get(`/contributions/${id}/receipt`, { responseType: 'blob' }),
 }
 
 export default client

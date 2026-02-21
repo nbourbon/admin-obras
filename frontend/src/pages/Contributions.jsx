@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { expensesAPI } from '../api/client'
+import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Coins, TrendingUp, Plus, X } from 'lucide-react'
 
@@ -53,19 +53,14 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
     setLoading(true)
 
     try {
-      // Create contribution (expense with is_contribution=true)
-      // Contributions are always in ARS and use current date
-      const expenseData = {
+      // Create contribution using the new Contribution API
+      const contributionData = {
         description: formData.description,
-        amount_original: parseFloat(formData.amount_original),
-        currency_original: 'ARS', // Always ARS for contributions
-        is_contribution: true,
-        expense_date: new Date().toISOString(), // Use current date
-        category_id: null, // No category for contributions
-        provider_id: null, // No provider for contributions
+        amount: parseFloat(formData.amount_original),
+        currency: 'ARS', // Always ARS for now (model supports other currencies)
       }
 
-      await expensesAPI.create(expenseData)
+      await contributionsAPI.create(contributionData)
 
       onCreated()
       onClose()
@@ -175,7 +170,7 @@ export default function Contributions() {
     try {
       setLoading(true)
       setError('')
-      const response = await expensesAPI.listContributions()
+      const response = await contributionsAPI.list()
       setContributions(response.data || [])
     } catch (err) {
       console.error('Error loading contributions:', err)
@@ -285,26 +280,9 @@ export default function Contributions() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Descripción
                   </th>
-                  {currencyMode === 'DUAL' && (
-                    <>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Monto USD
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Monto ARS
-                      </th>
-                    </>
-                  )}
-                  {currencyMode === 'ARS' && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Monto ARS
-                    </th>
-                  )}
-                  {currencyMode === 'USD' && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Monto USD
-                    </th>
-                  )}
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Monto
+                  </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
@@ -317,7 +295,7 @@ export default function Contributions() {
                 {contributions.map((contribution) => (
                   <tr key={contribution.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(contribution.expense_date)}
+                      {formatDate(contribution.created_at)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="flex items-center gap-2">
@@ -325,32 +303,15 @@ export default function Contributions() {
                         <span className="truncate">{contribution.description}</span>
                       </div>
                     </td>
-                    {currencyMode === 'DUAL' && (
-                      <>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
-                          {formatCurrency(contribution.amount_usd, 'USD')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">
-                          {formatCurrency(contribution.amount_ars, 'ARS')}
-                        </td>
-                      </>
-                    )}
-                    {currencyMode === 'ARS' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
-                        {formatCurrency(contribution.amount_ars, 'ARS')}
-                      </td>
-                    )}
-                    {currencyMode === 'USD' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
-                        {formatCurrency(contribution.amount_usd, 'USD')}
-                      </td>
-                    )}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
+                      {formatCurrency(contribution.amount, contribution.currency)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <StatusBadge status={contribution.status} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <Link
-                        to={`/expenses/${contribution.id}`}
+                        to={`/contributions/${contribution.id}`}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
                         Ver detalle
@@ -367,7 +328,7 @@ export default function Contributions() {
             {contributions.map((contribution) => (
               <Link
                 key={contribution.id}
-                to={`/expenses/${contribution.id}`}
+                to={`/contributions/${contribution.id}`}
                 className="block bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-2">
@@ -381,28 +342,9 @@ export default function Contributions() {
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">{formatDate(contribution.expense_date)}</span>
-                  <div className="text-right">
-                    {currencyMode === 'DUAL' && (
-                      <>
-                        <div className="font-semibold text-gray-900">
-                          {formatCurrency(contribution.amount_usd, 'USD')}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {formatCurrency(contribution.amount_ars, 'ARS')}
-                        </div>
-                      </>
-                    )}
-                    {currencyMode === 'ARS' && (
-                      <div className="font-semibold text-gray-900">
-                        {formatCurrency(contribution.amount_ars, 'ARS')}
-                      </div>
-                    )}
-                    {currencyMode === 'USD' && (
-                      <div className="font-semibold text-gray-900">
-                        {formatCurrency(contribution.amount_usd, 'USD')}
-                      </div>
-                    )}
+                  <span className="text-gray-500">{formatDate(contribution.created_at)}</span>
+                  <div className="font-semibold text-gray-900">
+                    {formatCurrency(contribution.amount, contribution.currency)}
                   </div>
                 </div>
               </Link>
