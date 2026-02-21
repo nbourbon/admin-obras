@@ -135,9 +135,19 @@ async def get_dashboard_summary(
 
     if project:
         # Get total approved contributions
+        # Sum based on currency field (Contribution uses generic amount + currency)
+        from app.models.contribution import Currency as ContribCurrency
+        from sqlalchemy import case
+
         contributions_query = db.query(
-            func.sum(Contribution.amount_usd).label("total_usd"),
-            func.sum(Contribution.amount_ars).label("total_ars"),
+            func.sum(case(
+                (Contribution.currency == ContribCurrency.USD, Contribution.amount),
+                else_=0
+            )).label("total_usd"),
+            func.sum(case(
+                (Contribution.currency == ContribCurrency.ARS, Contribution.amount),
+                else_=0
+            )).label("total_ars"),
         ).filter(
             Contribution.project_id == project.id,
             Contribution.status == ContributionStatus.APPROVED,

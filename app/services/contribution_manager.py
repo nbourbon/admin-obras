@@ -276,20 +276,27 @@ def get_contributions_by_participant(
     """
     Get total approved contributions by participant.
 
-    For DUAL mode, all contributions are in ARS, so we sum amount_ars.
-    USD equivalent is calculated in real-time if needed.
+    Sums contributions based on their currency field (generic amount + currency).
     """
-    # Query approved contributions grouped by user
+    from sqlalchemy import case
+
+    # Query approved contributions grouped by user (using created_by, not user_id)
     results = (
         db.query(
-            Contribution.user_id,
-            func.sum(Contribution.amount_usd).label("total_usd"),
-            func.sum(Contribution.amount_ars).label("total_ars"),
+            Contribution.created_by.label("user_id"),
+            func.sum(case(
+                (Contribution.currency == Currency.USD, Contribution.amount),
+                else_=0
+            )).label("total_usd"),
+            func.sum(case(
+                (Contribution.currency == Currency.ARS, Contribution.amount),
+                else_=0
+            )).label("total_ars"),
             func.count(Contribution.id).label("contributions_count"),
         )
         .filter(Contribution.project_id == project_id)
         .filter(Contribution.status == ContributionStatus.APPROVED)
-        .group_by(Contribution.user_id)
+        .group_by(Contribution.created_by)
         .all()
     )
 
