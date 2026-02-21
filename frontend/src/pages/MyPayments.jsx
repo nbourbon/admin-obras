@@ -94,14 +94,22 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
     setLoading(true)
 
     try {
-      // Determine amount and currency based on currency mode
+      // Determine amount and currency based on payment type
       let amountPaid, currencyPaid
-      if (currencyMode === 'ARS') {
-        amountPaid = payment.amount_due_ars
-        currencyPaid = 'ARS'
+
+      if (payment.payment_type === 'contribution') {
+        // Contribution payments have direct amount_due and currency
+        amountPaid = payment.amount_due
+        currencyPaid = payment.currency
       } else {
-        amountPaid = payment.amount_due_usd
-        currencyPaid = 'USD'
+        // Expense payments based on currency mode
+        if (currencyMode === 'ARS') {
+          amountPaid = payment.amount_due_ars
+          currencyPaid = 'ARS'
+        } else {
+          amountPaid = payment.amount_due_usd
+          currencyPaid = 'USD'
+        }
       }
 
       const submitData = {
@@ -110,8 +118,8 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
         payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
       }
 
-      // Include exchange rate override for DUAL mode
-      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+      // Include exchange rate override for DUAL mode (only for expenses)
+      if (payment.payment_type !== 'contribution' && currencyMode === 'DUAL' && formData.exchange_rate_override) {
         submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
       }
 
@@ -160,11 +168,17 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
         )}
 
         <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-          <p className="text-xs sm:text-sm text-gray-500">Gasto</p>
-          <p className="font-medium text-sm sm:text-base break-words">{payment.expense?.description}</p>
+          <p className="text-xs sm:text-sm text-gray-500">
+            {payment.payment_type === 'contribution' ? 'Aporte' : 'Gasto'}
+          </p>
+          <p className="font-medium text-sm sm:text-base break-words">
+            {payment.payment_type === 'contribution' ? payment.description : payment.expense?.description}
+          </p>
           <p className="text-xs sm:text-sm text-gray-500 mt-2">Monto que te corresponde</p>
           <p className="font-semibold text-blue-600 text-sm sm:text-base">
-            {currencyMode === 'ARS'
+            {payment.payment_type === 'contribution'
+              ? formatCurrency(payment.amount_due, payment.currency)
+              : currencyMode === 'ARS'
               ? formatCurrency(payment.amount_due_ars, 'ARS')
               : currencyMode === 'USD'
               ? formatCurrency(payment.amount_due_usd)
@@ -193,7 +207,7 @@ function SubmitPaymentModal({ isOpen, onClose, payment, onSuccess, isIndividual 
             />
           </div>
 
-          {currencyMode === 'DUAL' && (
+          {payment.payment_type !== 'contribution' && currencyMode === 'DUAL' && (
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Tipo de Cambio al momento de pagar (opcional)
