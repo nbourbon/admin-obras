@@ -15,6 +15,11 @@ class DashboardSummary(BaseModel):
     participants_count: int
     current_exchange_rate: Decimal
     currency_mode: Optional[str] = None
+    # Contribution totals
+    total_contributions_usd: Optional[Decimal] = Decimal("0")
+    total_contributions_ars: Optional[Decimal] = Decimal("0")
+    total_balance_usd: Optional[Decimal] = Decimal("0")
+    total_balance_ars: Optional[Decimal] = Decimal("0")
 
 
 class MonthlyExpense(BaseModel):

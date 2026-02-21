@@ -62,6 +62,7 @@ def init_db():
         NoteComment,
         VoteOption,
         UserVote,
+        Contribution,
     )
     Base.metadata.create_all(bind=engine)
 
@@ -116,6 +117,15 @@ def _run_migrations():
                     SELECT created_by FROM projects WHERE projects.id = project_members.project_id
                 )
             ''', 'Set is_admin=TRUE for project creators'))
+        if 'balance_usd' not in members_cols:
+            pending.append(('ALTER TABLE project_members ADD COLUMN balance_usd NUMERIC(15,2) DEFAULT 0 NOT NULL',
+                            'Added balance_usd to project_members'))
+        if 'balance_ars' not in members_cols:
+            pending.append(('ALTER TABLE project_members ADD COLUMN balance_ars NUMERIC(15,2) DEFAULT 0 NOT NULL',
+                            'Added balance_ars to project_members'))
+        if 'balance_updated_at' not in members_cols:
+            pending.append(('ALTER TABLE project_members ADD COLUMN balance_updated_at TIMESTAMP',
+                            'Added balance_updated_at to project_members'))
 
     # --- Expenses table ---
     if expenses_cols:

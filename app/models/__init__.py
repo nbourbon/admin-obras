@@ -9,6 +9,7 @@ from app.models.project_member_history import ProjectMemberHistory
 from app.models.note import Note, NoteParticipant, NoteType
 from app.models.note_comment import NoteComment
 from app.models.vote import VoteOption, UserVote
+from app.models.contribution import Contribution, ContributionStatus
 
 __all__ = [
     "User",
@@ -26,4 +27,6 @@ __all__ = [
     "NoteComment",
     "VoteOption",
     "UserVote",
+    "Contribution",
+    "ContributionStatus",
 ]

@@ -137,6 +137,31 @@ async def save_receipt(file: UploadFile, payment_id: int) -> str:
         return str(file_path.relative_to(get_upload_dir().parent))
 
 
+async def save_contribution_receipt(file: UploadFile, contribution_id: int) -> str:
+    """
+    Save a contribution receipt file and return the path/URL.
+    Uses Cloudinary if configured, otherwise local storage.
+    """
+    validate_file(file)
+
+    filename = generate_unique_filename(file.filename or "contribution_receipt")
+    public_id = f"contribution_{contribution_id}_{filename.rsplit('.', 1)[0]}"
+
+    if cloudinary_configured:
+        url = await upload_to_cloudinary(file, "receipts", public_id)
+        await file.close()
+        return url
+    else:
+        # Local storage fallback
+        file_path = get_receipts_dir() / f"contribution_{contribution_id}_{filename}"
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        finally:
+            await file.close()
+        return str(file_path.relative_to(get_upload_dir().parent))
+
+
 def get_file_path(relative_path: str) -> Optional[Path]:
     """
     Get the absolute path for a file given its relative path.

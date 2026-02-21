@@ -13,6 +13,12 @@ class ProjectMember(Base):
     participation_percentage = Column(Numeric(5, 2), nullable=False, default=0)
     is_admin = Column(Boolean, default=False)  # Admin of this specific project
     is_active = Column(Boolean, default=True)
+
+    # Balance fields for contributions system
+    balance_usd = Column(Numeric(15, 2), default=0, nullable=False)
+    balance_ars = Column(Numeric(15, 2), default=0, nullable=False)
+    balance_updated_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

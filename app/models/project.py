@@ -24,3 +24,4 @@ class Project(Base):
     categories = relationship("Category", back_populates="project")
     expenses = relationship("Expense", back_populates="project")
     notes = relationship("Note", back_populates="project", cascade="all, delete-orphan")
+    contributions = relationship("Contribution", back_populates="project", cascade="all, delete-orphan")

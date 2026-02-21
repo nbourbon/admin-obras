@@ -186,4 +186,22 @@ export const notesAPI = {
   closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
 }
 
+// Contributions API
+export const contributionsAPI = {
+  create: (data) => client.post('/contributions', data),
+  getMyContributions: () => client.get('/contributions/my'),
+  getPendingContributions: () => client.get('/contributions/pending'),
+  listAll: (statusFilter) => client.get(`/contributions${statusFilter ? `?status_filter=${statusFilter}` : ''}`),
+  approve: (id) => client.put(`/contributions/${id}/approve`),
+  reject: (id, data) => client.put(`/contributions/${id}/reject`, data),
+  uploadReceipt: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/contributions/${id}/receipt`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  downloadReceipt: (id) => client.get(`/contributions/${id}/receipt`, { responseType: 'blob' }),
+}
+
 export default client

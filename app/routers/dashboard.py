@@ -18,14 +18,17 @@ from app.schemas.dashboard import (
     ExpenseByProvider,
     ExpenseByCategory,
 )
+from app.schemas.contribution import MemberBalanceResponse, ContributionsByParticipant
 from app.utils.dependencies import get_current_user, get_project_from_header
 from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.contribution import Contribution, ContributionStatus
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync
 from app.services.expense_splitter import get_user_payment_summary
+from app.services.contribution_manager import get_all_member_balances, get_contributions_by_participant
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -122,6 +125,39 @@ async def get_dashboard_summary(
     else:
         current_rate = Decimal("0")
 
+    # Get contribution totals (approved only)
+    total_contributions_usd = Decimal("0")
+    total_contributions_ars = Decimal("0")
+    total_balance_usd = Decimal("0")
+    total_balance_ars = Decimal("0")
+
+    if project:
+        # Get total approved contributions
+        contributions_query = db.query(
+            func.sum(Contribution.amount_usd).label("total_usd"),
+            func.sum(Contribution.amount_ars).label("total_ars"),
+        ).filter(
+            Contribution.project_id == project.id,
+            Contribution.status == ContributionStatus.APPROVED,
+        )
+        contributions_totals = contributions_query.first()
+        total_contributions_usd = Decimal(str(contributions_totals.total_usd or 0))
+        total_contributions_ars = Decimal(str(contributions_totals.total_ars or 0))
+
+        # Get total member balances
+        members_balances = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project.id,
+            ProjectMember.is_active == True,
+        ).all()
+
+        # Sum up balances (for DUAL mode, calculate USD equivalent in real-time)
+        if currency_mode == "DUAL" and current_rate > 0:
+            total_balance_ars = sum(Decimal(str(m.balance_ars)) for m in members_balances)
+            total_balance_usd = (total_balance_ars / current_rate).quantize(Decimal("0.01"))
+        else:
+            total_balance_usd = sum(Decimal(str(m.balance_usd)) for m in members_balances)
+            total_balance_ars = sum(Decimal(str(m.balance_ars)) for m in members_balances)
+
     return DashboardSummary(
         total_expenses_usd=total_expenses_usd,
         total_expenses_ars=total_expenses_ars,
@@ -133,6 +169,10 @@ async def get_dashboard_summary(
         participants_count=participants_count,
         current_exchange_rate=current_rate,
         currency_mode=currency_mode,
+        total_contributions_usd=total_contributions_usd,
+        total_contributions_ars=total_contributions_ars,
+        total_balance_usd=total_balance_usd,
+        total_balance_ars=total_balance_ars,
     )
 
 
@@ -596,6 +636,106 @@ async def export_project_excel(
     for col in [4, 5, 6]:
         ws_participants.column_dimensions[get_column_letter(col)].width = 18
 
+    # === SHEET 4: APORTES ===
+    ws_contributions = wb.create_sheet("Aportes")
+
+    # Get contributions data
+    contributions_data = get_contributions_by_participant(db, project.id)
+
+    # Get current exchange rate for DUAL mode
+    current_tc = Decimal("0")
+    if currency_mode == "DUAL":
+        try:
+            current_tc = fetch_blue_dollar_rate_sync()
+        except:
+            current_tc = Decimal("1000")
+
+    # Headers adapt to currency mode
+    if currency_mode == "ARS":
+        contrib_headers = ["Participante", "Email", "% Participación",
+                          "Total Aportado ARS", "Saldo Actual ARS", "Cantidad de Aportes"]
+    elif currency_mode == "USD":
+        contrib_headers = ["Participante", "Email", "% Participación",
+                          "Total Aportado USD", "Saldo Actual USD", "Cantidad de Aportes"]
+    else:  # DUAL
+        contrib_headers = ["Participante", "Email", "% Participación",
+                          "Total Aportado USD", "Total Aportado ARS",
+                          "Saldo Actual USD", "Saldo Actual ARS", "Cantidad de Aportes"]
+
+    ws_contributions.append(contrib_headers)
+
+    # Style header
+    for col_num, header in enumerate(contrib_headers, 1):
+        cell = ws_contributions.cell(row=1, column=col_num)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+
+    # Add contribution data for each participant
+    for contrib in contributions_data:
+        # Get member balance
+        member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == contrib["user_id"],
+        ).first()
+
+        if currency_mode == "ARS":
+            row = [
+                contrib["user_name"], contrib["user_email"],
+                float(contrib["participation_percentage"]),
+                float(contrib["total_ars"]),
+                float(member.balance_ars) if member else 0,
+                contrib["contributions_count"],
+            ]
+        elif currency_mode == "USD":
+            row = [
+                contrib["user_name"], contrib["user_email"],
+                float(contrib["participation_percentage"]),
+                float(contrib["total_usd"]),
+                float(member.balance_usd) if member else 0,
+                contrib["contributions_count"],
+            ]
+        else:  # DUAL
+            # Calculate balance USD from balance ARS
+            balance_usd = (member.balance_ars / current_tc).quantize(Decimal("0.01")) if member and current_tc > 0 else Decimal("0")
+            row = [
+                contrib["user_name"], contrib["user_email"],
+                float(contrib["participation_percentage"]),
+                float(contrib["total_usd"]),
+                float(contrib["total_ars"]),
+                float(balance_usd),
+                float(member.balance_ars) if member else 0,
+                contrib["contributions_count"],
+            ]
+        ws_contributions.append(row)
+
+    # Format columns
+    for row in ws_contributions.iter_rows(min_row=2, max_row=ws_contributions.max_row):
+        row[2].number_format = '0.00"%"'  # Percentage
+        row[2].alignment = center_align
+
+        if currency_mode == "DUAL":
+            row[3].number_format = currency_format  # Total USD
+            row[4].number_format = currency_format  # Total ARS
+            row[5].number_format = currency_format  # Balance USD
+            row[6].number_format = currency_format  # Balance ARS
+            row[7].alignment = center_align  # Count
+        else:
+            row[3].number_format = currency_format  # Total
+            row[4].number_format = currency_format  # Balance
+            row[5].alignment = center_align  # Count
+
+        for cell in row:
+            cell.border = thin_border
+
+    # Auto-adjust column widths
+    ws_contributions.column_dimensions['A'].width = 25
+    ws_contributions.column_dimensions['B'].width = 30
+    ws_contributions.column_dimensions['C'].width = 18
+    for col in range(4, len(contrib_headers) + 1):
+        ws_contributions.column_dimensions[get_column_letter(col)].width = 18
+
     # Save to BytesIO
     excel_file = BytesIO()
     wb.save(excel_file)
@@ -723,4 +863,71 @@ async def get_expenses_by_category(
             expenses_count=r.expenses_count,
         )
         for r in results
+    ]
+
+
+@router.get("/balances", response_model=List[MemberBalanceResponse])
+async def get_member_balances(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get balances for all members of the current project.
+    For DUAL mode, USD equivalent is calculated in real-time using current exchange rate.
+    """
+    if not project:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="X-Project-ID header is required",
+        )
+
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+    balances_data = get_all_member_balances(db, project.id)
+
+    return [
+        MemberBalanceResponse(
+            user_id=b["user_id"],
+            user_name=b["user_name"],
+            user_email=b["user_email"],
+            participation_percentage=b["participation_percentage"],
+            balance_usd=b["balance_usd"],
+            balance_ars=b["balance_ars"],
+            balance_updated_at=b["balance_updated_at"],
+        )
+        for b in balances_data
+    ]
+
+
+@router.get("/contributions-by-participant", response_model=List[ContributionsByParticipant])
+async def get_contributions_by_participant_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get total approved contributions by participant for the current project.
+    Shows accumulated historical contributions (for pie chart).
+    """
+    if not project:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="X-Project-ID header is required",
+        )
+
+    contributions_data = get_contributions_by_participant(db, project.id)
+
+    return [
+        ContributionsByParticipant(
+            user_id=c["user_id"],
+            user_name=c["user_name"],
+            user_email=c["user_email"],
+            participation_percentage=c["participation_percentage"],
+            total_usd=c["total_usd"],
+            total_ars=c["total_ars"],
+            contributions_count=c["contributions_count"],
+        )
+        for c in contributions_data
     ]

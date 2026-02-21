@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import List, Optional
+from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -46,6 +47,87 @@ def validate_participation_percentages(db: Session, project_id: Optional[int] = 
     return (total == Decimal("100"), total)
 
 
+def check_sufficient_balance(
+    member: ProjectMember,
+    amount_due_usd: Decimal,
+    amount_due_ars: Decimal,
+    currency_mode: str,
+    expense: Expense,
+) -> bool:
+    """
+    Check if member has sufficient balance to auto-pay the expense.
+    Logic "todo o nada": only returns True if balance covers 100% of the amount.
+
+    Currency mode logic:
+    - ARS: check balance_ars >= amount_due_ars
+    - USD: check balance_usd >= amount_due_usd
+    - DUAL: balance is stored ONLY in ARS
+        - If expense is in ARS: check balance_ars >= amount_due_ars
+        - If expense is in USD: convert amount_due_usd to ARS using expense's TC and check balance_ars
+    """
+    if currency_mode == "ARS":
+        return member.balance_ars >= amount_due_ars
+    elif currency_mode == "USD":
+        return member.balance_usd >= amount_due_usd
+    else:  # DUAL
+        # In DUAL mode, balance is ONLY in ARS
+        # We need to check if the ARS balance covers the amount due
+
+        # If expense was in ARS
+        if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
+            return member.balance_ars >= amount_due_ars
+        # If expense was in USD, convert to ARS using expense's TC
+        else:
+            amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
+            return member.balance_ars >= amount_due_ars_equivalent
+
+
+def auto_pay_from_balance(
+    db: Session,
+    expense: Expense,
+    member: ProjectMember,
+    amount_due_usd: Decimal,
+    amount_due_ars: Decimal,
+    currency_mode: str,
+) -> ParticipantPayment:
+    """
+    Create an auto-paid payment record and deduct from member's balance.
+
+    Returns the payment record already marked as paid and approved.
+    The balance deduction happens in the calling function.
+    """
+    now = datetime.utcnow()
+
+    # Determine which amount to use as amount_paid
+    if currency_mode == "USD":
+        amount_paid = amount_due_usd
+        currency_paid = "USD"
+    else:
+        amount_paid = amount_due_ars
+        currency_paid = "ARS"
+
+    payment = ParticipantPayment(
+        expense_id=expense.id,
+        user_id=member.user_id,
+        amount_due_usd=amount_due_usd,
+        amount_due_ars=amount_due_ars,
+        amount_paid=amount_paid,
+        currency_paid=currency_paid,
+        is_paid=True,
+        paid_at=now,
+        payment_date=now,
+        submitted_at=now,
+        approved_at=now,
+        approved_by=expense.created_by,
+        exchange_rate_at_payment=expense.exchange_rate_used,
+        amount_paid_usd=amount_due_usd,
+        amount_paid_ars=amount_due_ars,
+        exchange_rate_source=expense.exchange_rate_source,
+    )
+
+    return payment
+
+
 def create_participant_payments(
     db: Session,
     expense: Expense,
@@ -82,13 +164,42 @@ def create_participant_payments(
             percentage = Decimal(str(member.participation_percentage)) / Decimal("100")
             amount_due_usd, amount_due_ars = calc_amounts(percentage)
 
-            payment = ParticipantPayment(
-                expense_id=expense.id,
-                user_id=member.user_id,
-                amount_due_usd=amount_due_usd,
-                amount_due_ars=amount_due_ars,
-                is_paid=False,
+            # NEW LOGIC: Check if member has sufficient balance to auto-pay
+            has_sufficient_balance = check_sufficient_balance(
+                member, amount_due_usd, amount_due_ars, currency_mode, expense
             )
+
+            if has_sufficient_balance:
+                # Auto-pay from balance
+                payment = auto_pay_from_balance(
+                    db, expense, member, amount_due_usd, amount_due_ars, currency_mode
+                )
+
+                # Deduct from balance according to currency_mode
+                if currency_mode == "ARS":
+                    member.balance_ars -= amount_due_ars
+                elif currency_mode == "USD":
+                    member.balance_usd -= amount_due_usd
+                else:  # DUAL
+                    # In DUAL mode, balance is stored ONLY in ARS
+                    if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
+                        member.balance_ars -= amount_due_ars
+                    else:  # Expense was in USD
+                        # Convert to ARS to deduct
+                        amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
+                        member.balance_ars -= amount_due_ars_equivalent
+
+                member.balance_updated_at = datetime.utcnow()
+            else:
+                # Normal flow: create pending payment
+                payment = ParticipantPayment(
+                    expense_id=expense.id,
+                    user_id=member.user_id,
+                    amount_due_usd=amount_due_usd,
+                    amount_due_ars=amount_due_ars,
+                    is_paid=False,
+                )
+
             db.add(payment)
             payments.append(payment)
     else:
