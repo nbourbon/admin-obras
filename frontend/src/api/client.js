@@ -99,6 +99,7 @@ export const categoriesAPI = {
 // Expenses API
 export const expensesAPI = {
   list: (filters = {}) => client.get('/expenses', { params: filters }),
+  listContributions: (filters = {}) => client.get('/expenses/contributions/list', { params: filters }),
   get: (id) => client.get(`/expenses/${id}`),
   create: (data) => client.post('/expenses', data),
   update: (id, data) => client.put(`/expenses/${id}`, data),
