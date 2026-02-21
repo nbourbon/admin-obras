@@ -33,6 +33,34 @@ class ContributionWithDetails(ContributionResponse):
     created_by_email: Optional[str] = None
     total_participants: int = 0
     paid_participants: int = 0
-    
+
+    class Config:
+        from_attributes = True
+
+
+class MemberBalanceResponse(BaseModel):
+    """Member balance for dashboard display"""
+    user_id: int
+    user_name: str
+    user_email: str
+    participation_percentage: Decimal
+    balance_usd: Decimal
+    balance_ars: Decimal
+    balance_updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ContributionsByParticipant(BaseModel):
+    """Total contributions by participant for pie chart"""
+    user_id: int
+    user_name: str
+    user_email: str
+    participation_percentage: Decimal
+    total_usd: Decimal
+    total_ars: Decimal
+    contributions_count: int
+
     class Config:
         from_attributes = True
