@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown } from 'lucide-react'
+import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, TrendingUp } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -1108,6 +1108,12 @@ function Expenses() {
                         {expense.is_deleted && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
                             ELIMINADO
+                          </span>
+                        )}
+                        {expense.is_contribution && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded flex items-center gap-1">
+                            <TrendingUp size={12} />
+                            APORTE
                           </span>
                         )}
                       </div>

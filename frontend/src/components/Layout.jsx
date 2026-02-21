@@ -15,6 +15,7 @@ import {
   Briefcase,
   ChevronDown,
   FileText,
+  TrendingUp,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -34,6 +35,7 @@ function Layout() {
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/expenses', icon: Receipt, label: 'Gastos' },
+    { to: '/contributions', icon: TrendingUp, label: 'Aportes' },
     { to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' },
     { to: '/notes', icon: FileText, label: 'Notas' },
     { to: '/projects', icon: Briefcase, label: 'Proyectos' },

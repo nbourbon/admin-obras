@@ -36,6 +36,8 @@ function Dashboard() {
   const [evolution, setEvolution] = useState(null)
   const [exchangeRate, setExchangeRate] = useState(null)
   const [byCategory, setByCategory] = useState([])
+  const [balances, setBalances] = useState([])
+  const [contributions, setContributions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
@@ -79,18 +81,22 @@ function Dashboard() {
       setLoading(true)
       const params = getDateParams()
 
-      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes] = await Promise.all([
+      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, balancesRes, contributionsRes] = await Promise.all([
         dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
         dashboardAPI.evolution(params),
         exchangeRateAPI.current().catch(() => null),
         dashboardAPI.expensesByCategory(params),
+        dashboardAPI.balances().catch(() => ({ data: [] })),
+        dashboardAPI.contributionsByParticipant().catch(() => ({ data: [] })),
       ])
 
       setSummary(summaryRes.data)
       setMyStatus(myStatusRes.data)
       setEvolution(evolutionRes.data)
       setByCategory(categoryRes.data)
+      setBalances(balancesRes.data || [])
+      setContributions(contributionsRes.data || [])
       if (rateRes) setExchangeRate(rateRes.data)
     } catch (err) {
       setError('Error al cargar datos del dashboard')
@@ -389,6 +395,125 @@ function Dashboard() {
                     const total = byCategory.reduce((sum, cat) => sum + parseFloat(cat.total_usd), 0)
                     const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
                     return `${value} (${percent}%)`
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Member Balances - Table */}
+      {balances.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Saldos de Participantes</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Participante
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    % Part.
+                  </th>
+                  {currencyMode === 'DUAL' && (
+                    <>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Saldo USD
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Saldo ARS
+                      </th>
+                    </>
+                  )}
+                  {currencyMode === 'ARS' && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Saldo ARS
+                    </th>
+                  )}
+                  {currencyMode === 'USD' && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Saldo USD
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {balances.map((balance) => (
+                  <tr key={balance.user_id}>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {balance.user_name}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-right text-gray-600">
+                      {parseFloat(balance.participation_percentage).toFixed(0)}%
+                    </td>
+                    {currencyMode === 'DUAL' && (
+                      <>
+                        <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
+                          {formatCurrency(balance.balance_usd, 'USD')}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-right text-gray-600">
+                          {formatCurrency(balance.balance_ars, 'ARS')}
+                        </td>
+                      </>
+                    )}
+                    {currencyMode === 'ARS' && (
+                      <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
+                        {formatCurrency(balance.balance_ars, 'ARS')}
+                      </td>
+                    )}
+                    {currencyMode === 'USD' && (
+                      <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
+                        {formatCurrency(balance.balance_usd, 'USD')}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 text-sm text-gray-500">
+            Los saldos se incrementan al aprobar aportes y se descuentan automáticamente al pagar gastos.
+          </div>
+        </div>
+      )}
+
+      {/* Contributions by Participant - Pie Chart */}
+      {contributions.length > 0 && contributions.some(c => c.contributions_count > 0) && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Aportes Totales por Participante</h3>
+          <div className="w-full h-96">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={contributions.filter(c => c.contributions_count > 0).map(contrib => ({
+                    name: contrib.user_name,
+                    value: parseFloat(currencyMode === 'ARS' ? contrib.total_ars : contrib.total_usd),
+                    count: contrib.contributions_count,
+                  }))}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={130}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {contributions.map((entry, index) => {
+                    const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  })}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value, entry) => {
+                    const total = contributions.reduce((sum, c) => sum + parseFloat(currencyMode === 'ARS' ? c.total_ars : c.total_usd), 0)
+                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
+                    return `${value} (${percent}%) - ${entry.payload.count} aportes`
                   }}
                 />
               </PieChart>

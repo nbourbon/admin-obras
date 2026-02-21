@@ -7,6 +7,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Expenses from './pages/Expenses'
 import ExpenseDetail from './pages/ExpenseDetail'
+import Contributions from './pages/Contributions'
 import MyPayments from './pages/MyPayments'
 import PendingApprovals from './pages/PendingApprovals'
 import Users from './pages/Users'
@@ -66,6 +67,7 @@ function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="expenses/:id" element={<ExpenseDetail />} />
+        <Route path="contributions" element={<Contributions />} />
         <Route path="my-payments" element={<MyPayments />} />
         <Route path="notes" element={<Notes />} />
         <Route path="notes/:id" element={<NoteDetail />} />
