@@ -125,6 +125,7 @@ export const contributionsAPI = {
 // Payments API
 export const paymentsAPI = {
   myPayments: (pendingOnly = false) => client.get(`/payments/my?pending_only=${pendingOnly}`),
+  myAllPayments: (pendingOnly = false) => client.get(`/payments/my-all?pending_only=${pendingOnly}`),
   get: (id) => client.get(`/payments/${id}`),
   markPaid: (id, data) => client.put(`/payments/${id}/mark-paid`, data),
   submitPayment: (id, data) => client.put(`/payments/${id}/submit-payment`, data),

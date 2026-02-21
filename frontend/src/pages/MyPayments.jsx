@@ -14,7 +14,8 @@ import {
   Eye,
   Trash2,
   Filter,
-  ChevronDown
+  ChevronDown,
+  TrendingUp
 } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
 
@@ -291,8 +292,8 @@ function MyPayments() {
   const loadPayments = async () => {
     try {
       setLoading(true)
-      // Load ALL payments at once
-      const response = await paymentsAPI.myPayments(false)
+      // Load ALL payments at once (expenses + contributions)
+      const response = await paymentsAPI.myAllPayments(false)
       setAllPayments(response.data)
     } catch (err) {
       console.error('Error loading payments:', err)
@@ -410,7 +411,10 @@ function MyPayments() {
     else if (filter === 'paid') base = paidPayments
 
     return base.filter((payment) => {
-      const date = payment.expense?.expense_date
+      // Handle both expense and contribution payments
+      const date = payment.payment_type === 'contribution'
+        ? payment.created_at  // Contributions use created_at
+        : payment.expense?.expense_date  // Expenses use expense_date
       if (filterDateFrom && date && date < filterDateFrom) return false
       if (filterDateTo && date && date > filterDateTo + 'T23:59:59') return false
       return true
@@ -518,23 +522,47 @@ function MyPayments() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <Link
-                      to={`/expenses/${payment.expense_id}`}
-                      className="text-lg font-medium text-blue-600 hover:text-blue-800"
-                    >
-                      {payment.expense?.description}
-                    </Link>
+                    {payment.payment_type === 'contribution' ? (
+                      <Link
+                        to={`/contributions/${payment.contribution_id}`}
+                        className="text-lg font-medium text-green-600 hover:text-green-800"
+                      >
+                        {payment.description}
+                      </Link>
+                    ) : (
+                      <Link
+                        to={`/expenses/${payment.expense_id}`}
+                        className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        {payment.expense?.description || payment.description}
+                      </Link>
+                    )}
                     <PaymentStatusBadge payment={payment} />
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <span>{payment.expense?.provider_name || 'Sin definir'}</span>
-                    <span>{payment.expense?.category_name || 'Sin definir'}</span>
-                    <span>{formatDate(payment.expense?.expense_date)}</span>
+                    {payment.payment_type === 'contribution' ? (
+                      <>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          <TrendingUp size={12} />
+                          Aporte
+                        </span>
+                        <span>Solicitado por {payment.created_by_name}</span>
+                        <span>{formatDate(payment.created_at)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{payment.expense?.provider_name || payment.provider_name || 'Sin definir'}</span>
+                        <span>{payment.expense?.category_name || payment.category_name || 'Sin definir'}</span>
+                        <span>{formatDate(payment.expense?.expense_date || payment.expense_date)}</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  {currencyMode === 'ARS' ? (
+                  {payment.payment_type === 'contribution' ? (
+                    <p className="text-lg font-bold">{formatCurrency(payment.amount_due, payment.currency)}</p>
+                  ) : currencyMode === 'ARS' ? (
                     <p className="text-lg font-bold">{formatCurrency(payment.amount_due_ars, 'ARS')}</p>
                   ) : currencyMode === 'USD' ? (
                     <p className="text-lg font-bold">{formatCurrency(payment.amount_due_usd)}</p>
