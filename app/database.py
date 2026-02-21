@@ -213,6 +213,58 @@ def _run_migrations():
             pending.append(('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL',
                             'Made password_hash nullable'))
 
+    # --- Contributions table ---
+    contributions_cols = get_cols('contributions')
+    if contributions_cols:
+        # Migrate from old schema (amount_usd, amount_ars) to new schema (amount, currency)
+        if 'amount' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN amount NUMERIC(15,2)',
+                            'Added amount to contributions'))
+        if 'currency' not in contributions_cols:
+            pending.append(("ALTER TABLE contributions ADD COLUMN currency VARCHAR(10) DEFAULT 'ARS'",
+                            'Added currency to contributions'))
+
+        # Drop old columns if they exist
+        if 'amount_usd' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS amount_usd',
+                            'Removed amount_usd from contributions'))
+        if 'amount_ars' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS amount_ars',
+                            'Removed amount_ars from contributions'))
+        if 'amount_original' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS amount_original',
+                            'Removed amount_original from contributions'))
+        if 'currency_original' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS currency_original',
+                            'Removed currency_original from contributions'))
+        if 'exchange_rate_used' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS exchange_rate_used',
+                            'Removed exchange_rate_used from contributions'))
+        if 'exchange_rate_source' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS exchange_rate_source',
+                            'Removed exchange_rate_source from contributions'))
+        if 'contribution_date' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS contribution_date',
+                            'Removed contribution_date from contributions'))
+        if 'approved_by' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS approved_by',
+                            'Removed approved_by from contributions'))
+        if 'approved_at' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS approved_at',
+                            'Removed approved_at from contributions'))
+        if 'rejected_at' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS rejected_at',
+                            'Removed rejected_at from contributions'))
+        if 'rejection_reason' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS rejection_reason',
+                            'Removed rejection_reason from contributions'))
+        if 'receipt_file_path' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS receipt_file_path',
+                            'Removed receipt_file_path from contributions'))
+        if 'user_id' in contributions_cols:
+            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS user_id',
+                            'Removed user_id from contributions (use created_by)'))
+
     # Execute all pending migrations
     if not pending:
         print("Migrations: All up to date (0 queries)")
