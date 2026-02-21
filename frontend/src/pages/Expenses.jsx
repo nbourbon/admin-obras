@@ -727,30 +727,32 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
           {/* Only show provider field for regular expenses, not contributions */}
           {!formData.is_contribution && (
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Proveedor (opcional)
-            </label>
-            <div className="flex gap-2">
-              <select
-                value={formData.provider_id}
-                onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sin definir</option>
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setShowProviderModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                title="Crear nuevo proveedor"
-              >
-                <Plus size={20} />
-              </button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Proveedor (opcional)
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={formData.provider_id}
+                  onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Sin definir</option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowProviderModal(true)}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="Crear nuevo proveedor"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
