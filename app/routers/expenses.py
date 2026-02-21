@@ -33,12 +33,14 @@ async def list_expenses(
     from_date: Optional[datetime] = Query(None, description="Filter from date"),
     to_date: Optional[datetime] = Query(None, description="Filter to date"),
     include_deleted: bool = Query(False, description="Include deleted expenses (admin only)"),
+    include_contributions: bool = Query(False, description="Include contribution requests"),
     skip: int = 0,
     limit: int = 100,
 ):
     """
     List all expenses for the current project with optional filters.
-    By default, deleted expenses are excluded. Admins can include them with include_deleted=true.
+    By default, deleted expenses and contribution requests are excluded.
+    Use include_contributions=true to include contribution requests.
     """
     query = (
         db.query(Expense)
@@ -51,6 +53,10 @@ async def list_expenses(
     # Filter deleted expenses unless admin specifically requests them
     if not include_deleted:
         query = query.filter(Expense.is_deleted == False)
+
+    # Filter contribution requests unless specifically requested
+    if not include_contributions:
+        query = query.filter(Expense.is_contribution == False)
 
     if provider_id:
         query = query.filter(Expense.provider_id == provider_id)
@@ -231,6 +237,47 @@ async def create_expense(
     }
 
     return ExpenseWithPayments(**response_data)
+
+
+@router.get("/contributions/list", response_model=List[ExpenseResponse])
+async def list_contribution_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+    status_filter: Optional[str] = Query(None, description="Filter by status"),
+    from_date: Optional[datetime] = Query(None, description="Filter from date"),
+    to_date: Optional[datetime] = Query(None, description="Filter to date"),
+    skip: int = 0,
+    limit: int = 100,
+):
+    """
+    List all contribution requests for the current project.
+    Contribution requests are expenses with is_contribution=True.
+    """
+    query = (
+        db.query(Expense)
+        .options(joinedload(Expense.provider), joinedload(Expense.category))
+        .filter(Expense.is_contribution == True)
+        .filter(Expense.is_deleted == False)
+    )
+
+    if project:
+        query = query.filter(Expense.project_id == project.id)
+
+    if status_filter:
+        query = query.filter(Expense.status == status_filter)
+    if from_date:
+        query = query.filter(Expense.expense_date >= from_date)
+    if to_date:
+        query = query.filter(Expense.expense_date <= to_date)
+
+    return (
+        query
+        .order_by(Expense.expense_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/{expense_id}", response_model=ExpenseWithPayments)

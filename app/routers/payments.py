@@ -427,6 +427,33 @@ async def approve_payment(
         payment.approved_by = current_user.id
         payment.approved_at = datetime.utcnow()
         payment.rejection_reason = None
+
+        # NEW LOGIC: If this is a contribution (not a regular expense), credit the balance
+        if expense and expense.is_contribution:
+            from app.models.project_member import ProjectMember
+            from app.models.project import Project
+
+            # Get project and member
+            project = db.query(Project).filter(Project.id == expense.project_id).first()
+            member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == expense.project_id,
+                ProjectMember.user_id == payment.user_id,
+            ).first()
+
+            if member and project:
+                currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+                # Credit balance according to currency_mode
+                if currency_mode == "ARS":
+                    member.balance_ars += payment.amount_due_ars
+                elif currency_mode == "USD":
+                    member.balance_usd += payment.amount_due_usd
+                else:  # DUAL
+                    # In DUAL mode, balance is stored ONLY in ARS
+                    member.balance_ars += payment.amount_due_ars
+
+                member.balance_updated_at = datetime.utcnow()
+                print(f"[DEBUG approve_payment] Contribution approved: credited {payment.amount_due_ars} ARS to user {payment.user_id}")
     else:
         # Reject the payment
         payment.is_pending_approval = False

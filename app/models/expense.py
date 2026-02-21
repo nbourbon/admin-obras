@@ -54,6 +54,9 @@ class Expense(Base):
     # Status
     status = Column(Enum(ExpenseStatus), default=ExpenseStatus.PENDING)
 
+    # Contribution flag - True if this is a contribution request (goes to cash pool), False if it's a regular expense
+    is_contribution = Column(Boolean, default=False, nullable=False)
+
     # Soft delete
     is_deleted = Column(Boolean, default=False, nullable=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)

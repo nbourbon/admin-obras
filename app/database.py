@@ -139,6 +139,9 @@ def _run_migrations():
         if 'exchange_rate_source' not in expenses_cols:
             pending.append(('ALTER TABLE expenses ADD COLUMN exchange_rate_source VARCHAR(50)',
                             'Added exchange_rate_source to expenses'))
+        if 'is_contribution' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN is_contribution BOOLEAN DEFAULT FALSE NOT NULL',
+                            'Added is_contribution to expenses'))
 
     # --- Participant payments table ---
     if payments_cols:

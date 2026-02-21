@@ -14,6 +14,7 @@ class ExpenseBase(BaseModel):
     provider_id: Optional[int] = None
     category_id: Optional[int] = None
     expense_date: Optional[datetime] = None
+    is_contribution: Optional[bool] = False  # True if this is a contribution request
 
 
 class ExpenseCreate(ExpenseBase):
@@ -28,6 +29,7 @@ class ExpenseUpdate(BaseModel):
     category_id: Optional[int] = None
     expense_date: Optional[datetime] = None
     exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
+    is_contribution: Optional[bool] = None
 
 
 class ExpenseResponse(BaseModel):
@@ -44,6 +46,7 @@ class ExpenseResponse(BaseModel):
     created_by: int
     invoice_file_path: Optional[str] = None
     status: ExpenseStatus
+    is_contribution: bool = False
     expense_date: datetime
     created_at: datetime
     updated_at: Optional[datetime] = None
