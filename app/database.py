@@ -142,11 +142,15 @@ def _run_migrations():
         if 'is_contribution' not in expenses_cols:
             pending.append(('ALTER TABLE expenses ADD COLUMN is_contribution BOOLEAN DEFAULT FALSE NOT NULL',
                             'Added is_contribution to expenses'))
-        # Make provider_id nullable (needed for contributions which don't have a provider)
+        # Make provider_id and category_id nullable (needed for contributions which don't have these)
         provider_id_col = expenses_cols.get('provider_id')
         if provider_id_col and not provider_id_col.get('nullable', True):
             pending.append(('ALTER TABLE expenses ALTER COLUMN provider_id DROP NOT NULL',
-                            'Made provider_id nullable for contributions'))
+                            'Made provider_id nullable'))
+        category_id_col = expenses_cols.get('category_id')
+        if category_id_col and not category_id_col.get('nullable', True):
+            pending.append(('ALTER TABLE expenses ALTER COLUMN category_id DROP NOT NULL',
+                            'Made category_id nullable'))
 
     # --- Participant payments table ---
     if payments_cols:
@@ -169,6 +173,15 @@ def _run_migrations():
                             'Added amount_paid_ars to participant_payments'))
             pending.append(('ALTER TABLE participant_payments ADD COLUMN exchange_rate_source VARCHAR(50)',
                             'Added exchange_rate_source to participant_payments'))
+        # Add contribution_id column for contribution payments
+        if 'contribution_id' not in payments_cols:
+            pending.append(('ALTER TABLE participant_payments ADD COLUMN contribution_id INTEGER REFERENCES contributions(id)',
+                            'Added contribution_id to participant_payments'))
+        # Make expense_id nullable (payment can be for expense OR contribution)
+        expense_id_col = payments_cols.get('expense_id')
+        if expense_id_col and not expense_id_col.get('nullable', True):
+            pending.append(('ALTER TABLE participant_payments ALTER COLUMN expense_id DROP NOT NULL',
+                            'Made expense_id nullable for contribution payments'))
 
     # --- Notes table ---
     if notes_cols:

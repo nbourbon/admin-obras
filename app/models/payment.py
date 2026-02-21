@@ -10,8 +10,9 @@ class ParticipantPayment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Foreign keys
-    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=False)
+    # Foreign keys (payment can be for an expense OR a contribution)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)
+    contribution_id = Column(Integer, ForeignKey("contributions.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Amount due (based on participation %)
@@ -52,6 +53,7 @@ class ParticipantPayment(Base):
 
     # Relationships
     expense = relationship("Expense", back_populates="participant_payments")
+    contribution = relationship("Contribution", back_populates="participant_payments")
     user = relationship("User", back_populates="payments", foreign_keys=[user_id])
     approver = relationship("User", foreign_keys=[approved_by])
 
