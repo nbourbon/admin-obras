@@ -142,6 +142,11 @@ def _run_migrations():
         if 'is_contribution' not in expenses_cols:
             pending.append(('ALTER TABLE expenses ADD COLUMN is_contribution BOOLEAN DEFAULT FALSE NOT NULL',
                             'Added is_contribution to expenses'))
+        # Make provider_id nullable (needed for contributions which don't have a provider)
+        provider_id_col = expenses_cols.get('provider_id')
+        if provider_id_col and not provider_id_col.get('nullable', True):
+            pending.append(('ALTER TABLE expenses ALTER COLUMN provider_id DROP NOT NULL',
+                            'Made provider_id nullable for contributions'))
 
     # --- Participant payments table ---
     if payments_cols:
