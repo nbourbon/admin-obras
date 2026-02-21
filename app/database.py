@@ -216,6 +216,14 @@ def _run_migrations():
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')
     if contributions_cols:
+        # Rename user_id to created_by if needed
+        if 'user_id' in contributions_cols and 'created_by' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions RENAME COLUMN user_id TO created_by',
+                            'Renamed user_id to created_by in contributions'))
+        elif 'created_by' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN created_by INTEGER REFERENCES users(id)',
+                            'Added created_by to contributions'))
+
         # Migrate from old schema (amount_usd, amount_ars) to new schema (amount, currency)
         if 'amount' not in contributions_cols:
             pending.append(('ALTER TABLE contributions ADD COLUMN amount NUMERIC(15,2)',
@@ -261,9 +269,6 @@ def _run_migrations():
         if 'receipt_file_path' in contributions_cols:
             pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS receipt_file_path',
                             'Removed receipt_file_path from contributions'))
-        if 'user_id' in contributions_cols:
-            pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS user_id',
-                            'Removed user_id from contributions (use created_by)'))
 
     # Execute all pending migrations
     if not pending:
