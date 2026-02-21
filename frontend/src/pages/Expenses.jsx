@@ -532,7 +532,6 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     category_id: '',
     expense_date: new Date().toISOString().split('T')[0], // Default to today
     exchange_rate_override: '',
-    is_contribution: false, // NEW: Flag for contribution requests
   })
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -571,7 +570,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
         expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
-        is_contribution: formData.is_contribution, // NEW: Include contribution flag
+        is_contribution: false, // Regular expense, not a contribution
       }
       // Only send exchange_rate_override if user entered a value (DUAL mode)
       if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
@@ -599,7 +598,6 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         category_id: '',
         expense_date: new Date().toISOString().split('T')[0],
         exchange_rate_override: '',
-        is_contribution: false,
       })
       setInvoiceFile(null)
     } catch (err) {
@@ -615,9 +613,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">
-            {formData.is_contribution ? 'Nueva Solicitud de Aporte' : 'Nuevo Gasto'}
-          </h2>
+          <h2 className="text-xl font-bold">Nuevo Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
           </button>
@@ -640,32 +636,9 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={formData.is_contribution ? "Ej: Aporte para caja común" : "Ej: Materiales para estructura"}
+              placeholder="Ej: Materiales para estructura"
             />
           </div>
-
-          {/* NEW: Toggle for contribution request */}
-          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <input
-              type="checkbox"
-              id="is_contribution"
-              checked={formData.is_contribution}
-              onChange={(e) => setFormData({
-                ...formData,
-                is_contribution: e.target.checked,
-                provider_id: e.target.checked ? '' : formData.provider_id // Clear provider if contribution
-              })}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="is_contribution" className="text-sm font-medium text-blue-900 cursor-pointer">
-              Es solicitud de aporte a la caja común
-            </label>
-          </div>
-          {formData.is_contribution && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs">
-              Los aportes se dividen entre participantes. Al aprobar los pagos, el monto se acredita al saldo de cada uno.
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -725,34 +698,31 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
             </div>
           )}
 
-          {/* Only show provider field for regular expenses, not contributions */}
-          {!formData.is_contribution && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Proveedor (opcional)
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={formData.provider_id}
-                  onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Sin definir</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setShowProviderModal(true)}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  title="Crear nuevo proveedor"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Proveedor (opcional)
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.provider_id}
+                onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowProviderModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nuevo proveedor"
+              >
+                <Plus size={20} />
+              </button>
             </div>
-          )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -836,7 +806,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               disabled={loading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Creando...' : (formData.is_contribution ? 'Crear Solicitud de Aporte' : 'Crear Gasto')}
+              {loading ? 'Creando...' : 'Crear Gasto'}
             </button>
           </div>
         </form>
