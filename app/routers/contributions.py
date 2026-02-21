@@ -9,10 +9,9 @@ from app.schemas.contribution import ContributionCreate, ContributionResponse, C
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.contribution import Contribution, Currency
-from app.models.payment import ParticipantPayment
+from app.models.contribution_payment import ContributionPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
-from app.services.expense_splitter import create_participant_payments, update_expense_status
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -44,10 +43,10 @@ async def list_contributions(
     # Add payment stats to each contribution
     result = []
     for contrib in contributions:
-        payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.contribution_id == contrib.id
+        payments = db.query(ContributionPayment).filter(
+            ContributionPayment.contribution_id == contrib.id
         ).all()
-        
+
         result.append(ContributionWithDetails(
             **contrib.__dict__,
             created_by_name=contrib.created_by_user.full_name,
@@ -74,12 +73,12 @@ async def get_contribution(
     
     if project and contribution.project_id != project.id:
         raise HTTPException(status_code=403, detail="Contribution belongs to different project")
-    
+
     # Get payment stats
-    payments = db.query(ParticipantPayment).filter(
-        ParticipantPayment.contribution_id == contribution.id
+    payments = db.query(ContributionPayment).filter(
+        ContributionPayment.contribution_id == contribution.id
     ).all()
-    
+
     return ContributionWithDetails(
         **contribution.__dict__,
         created_by_name=contribution.created_by_user.full_name,
@@ -115,7 +114,7 @@ async def create_contribution(
     db.add(contribution)
     db.flush()  # Get the ID
 
-    # Create participant payments (split among all active members)
+    # Create contribution payments (split among all active members)
     members = db.query(ProjectMember).filter(
         ProjectMember.project_id == project.id,
         ProjectMember.is_active == True
@@ -125,12 +124,10 @@ async def create_contribution(
         percentage = member.participation_percentage / Decimal(100)
         amount_due = (contribution_data.amount * percentage).quantize(Decimal("0.01"))
 
-        payment = ParticipantPayment(
+        payment = ContributionPayment(
             contribution_id=contribution.id,
             user_id=member.user_id,
-            # For contributions, amounts are in a single currency
-            amount_due_usd=amount_due if contribution_data.currency == Currency.USD else Decimal(0),
-            amount_due_ars=amount_due if contribution_data.currency == Currency.ARS else Decimal(0),
+            amount_due=amount_due,
             is_paid=False,
         )
         db.add(payment)

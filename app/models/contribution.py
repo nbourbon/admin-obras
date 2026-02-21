@@ -40,4 +40,4 @@ class Contribution(Base):
     # Relationships
     project = relationship("Project", back_populates="contributions")
     created_by_user = relationship("User", foreign_keys=[created_by])
-    participant_payments = relationship("ParticipantPayment", back_populates="contribution", cascade="all, delete-orphan")
+    payments = relationship("ContributionPayment", back_populates="contribution", cascade="all, delete-orphan")

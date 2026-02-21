@@ -63,6 +63,7 @@ def init_db():
         VoteOption,
         UserVote,
         Contribution,
+        ContributionPayment,
     )
     Base.metadata.create_all(bind=engine)
 
@@ -173,15 +174,6 @@ def _run_migrations():
                             'Added amount_paid_ars to participant_payments'))
             pending.append(('ALTER TABLE participant_payments ADD COLUMN exchange_rate_source VARCHAR(50)',
                             'Added exchange_rate_source to participant_payments'))
-        # Add contribution_id column for contribution payments
-        if 'contribution_id' not in payments_cols:
-            pending.append(('ALTER TABLE participant_payments ADD COLUMN contribution_id INTEGER REFERENCES contributions(id)',
-                            'Added contribution_id to participant_payments'))
-        # Make expense_id nullable (payment can be for expense OR contribution)
-        expense_id_col = payments_cols.get('expense_id')
-        if expense_id_col and not expense_id_col.get('nullable', True):
-            pending.append(('ALTER TABLE participant_payments ALTER COLUMN expense_id DROP NOT NULL',
-                            'Made expense_id nullable for contribution payments'))
 
     # --- Notes table ---
     if notes_cols:

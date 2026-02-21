@@ -67,10 +67,12 @@ async def get_dashboard_summary(
     expenses_count = expense_totals.count or 0
 
     # Get payment totals (filter by project through expense, exclude deleted)
+    # Only count expense payments, not contribution payments
     paid_query = db.query(
         func.sum(ParticipantPayment.amount_due_usd).label("paid_usd"),
         func.sum(ParticipantPayment.amount_due_ars).label("paid_ars"),
     ).join(Expense).filter(
+        ParticipantPayment.expense_id.isnot(None),  # Only expense payments
         ParticipantPayment.is_paid == True,
         ParticipantPayment.is_deleted == False,
         Expense.is_deleted == False,

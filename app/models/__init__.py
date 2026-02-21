@@ -10,6 +10,7 @@ from app.models.note import Note, NoteParticipant, NoteType
 from app.models.note_comment import NoteComment
 from app.models.vote import VoteOption, UserVote
 from app.models.contribution import Contribution, ContributionStatus
+from app.models.contribution_payment import ContributionPayment
 
 __all__ = [
     "User",
@@ -29,4 +30,5 @@ __all__ = [
     "UserVote",
     "Contribution",
     "ContributionStatus",
+    "ContributionPayment",
 ]
