@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { expensesAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X, Upload } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -40,7 +40,6 @@ function StatusBadge({ status }) {
 }
 
 function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
-  const [invoiceFile, setInvoiceFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -66,12 +65,7 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
         provider_id: null, // No provider for contributions
       }
 
-      const response = await expensesAPI.create(expenseData)
-
-      // Upload invoice if provided
-      if (invoiceFile) {
-        await expensesAPI.uploadInvoice(response.data.id, invoiceFile)
-      }
+      await expensesAPI.create(expenseData)
 
       onCreated()
       onClose()
@@ -80,7 +74,6 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
         description: '',
         amount_original: '',
       })
-      setInvoiceFile(null)
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al crear solicitud de aporte')
     } finally {
@@ -141,35 +134,6 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
             <p className="mt-1 text-xs text-gray-500">
               Los aportes siempre se solicitan en pesos
             </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Comprobante (opcional)
-            </label>
-            <div className="flex items-center gap-2">
-              <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
-                <Upload size={20} className="mr-2 text-gray-400" />
-                <span className="text-sm text-gray-600">
-                  {invoiceFile ? invoiceFile.name : 'Seleccionar archivo'}
-                </span>
-                <input
-                  type="file"
-                  onChange={(e) => setInvoiceFile(e.target.files[0])}
-                  className="hidden"
-                  accept="image/*,.pdf"
-                />
-              </label>
-              {invoiceFile && (
-                <button
-                  type="button"
-                  onClick={() => setInvoiceFile(null)}
-                  className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              )}
-            </div>
           </div>
 
           <div className="flex gap-3 pt-2">
