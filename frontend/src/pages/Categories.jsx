@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { categoriesAPI } from '../api/client'
-import { FolderOpen, Plus, Edit2, Trash2, X, Palette } from 'lucide-react'
+import { categoriesAPI, rubrosAPI } from '../api/client'
+import { FolderOpen, Plus, Edit2, Trash2, X, Tag } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -16,11 +16,12 @@ const CATEGORY_COLORS = [
   { name: 'Gris', value: '#F3F4F6', bg: 'bg-gray-100', border: 'border-gray-300' },
 ]
 
-function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
+function CategoryModal({ isOpen, onClose, onSuccess, category = null, rubros = [] }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     color: null,
+    rubroIds: [],
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -31,11 +32,21 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
         name: category.name,
         description: category.description || '',
         color: category.color || null,
+        rubroIds: category.rubros ? category.rubros.map(r => r.id) : [],
       })
     } else {
-      setFormData({ name: '', description: '', color: null })
+      setFormData({ name: '', description: '', color: null, rubroIds: [] })
     }
-  }, [category])
+  }, [category, isOpen])
+
+  const toggleRubro = (rubroId) => {
+    setFormData(prev => ({
+      ...prev,
+      rubroIds: prev.rubroIds.includes(rubroId)
+        ? prev.rubroIds.filter(id => id !== rubroId)
+        : [...prev.rubroIds, rubroId],
+    }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -43,10 +54,16 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
     setLoading(true)
 
     try {
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        color: formData.color,
+        rubro_ids: formData.rubroIds,
+      }
       if (category) {
-        await categoriesAPI.update(category.id, formData)
+        await categoriesAPI.update(category.id, payload)
       } else {
-        await categoriesAPI.create(formData)
+        await categoriesAPI.create(payload)
       }
       onSuccess()
       onClose()
@@ -61,7 +78,7 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">
             {category ? 'Editar Categoria' : 'Nueva Categoria'}
@@ -133,6 +150,38 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
             </p>
           </div>
 
+          {rubros.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Rubros asociados
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                {formData.rubroIds.length === 0
+                  ? 'Sin seleccionar — la categoria sera generica (visible en todos los rubros)'
+                  : 'Solo visible cuando se seleccione uno de estos rubros'}
+              </p>
+              <div className="space-y-1 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                {rubros.map(rubro => (
+                  <label key={rubro.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.rubroIds.includes(rubro.id)}
+                      onChange={() => toggleRubro(rubro.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{rubro.name}</span>
+                  </label>
+                ))}
+              </div>
+              {formData.rubroIds.length === 0 && (
+                <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                  <Tag size={12} />
+                  Generica (aparece en todos los rubros)
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -157,20 +206,25 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null }) {
 
 function Categories() {
   const [categories, setCategories] = useState([])
+  const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
 
   useEffect(() => {
-    loadCategories()
+    loadData()
   }, [])
 
-  const loadCategories = async () => {
+  const loadData = async () => {
     try {
-      const response = await categoriesAPI.list()
-      setCategories(response.data)
+      const [categoriesRes, rubrosRes] = await Promise.all([
+        categoriesAPI.list(),
+        rubrosAPI.list(),
+      ])
+      setCategories(categoriesRes.data)
+      setRubros(rubrosRes.data)
     } catch (err) {
-      console.error('Error loading categories:', err)
+      console.error('Error loading data:', err)
     } finally {
       setLoading(false)
     }
@@ -191,7 +245,7 @@ function Categories() {
 
     try {
       await categoriesAPI.delete(categoryId)
-      loadCategories()
+      loadData()
     } catch (err) {
       console.error('Error deleting category:', err)
     }
@@ -244,6 +298,20 @@ function Categories() {
                         {category.description}
                       </p>
                     )}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {category.rubros && category.rubros.length > 0 ? (
+                        category.rubros.map(r => (
+                          <span key={r.id} className="px-2 py-0.5 bg-white bg-opacity-70 border border-gray-300 text-gray-600 text-xs rounded-full">
+                            {r.name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="px-2 py-0.5 bg-white bg-opacity-70 border border-blue-200 text-blue-600 text-xs rounded-full flex items-center gap-1">
+                          <Tag size={10} />
+                          Generica
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -269,8 +337,9 @@ function Categories() {
       <CategoryModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        onSuccess={loadCategories}
+        onSuccess={loadData}
         category={selectedCategory}
+        rubros={rubros}
       />
     </div>
   )

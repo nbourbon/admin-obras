@@ -51,6 +51,7 @@ def init_db():
         User,
         Provider,
         Category,
+        Rubro,
         Expense,
         ParticipantPayment,
         ExchangeRateLog,
@@ -271,6 +272,18 @@ def _run_migrations():
         if 'rejection_reason' not in contribution_payments_cols:
             pending.append(('ALTER TABLE contribution_payments ADD COLUMN rejection_reason VARCHAR(500)',
                             'Added rejection_reason to contribution_payments'))
+
+    # --- Category rubros table (many-to-many) ---
+    if 'category_rubros' not in table_names:
+        pending.append(('''
+            CREATE TABLE IF NOT EXISTS category_rubros (
+                category_id INTEGER NOT NULL,
+                rubro_id INTEGER NOT NULL,
+                PRIMARY KEY (category_id, rubro_id),
+                FOREIGN KEY (category_id) REFERENCES categories(id),
+                FOREIGN KEY (rubro_id) REFERENCES rubros(id)
+            )
+        ''', 'Created category_rubros table'))
 
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')

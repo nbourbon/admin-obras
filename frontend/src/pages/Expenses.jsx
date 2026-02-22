@@ -241,12 +241,14 @@ function QuickCreateRubroModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
+function QuickCreateCategoryModal({ isOpen, onClose, onCreated, selectedRubroId = null, rubros = [] }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const selectedRubroName = rubros.find(r => r.id === selectedRubroId)?.name
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -254,7 +256,12 @@ function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
     setLoading(true)
 
     try {
-      const response = await categoriesAPI.create({ name, description, color })
+      const response = await categoriesAPI.create({
+        name,
+        description,
+        color,
+        rubro_ids: selectedRubroId ? [selectedRubroId] : [],
+      })
       onCreated(response.data)
       onClose()
       setName('')
@@ -278,6 +285,16 @@ function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
             <X size={20} />
           </button>
         </div>
+
+        {selectedRubroId ? (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2 rounded-lg text-sm mb-3">
+            Se asignara al rubro: <strong>{selectedRubroName}</strong>
+          </div>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm mb-3">
+            Sin rubro seleccionado — sera una categoria generica
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">
@@ -395,6 +412,21 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
       })
     }
   }, [expense])
+
+  const selectedRubroId = formData.rubro_id ? parseInt(formData.rubro_id) : null
+  const filteredCategories = selectedRubroId
+    ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === selectedRubroId))
+    : categories
+
+  const handleRubroChange = (e) => {
+    const newRubroId = e.target.value
+    const newRubroIdInt = newRubroId ? parseInt(newRubroId) : null
+    const newFiltered = newRubroIdInt
+      ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === newRubroIdInt))
+      : categories
+    const categoryStillValid = !formData.category_id || newFiltered.some(c => c.id === parseInt(formData.category_id))
+    setFormData({ ...formData, rubro_id: newRubroId, category_id: categoryStillValid ? formData.category_id : '' })
+  }
 
   const handleProviderCreated = (newProvider) => {
     setProviders([...providers, newProvider])
@@ -556,38 +588,12 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria (opcional)
-            </label>
-            <div className="flex gap-2">
-              <select
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sin definir</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setShowCategoryModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                title="Crear nueva categoria"
-              >
-                <Plus size={20} />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
               Rubro (opcional)
             </label>
             <div className="flex gap-2">
               <select
                 value={formData.rubro_id}
-                onChange={(e) => setFormData({ ...formData, rubro_id: e.target.value })}
+                onChange={handleRubroChange}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
@@ -600,6 +606,35 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
                 onClick={() => setShowRubroModal(true)}
                 className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo rubro"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Categoria (opcional)
+              {selectedRubroId && (
+                <span className="ml-2 text-xs font-normal text-blue-600">filtrada por rubro</span>
+              )}
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {filteredCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nueva categoria"
               >
                 <Plus size={20} />
               </button>
@@ -647,6 +682,8 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
           isOpen={showCategoryModal}
           onClose={() => setShowCategoryModal(false)}
           onCreated={handleCategoryCreated}
+          selectedRubroId={selectedRubroId}
+          rubros={rubros}
         />
 
         <QuickCreateRubroModal
@@ -686,6 +723,21 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     setCategories(initialCategories)
     setRubros(initialRubros)
   }, [initialProviders, initialCategories, initialRubros])
+
+  const selectedRubroId = formData.rubro_id ? parseInt(formData.rubro_id) : null
+  const filteredCategories = selectedRubroId
+    ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === selectedRubroId))
+    : categories
+
+  const handleRubroChange = (e) => {
+    const newRubroId = e.target.value
+    const newRubroIdInt = newRubroId ? parseInt(newRubroId) : null
+    const newFiltered = newRubroIdInt
+      ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === newRubroIdInt))
+      : categories
+    const categoryStillValid = !formData.category_id || newFiltered.some(c => c.id === parseInt(formData.category_id))
+    setFormData({ ...formData, rubro_id: newRubroId, category_id: categoryStillValid ? formData.category_id : '' })
+  }
 
   const handleProviderCreated = (newProvider) => {
     setProviders([...providers, newProvider])
@@ -874,38 +926,12 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria (opcional)
-            </label>
-            <div className="flex gap-2">
-              <select
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sin definir</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setShowCategoryModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                title="Crear nueva categoria"
-              >
-                <Plus size={20} />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
               Rubro (opcional)
             </label>
             <div className="flex gap-2">
               <select
                 value={formData.rubro_id}
-                onChange={(e) => setFormData({ ...formData, rubro_id: e.target.value })}
+                onChange={handleRubroChange}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
@@ -918,6 +944,35 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
                 onClick={() => setShowRubroModal(true)}
                 className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo rubro"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Categoria (opcional)
+              {selectedRubroId && (
+                <span className="ml-2 text-xs font-normal text-blue-600">filtrada por rubro</span>
+              )}
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {filteredCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nueva categoria"
               >
                 <Plus size={20} />
               </button>
@@ -995,6 +1050,8 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
           isOpen={showCategoryModal}
           onClose={() => setShowCategoryModal(false)}
           onCreated={handleCategoryCreated}
+          selectedRubroId={selectedRubroId}
+          rubros={rubros}
         />
         <QuickCreateRubroModal
           isOpen={showRubroModal}

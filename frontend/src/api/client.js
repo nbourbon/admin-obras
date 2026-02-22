@@ -90,7 +90,7 @@ export const providersAPI = {
 
 // Categories API
 export const categoriesAPI = {
-  list: () => client.get('/categories'),
+  list: (rubroId = null) => client.get('/categories', rubroId !== null ? { params: { rubro_id: rubroId } } : undefined),
   create: (data) => client.post('/categories', data),
   update: (id, data) => client.put(`/categories/${id}`, data),
   delete: (id) => client.delete(`/categories/${id}`),

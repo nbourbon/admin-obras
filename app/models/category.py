@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
+
+# Association table for many-to-many Category ↔ Rubro
+category_rubros = Table(
+    'category_rubros',
+    Base.metadata,
+    Column('category_id', Integer, ForeignKey('categories.id'), primary_key=True),
+    Column('rubro_id', Integer, ForeignKey('rubros.id'), primary_key=True),
+)
 
 
 class Category(Base):
@@ -18,3 +26,4 @@ class Category(Base):
     # Relationships
     expenses = relationship("Expense", back_populates="category")
     project = relationship("Project", back_populates="categories")
+    rubros = relationship("Rubro", secondary=category_rubros, back_populates="categories")

@@ -1,6 +1,7 @@
 from app.models.user import User
 from app.models.provider import Provider
 from app.models.category import Category
+from app.models.rubro import Rubro
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment, ExchangeRateLog
 from app.models.project import Project
@@ -16,6 +17,7 @@ __all__ = [
     "User",
     "Provider",
     "Category",
+    "Rubro",
     "Expense",
     "ParticipantPayment",
     "ExchangeRateLog",
