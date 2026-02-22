@@ -978,7 +978,7 @@ async def get_expenses_by_rubro(
     query = db.query(
         Expense.rubro_id,
         case(
-            (Expense.rubro_id.is_(None), "Sin rubro"),
+            (Expense.rubro_id.is_(None), "Otros"),
             else_=Rubro.name
         ).label("rubro_name"),
         func.sum(Expense.amount_usd).label("total_usd"),
