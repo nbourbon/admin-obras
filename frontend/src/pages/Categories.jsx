@@ -210,6 +210,7 @@ function Categories() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [filterRubro, setFilterRubro] = useState(null) // null = todos
 
   useEffect(() => {
     loadData()
@@ -251,6 +252,10 @@ function Categories() {
     }
   }
 
+  const filteredCategories = filterRubro === null
+    ? categories
+    : categories.filter(c => c.rubros.length === 0 || c.rubros.some(r => r.id === filterRubro))
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -272,15 +277,51 @@ function Categories() {
         </button>
       </div>
 
+      {rubros.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterRubro(null)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              filterRubro === null
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            Todos
+          </button>
+          {rubros.map(rubro => (
+            <button
+              key={rubro.id}
+              onClick={() => setFilterRubro(filterRubro === rubro.id ? null : rubro.id)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                filterRubro === rubro.id
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              {rubro.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {categories.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <FolderOpen className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">Sin categorias</h3>
           <p className="mt-2 text-gray-500">Agrega categorias para clasificar los gastos.</p>
         </div>
+      ) : filteredCategories.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <FolderOpen className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-4 text-lg font-medium text-gray-900">Sin categorias para este rubro</h3>
+          <p className="mt-2 text-gray-500">
+            No hay categorias asignadas a este rubro todavia.
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {categories.map((category) => (
+          {filteredCategories.map((category) => (
             <div
               key={category.id}
               className="rounded-xl shadow-sm p-6 border"
