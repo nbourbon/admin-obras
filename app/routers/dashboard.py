@@ -17,6 +17,7 @@ from app.schemas.dashboard import (
     ParticipantStatus,
     ExpenseByProvider,
     ExpenseByCategory,
+    ExpenseByRubro,
 )
 from app.schemas.contribution import MemberBalanceResponse, ContributionsByParticipant
 from app.utils.dependencies import get_current_user, get_project_from_header
@@ -951,6 +952,58 @@ async def get_expenses_by_category(
         ExpenseByCategory(
             category_id=r.category_id,
             category_name=r.category_name,
+            total_usd=Decimal(str(r.total_usd or 0)),
+            total_ars=Decimal(str(r.total_ars or 0)),
+            expenses_count=r.expenses_count,
+        )
+        for r in results
+    ]
+
+
+@router.get("/expenses-by-rubro", response_model=List[ExpenseByRubro])
+async def get_expenses_by_rubro(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get total expenses grouped by rubro, ordered by total descending.
+    Optionally filter by date range (expense_date).
+    """
+    from app.models.rubro import Rubro
+    from sqlalchemy import case
+
+    query = db.query(
+        Expense.rubro_id,
+        case(
+            (Expense.rubro_id.is_(None), "Sin rubro"),
+            else_=Rubro.name
+        ).label("rubro_name"),
+        func.sum(Expense.amount_usd).label("total_usd"),
+        func.sum(Expense.amount_ars).label("total_ars"),
+        func.count(Expense.id).label("expenses_count"),
+    ).outerjoin(Rubro, Expense.rubro_id == Rubro.id)
+
+    if project:
+        query = query.filter(Expense.project_id == project.id)
+
+    query = query.filter(Expense.is_deleted == False)
+
+    if start_date:
+        query = query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
+
+    query = query.group_by(Expense.rubro_id, Rubro.name).order_by(func.sum(Expense.amount_usd).desc())
+
+    results = query.all()
+
+    return [
+        ExpenseByRubro(
+            rubro_id=r.rubro_id,
+            rubro_name=r.rubro_name,
             total_usd=Decimal(str(r.total_usd or 0)),
             total_ars=Decimal(str(r.total_ars or 0)),
             expenses_count=r.expenses_count,

@@ -171,6 +171,7 @@ export const dashboardAPI = {
   exportExcel: () => client.get('/dashboard/export-excel', { responseType: 'blob' }),
   expensesByProvider: (params = {}) => client.get('/dashboard/expenses-by-provider', { params }),
   expensesByCategory: (params = {}) => client.get('/dashboard/expenses-by-category', { params }),
+  expensesByRubro: (params = {}) => client.get('/dashboard/expenses-by-rubro', { params }),
   balances: () => client.get('/dashboard/balances'),
   contributionsByParticipant: () => client.get('/dashboard/contributions-by-participant'),
 }

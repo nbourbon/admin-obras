@@ -101,3 +101,11 @@ class ExpenseByCategory(BaseModel):
     total_usd: Decimal
     total_ars: Decimal
     expenses_count: int
+
+
+class ExpenseByRubro(BaseModel):
+    rubro_id: Optional[int] = None
+    rubro_name: str
+    total_usd: Decimal
+    total_ars: Decimal
+    expenses_count: int

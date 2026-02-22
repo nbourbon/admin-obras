@@ -36,6 +36,7 @@ function Dashboard() {
   const [evolution, setEvolution] = useState(null)
   const [exchangeRate, setExchangeRate] = useState(null)
   const [byCategory, setByCategory] = useState([])
+  const [byRubro, setByRubro] = useState([])
   const [balances, setBalances] = useState([])
   const [avanceData, setAvanceData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -81,12 +82,13 @@ function Dashboard() {
       setLoading(true)
       const params = getDateParams()
 
-      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, balancesRes, avanceRes] = await Promise.all([
+      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, rubroRes, balancesRes, avanceRes] = await Promise.all([
         dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
         dashboardAPI.evolution(params),
         exchangeRateAPI.current().catch(() => null),
         dashboardAPI.expensesByCategory(params),
+        dashboardAPI.expensesByRubro(params),
         dashboardAPI.balances().catch(() => ({ data: [] })),
         avanceObraAPI.list().catch(() => ({ data: [] })),
       ])
@@ -95,6 +97,7 @@ function Dashboard() {
       setMyStatus(myStatusRes.data)
       setEvolution(evolutionRes.data)
       setByCategory(categoryRes.data)
+      setByRubro(rubroRes.data)
       setBalances(balancesRes.data || [])
       setAvanceData(avanceRes.data || [])
       if (rateRes) setExchangeRate(rateRes.data)
@@ -437,6 +440,49 @@ function Dashboard() {
         </div>
       )}
 
+
+      {/* Expenses by Rubro - Pie Chart */}
+      {byRubro.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Gastos por Rubro</h3>
+          <div className="w-full h-96">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={byRubro.map(r => ({
+                    name: r.rubro_name,
+                    value: parseFloat(currencyMode === 'ARS' ? r.total_ars : r.total_usd),
+                    count: r.expenses_count,
+                  }))}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={130}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {byRubro.map((entry, index) => {
+                    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  })}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value, entry) => {
+                    const total = byRubro.reduce((sum, r) => sum + parseFloat(currencyMode === 'ARS' ? r.total_ars : r.total_usd), 0)
+                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
+                    return `${value} (${percent}%)`
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Avance de Obra (solo proyectos tipo construccion) */}
       {summary?.project_type === 'construccion' && avanceData.length > 0 && (
