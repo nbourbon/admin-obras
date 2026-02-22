@@ -1,11 +1,251 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { expensesAPI, dashboardAPI, paymentsAPI } from '../api/client'
+import { expensesAPI, dashboardAPI, paymentsAPI, providersAPI, categoriesAPI, rubrosAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
-import { ArrowLeft, FileText, Upload, CheckCircle, Clock, Download, AlertCircle, XCircle, User, Eye, Trash2 } from 'lucide-react'
+import { ArrowLeft, FileText, Upload, CheckCircle, Clock, Download, AlertCircle, XCircle, User, Eye, Trash2, Edit2, X } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
 import PayExpenseModal from '../components/PayExpenseModal'
+
+function EditExpenseInlineModal({ isOpen, onClose, onSaved, expense, currencyMode }) {
+  const [formData, setFormData] = useState({
+    description: '',
+    amount_original: '',
+    currency_original: 'USD',
+    provider_id: '',
+    category_id: '',
+    rubro_id: '',
+    expense_date: '',
+    exchange_rate_override: '',
+  })
+  const [providers, setProviders] = useState([])
+  const [categories, setCategories] = useState([])
+  const [rubros, setRubros] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [fetching, setFetching] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isOpen && expense) {
+      setFormData({
+        description: expense.description || '',
+        amount_original: expense.amount_original || '',
+        currency_original: expense.currency_original || 'USD',
+        provider_id: expense.provider_id ? String(expense.provider_id) : '',
+        category_id: expense.category_id ? String(expense.category_id) : '',
+        rubro_id: expense.rubro_id ? String(expense.rubro_id) : '',
+        expense_date: expense.expense_date ? new Date(expense.expense_date).toISOString().split('T')[0] : '',
+        exchange_rate_override: '',
+      })
+      setError('')
+      setFetching(true)
+      Promise.all([providersAPI.list(), categoriesAPI.list(), rubrosAPI.list()])
+        .then(([pRes, cRes, rRes]) => {
+          setProviders(pRes.data)
+          setCategories(cRes.data)
+          setRubros(rRes.data)
+        })
+        .catch(() => {})
+        .finally(() => setFetching(false))
+    }
+  }, [isOpen, expense])
+
+  const selectedRubroId = formData.rubro_id ? parseInt(formData.rubro_id) : null
+  const filteredCategories = selectedRubroId
+    ? categories.filter(c => !c.rubro || c.rubro.id === selectedRubroId)
+    : categories
+
+  const handleRubroChange = (e) => {
+    const newRubroId = e.target.value
+    const newRubroIdInt = newRubroId ? parseInt(newRubroId) : null
+    const newFiltered = newRubroIdInt
+      ? categories.filter(c => !c.rubro || c.rubro.id === newRubroIdInt)
+      : categories
+    const categoryStillValid = !formData.category_id || newFiltered.some(c => c.id === parseInt(formData.category_id))
+    setFormData({ ...formData, rubro_id: newRubroId, category_id: categoryStillValid ? formData.category_id : '' })
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const payload = {
+        description: formData.description,
+        amount_original: parseFloat(formData.amount_original),
+        currency_original: formData.currency_original,
+        provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        rubro_id: formData.rubro_id ? parseInt(formData.rubro_id) : null,
+        expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
+      }
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        payload.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+      await expensesAPI.update(expense.id, payload)
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al actualizar gasto')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen || !expense) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Editar Gasto</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>
+        )}
+
+        {fetching ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+              <input
+                type="text"
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monto</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formData.amount_original}
+                  onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
+                {currencyMode === 'DUAL' ? (
+                  <select
+                    value={formData.currency_original}
+                    onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="ARS">ARS</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    disabled
+                    value={currencyMode}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  />
+                )}
+              </div>
+            </div>
+
+            {currencyMode === 'DUAL' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Cambio (opcional)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.exchange_rate_override}
+                  onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Dejar vacio para usar TC automatico"
+                />
+                <p className="mt-1 text-xs text-gray-500">Si no se especifica, se usa el dolar blue actual</p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor (opcional)</label>
+              <select
+                value={formData.provider_id}
+                onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rubro (opcional)</label>
+              <select
+                value={formData.rubro_id}
+                onChange={handleRubroChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {rubros.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categoria (opcional)
+                {selectedRubroId && <span className="ml-2 text-xs font-normal text-blue-600">filtrada por rubro</span>}
+              </label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha del Gasto</label>
+              <input
+                type="date"
+                required
+                value={formData.expense_date}
+                onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -47,6 +287,7 @@ function ExpenseDetail() {
   const [deleting, setDeleting] = useState(false)
   const [contributionMode, setContributionMode] = useState('both')
   const [showPayModal, setShowPayModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
     loadExpense()
@@ -215,13 +456,22 @@ function ExpenseDetail() {
           <h1 className="text-2xl font-bold text-gray-900">{expense.description}</h1>
         </div>
         {isProjectAdmin && (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
-            <Trash2 size={18} />
-            <span>Eliminar Gasto</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Edit2 size={18} />
+              <span className="hidden sm:inline">Editar Gasto</span>
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Trash2 size={18} />
+              <span className="hidden sm:inline">Eliminar Gasto</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -762,6 +1012,14 @@ function ExpenseDetail() {
           </div>
         </div>
       )}
+
+      <EditExpenseInlineModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSaved={loadExpense}
+        expense={expense}
+        currencyMode={currencyMode}
+      />
 
       <PayExpenseModal
         isOpen={showPayModal}

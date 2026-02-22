@@ -415,14 +415,14 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
 
   const selectedRubroId = formData.rubro_id ? parseInt(formData.rubro_id) : null
   const filteredCategories = selectedRubroId
-    ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === selectedRubroId))
+    ? categories.filter(c => !c.rubro || c.rubro.id === selectedRubroId)
     : categories
 
   const handleRubroChange = (e) => {
     const newRubroId = e.target.value
     const newRubroIdInt = newRubroId ? parseInt(newRubroId) : null
     const newFiltered = newRubroIdInt
-      ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === newRubroIdInt))
+      ? categories.filter(c => !c.rubro || c.rubro.id === newRubroIdInt)
       : categories
     const categoryStillValid = !formData.category_id || newFiltered.some(c => c.id === parseInt(formData.category_id))
     setFormData({ ...formData, rubro_id: newRubroId, category_id: categoryStillValid ? formData.category_id : '' })
@@ -475,7 +475,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Editar Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -726,14 +726,14 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
   const selectedRubroId = formData.rubro_id ? parseInt(formData.rubro_id) : null
   const filteredCategories = selectedRubroId
-    ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === selectedRubroId))
+    ? categories.filter(c => !c.rubro || c.rubro.id === selectedRubroId)
     : categories
 
   const handleRubroChange = (e) => {
     const newRubroId = e.target.value
     const newRubroIdInt = newRubroId ? parseInt(newRubroId) : null
     const newFiltered = newRubroIdInt
-      ? categories.filter(c => !c.rubros || c.rubros.length === 0 || c.rubros.some(r => r.id === newRubroIdInt))
+      ? categories.filter(c => !c.rubro || c.rubro.id === newRubroIdInt)
       : categories
     const categoryStillValid = !formData.category_id || newFiltered.some(c => c.id === parseInt(formData.category_id))
     setFormData({ ...formData, rubro_id: newRubroId, category_id: categoryStillValid ? formData.category_id : '' })
