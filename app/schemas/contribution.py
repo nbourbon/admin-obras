@@ -23,6 +23,8 @@ class BalanceAdjustmentCreate(BaseModel):
 
 
 class ContributionResponse(ContributionBase):
+    # Override amount to allow negative values (e.g. balance adjustments)
+    amount: Decimal = Field(decimal_places=2)
     id: int
     project_id: int
     created_by: int
