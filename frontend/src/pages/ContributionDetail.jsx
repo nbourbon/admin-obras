@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2 } from 'lucide-react'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -66,6 +66,23 @@ export default function ContributionDetail() {
     }
   }
 
+  const handleDownloadReceipt = async (paymentId) => {
+    try {
+      const response = await contributionsAPI.downloadReceipt(paymentId)
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `recibo_aporte_${paymentId}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error downloading receipt:', err)
+      alert('Error al descargar el comprobante')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -120,7 +137,15 @@ export default function ContributionDetail() {
               </p>
             </div>
           </div>
-          <StatusBadge status={contribution.status} />
+          {contribution.is_complete ? (
+            <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+              Completado
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700">
+              Pendiente
+            </span>
+          )}
         </div>
 
         {/* Summary stats */}
@@ -183,6 +208,9 @@ export default function ContributionDetail() {
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                   Pagado el
                 </th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                  Comprobante
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -221,11 +249,25 @@ export default function ContributionDetail() {
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
                       {payment.paid_at ? formatDate(payment.paid_at) : '-'}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {payment.receipt_file_path ? (
+                        <button
+                          onClick={() => handleDownloadReceipt(payment.payment_id)}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                          title="Descargar comprobante"
+                        >
+                          <Download size={16} />
+                          <span className="hidden lg:inline">Ver</span>
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Sin comprobante</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                     No hay pagos registrados
                   </td>
                 </tr>
@@ -274,6 +316,17 @@ export default function ContributionDetail() {
                     <div className="flex justify-between">
                       <span className="text-gray-600">Pagado el:</span>
                       <span className="text-gray-900">{formatDate(payment.paid_at)}</span>
+                    </div>
+                  )}
+                  {payment.receipt_file_path && (
+                    <div className="pt-2 border-t border-gray-100 mt-2">
+                      <button
+                        onClick={() => handleDownloadReceipt(payment.payment_id)}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      >
+                        <FileText size={16} />
+                        Ver Comprobante
+                      </button>
                     </div>
                   )}
                 </div>

@@ -12,6 +12,7 @@ from app.routers import (
     users_router,
     providers_router,
     categories_router,
+    rubros_router,
     expenses_router,
     payments_router,
     dashboard_router,
@@ -69,6 +70,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(providers_router)
 app.include_router(categories_router)
+app.include_router(rubros_router)
 app.include_router(expenses_router)
 app.include_router(payments_router)
 app.include_router(dashboard_router)

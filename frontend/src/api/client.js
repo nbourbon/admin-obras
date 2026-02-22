@@ -96,6 +96,14 @@ export const categoriesAPI = {
   delete: (id) => client.delete(`/categories/${id}`),
 }
 
+// Rubros API
+export const rubrosAPI = {
+  list: () => client.get('/rubros'),
+  create: (data) => client.post('/rubros', data),
+  update: (id, data) => client.put(`/rubros/${id}`, data),
+  delete: (id) => client.delete(`/rubros/${id}`),
+}
+
 // Expenses API
 export const expensesAPI = {
   list: (filters = {}) => client.get('/expenses', { params: filters }),

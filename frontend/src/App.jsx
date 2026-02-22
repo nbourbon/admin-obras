@@ -14,6 +14,7 @@ import PendingApprovals from './pages/PendingApprovals'
 import Users from './pages/Users'
 import Providers from './pages/Providers'
 import Categories from './pages/Categories'
+import Rubros from './pages/Rubros'
 import Projects from './pages/Projects'
 import ProjectMembers from './pages/ProjectMembers'
 import ProjectSelector from './pages/ProjectSelector'
@@ -81,6 +82,7 @@ function App() {
         <Route path="project-members" element={<AdminRoute><ProjectMembers /></AdminRoute>} />
         <Route path="providers" element={<AdminRoute><Providers /></AdminRoute>} />
         <Route path="categories" element={<AdminRoute><Categories /></AdminRoute>} />
+        <Route path="rubros" element={<AdminRoute><Rubros /></AdminRoute>} />
       </Route>
     </Routes>
   )

@@ -42,8 +42,10 @@ class ContributionWithMyPayment(ContributionResponse):
     """Contribution with current user's payment info"""
     created_by_name: Optional[str] = None
     created_by_email: Optional[str] = None
+    my_payment_id: Optional[int] = None  # ID del pago del usuario actual
     my_amount_due: Decimal = Decimal("0")  # Cuánto debe pagar el usuario actual
-    i_paid: bool = False  # Si el usuario actual ya pagó
+    i_paid: bool = False  # Si el usuario actual ya pagó (aprobado)
+    is_pending_approval: bool = False  # Si enviado pero pendiente de aprobación
     is_complete: bool = False  # Si todos los participantes pagaron
     total_participants: int = 0
     paid_participants: int = 0
@@ -61,6 +63,8 @@ class ContributionPaymentDetail(BaseModel):
     amount_due: Decimal
     is_paid: bool
     paid_at: Optional[datetime] = None
+    receipt_file_path: Optional[str] = None
+    amount_paid: Optional[Decimal] = None
 
     class Config:
         from_attributes = True

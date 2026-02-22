@@ -24,6 +24,33 @@ from app.schemas.project import ProjectMemberHistoryResponse
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
+def auto_update_project_mode(db: Session, project_id: int):
+    """
+    Automatically update project mode based on number of active members.
+    - If project has more than 1 active member, it should be multi-participant (is_individual=False).
+    - If project has only 1 active member, it should be individual (is_individual=True).
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return
+
+    active_members_count = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.is_active == True
+    ).count()
+
+    # If more than 1 member, project should be multi-participant
+    if active_members_count > 1 and project.is_individual:
+        project.is_individual = False
+        db.commit()
+        print(f"[AUTO] Project {project_id} changed to multi-participant (has {active_members_count} members)")
+    # If only 1 member, project should be individual
+    elif active_members_count == 1 and not project.is_individual:
+        project.is_individual = True
+        db.commit()
+        print(f"[AUTO] Project {project_id} changed to individual (has {active_members_count} member)")
+
+
 @router.get("", response_model=List[ProjectResponse])
 async def list_projects(
     db: Session = Depends(get_db),
@@ -56,6 +83,8 @@ async def list_projects(
             "created_by": project.created_by,
             "is_individual": project.is_individual,
             "currency_mode": getattr(project, 'currency_mode', None) or "DUAL",
+            "project_type": getattr(project, 'project_type', None) or "generico",
+            "type_parameters": getattr(project, 'type_parameters', None),
             "is_active": project.is_active,
             "created_at": project.created_at,
             "current_user_is_admin": is_project_admin(db, current_user.id, project.id),
@@ -85,6 +114,8 @@ async def create_project(
         description=project_data.description,
         is_individual=project_data.is_individual,
         currency_mode=project_data.currency_mode,
+        project_type=project_data.project_type,
+        type_parameters=project_data.type_parameters,
         created_by=current_user.id,
     )
     db.add(project)
@@ -239,6 +270,8 @@ async def update_project(
         created_by=project.created_by,
         is_individual=project.is_individual,
         currency_mode=getattr(project, 'currency_mode', None) or "DUAL",
+        project_type=getattr(project, 'project_type', None) or "generico",
+        type_parameters=getattr(project, 'type_parameters', None),
         is_active=project.is_active,
         created_at=project.created_at,
         current_user_is_admin=True,  # Caller is project admin
@@ -376,6 +409,10 @@ async def add_project_member(
         existing.is_admin = member_data.is_admin
         db.commit()
         db.refresh(existing)
+
+        # Auto-update project mode if needed
+        auto_update_project_mode(db, project_id)
+
         return ProjectMemberResponse(
             id=existing.id,
             project_id=existing.project_id,
@@ -398,6 +435,9 @@ async def add_project_member(
     db.add(member)
     db.commit()
     db.refresh(member)
+
+    # Auto-update project mode if needed
+    auto_update_project_mode(db, project_id)
 
     return ProjectMemberResponse(
         id=member.id,
@@ -484,6 +524,10 @@ async def add_project_member_by_email(
         existing.is_admin = is_admin
         db.commit()
         db.refresh(existing)
+
+        # Auto-update project mode if needed
+        auto_update_project_mode(db, project_id)
+
         db.add(ProjectMemberHistory(
             project_id=project_id,
             user_id=user.id,
@@ -517,6 +561,9 @@ async def add_project_member_by_email(
     db.add(member)
     db.commit()
     db.refresh(member)
+
+    # Auto-update project mode if needed
+    auto_update_project_mode(db, project_id)
 
     db.add(ProjectMemberHistory(
         project_id=project_id,
@@ -651,6 +698,9 @@ async def remove_project_member(
 
     member.is_active = False
     db.commit()
+
+    # Auto-update project mode if needed
+    auto_update_project_mode(db, project_id)
 
     db.add(ProjectMemberHistory(
         project_id=project_id,

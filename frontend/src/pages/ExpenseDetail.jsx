@@ -44,10 +44,21 @@ function ExpenseDetail() {
   const [allPaidCurrency, setAllPaidCurrency] = useState('USD')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [contributionMode, setContributionMode] = useState('both')
 
   useEffect(() => {
     loadExpense()
+    loadContributionMode()
   }, [id])
+
+  const loadContributionMode = async () => {
+    try {
+      const response = await dashboardAPI.summary()
+      setContributionMode(response.data.contribution_mode || 'both')
+    } catch (err) {
+      console.error('Error loading contribution mode:', err)
+    }
+  }
 
   const loadExpense = async () => {
     try {
@@ -275,6 +286,10 @@ function ExpenseDetail() {
                 <dd className="font-medium">{expense.category?.name || 'Sin definir'}</dd>
               </div>
               <div>
+                <dt className="text-sm text-gray-500">Rubro</dt>
+                <dd className="font-medium">{expense.rubro?.name || 'Sin definir'}</dd>
+              </div>
+              <div>
                 <dt className="text-sm text-gray-500">Fecha</dt>
                 <dd className="font-medium">{formatDate(expense.expense_date)}</dd>
               </div>
@@ -289,6 +304,18 @@ function ExpenseDetail() {
                     {expense.status === 'paid' ? 'Pagado' :
                      expense.status === 'partial' ? 'Parcial' : 'Pendiente'}
                   </span>
+                  {expense.status === 'paid' && paymentStatus?.participants && (() => {
+                    // Check if all payments were auto-paid from balance (no receipts)
+                    const allPaid = paymentStatus.participants.every(p => p.is_paid)
+                    const anyReceipt = paymentStatus.participants.some(p => p.receipt_file_path)
+                    if (allPaid && !anyReceipt) {
+                      return (
+                        <div className="mt-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                          💰 Pagado desde Saldo Cta Corriente
+                        </div>
+                      )
+                    }
+                  })()}
                 </dd>
               </div>
             </dl>
@@ -438,7 +465,8 @@ function ExpenseDetail() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Todos los Participantes</h2>
-              {isProjectAdmin && paymentStatus?.pending_count > 0 && !markingAllPaid && (
+              {/* Hide "Mark all paid" button in current_account mode */}
+              {isProjectAdmin && paymentStatus?.pending_count > 0 && !markingAllPaid && contributionMode !== 'current_account' && (
                 <button
                   onClick={() => {
                     setMarkingAllPaid(true)
@@ -562,7 +590,8 @@ function ExpenseDetail() {
                     }
 
                     const style = getParticipantStyle()
-                    const showMarkPaidButton = isProjectAdmin && !p.is_paid && !p.is_pending_approval
+                    // Hide mark paid button in current_account mode (payments must come from balance)
+                    const showMarkPaidButton = isProjectAdmin && !p.is_paid && !p.is_pending_approval && contributionMode !== 'current_account'
 
                     return (
                       <div key={p.user_id}>

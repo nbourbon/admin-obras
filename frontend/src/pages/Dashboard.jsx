@@ -264,14 +264,16 @@ function Dashboard() {
               : formatCurrency(summary?.total_expenses_usd || 0)}
           </span>
         </div>
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-gray-600">Pagado</span>
-          <span className="text-green-700 font-bold">
-            {currencyMode === 'ARS'
-              ? formatCurrency(summary?.total_paid_ars || 0, 'ARS')
-              : formatCurrency(summary?.total_paid_usd || 0)}
-          </span>
-        </div>
+        {summary?.project_type === 'construccion' && summary?.square_meters > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 bg-blue-50">
+            <span className="text-gray-600">Total x Metro² ({summary?.square_meters} m²)</span>
+            <span className="text-blue-700 font-bold">
+              {currencyMode === 'ARS'
+                ? formatCurrency(summary?.cost_per_square_meter_ars || 0, 'ARS')
+                : formatCurrency(summary?.cost_per_square_meter_usd || 0)}
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Pendiente</span>
           <span className="text-yellow-700 font-bold">
@@ -280,21 +282,32 @@ function Dashboard() {
               : formatCurrency(summary?.total_pending_usd || 0)}
           </span>
         </div>
+        {/* Hide Saldo Cta Corriente for direct_payment mode */}
+        {summary?.contribution_mode !== 'direct_payment' && (
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-gray-600">Saldo Cta Corriente</span>
+            <span className="text-green-700 font-bold">
+              {currencyMode === 'ARS'
+                ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
+                : formatCurrency(summary?.total_balance_usd || 0)}
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Participantes</span>
           <span className="text-blue-700 font-bold">{summary?.participants_count || 0}</span>
         </div>
       </div>
 
-      {/* My Personal Status - compact (hide for individual projects) */}
-      {!isIndividual && myStatus && (
+      {/* My Personal Status - compact (hidden for individual projects) */}
+      {myStatus && !isIndividual && (
         <div className="bg-white rounded-xl shadow-sm">
           <div className="px-4 py-3 border-b bg-gray-50 rounded-t-xl">
             <h2 className="font-semibold text-gray-900">Mi Estado <span className="text-blue-600">({myStatus.participation_percentage}%)</span></h2>
           </div>
           <div className="divide-y">
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-gray-600">Me corresponde</span>
+              <span className="text-gray-600">Gastado</span>
               <span className="font-bold text-gray-900">
                 {currencyMode === 'ARS'
                   ? formatCurrency(myStatus.total_due_ars, 'ARS')
@@ -302,21 +315,31 @@ function Dashboard() {
               </span>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-gray-600">Ya pague</span>
-              <span className="font-bold text-green-600">
-                {currencyMode === 'ARS'
-                  ? formatCurrency(myStatus.total_paid_ars, 'ARS')
-                  : formatCurrency(myStatus.total_paid_usd)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-gray-600">Me falta</span>
+              <span className="text-gray-600">Pendiente</span>
               <span className="font-bold text-yellow-600">
                 {currencyMode === 'ARS'
                   ? formatCurrency(myStatus.pending_ars, 'ARS')
                   : formatCurrency(myStatus.pending_usd)}
               </span>
             </div>
+            {/* Hide Saldo Aportes for direct_payment mode */}
+            {summary?.contribution_mode !== 'direct_payment' && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">Saldo Aportes</span>
+                  {myStatus.has_pending_contribution && (
+                    <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                      Pendiente
+                    </span>
+                  )}
+                </div>
+                <span className="font-bold text-green-600">
+                  {currencyMode === 'ARS'
+                    ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
+                    : formatCurrency(myStatus.balance_aportes_usd || 0)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -403,84 +426,9 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Member Balances - Table */}
-      {balances.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Saldos de Participantes</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Participante
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    % Part.
-                  </th>
-                  {currencyMode === 'DUAL' && (
-                    <>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Saldo USD
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Saldo ARS
-                      </th>
-                    </>
-                  )}
-                  {currencyMode === 'ARS' && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Saldo ARS
-                    </th>
-                  )}
-                  {currencyMode === 'USD' && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Saldo USD
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {balances.map((balance) => (
-                  <tr key={balance.user_id}>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {balance.user_name}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right text-gray-600">
-                      {parseFloat(balance.participation_percentage).toFixed(0)}%
-                    </td>
-                    {currencyMode === 'DUAL' && (
-                      <>
-                        <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
-                          {formatCurrency(balance.balance_usd, 'USD')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-right text-gray-600">
-                          {formatCurrency(balance.balance_ars, 'ARS')}
-                        </td>
-                      </>
-                    )}
-                    {currencyMode === 'ARS' && (
-                      <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
-                        {formatCurrency(balance.balance_ars, 'ARS')}
-                      </td>
-                    )}
-                    {currencyMode === 'USD' && (
-                      <td className="px-6 py-4 text-sm text-right font-medium text-green-600">
-                        {formatCurrency(balance.balance_usd, 'USD')}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4 text-sm text-gray-500">
-            Los saldos se incrementan al aprobar aportes y se descuentan automáticamente al pagar gastos.
-          </div>
-        </div>
-      )}
 
-      {/* Contributions by Participant - Pie Chart */}
-      {contributions.length > 0 && contributions.some(c => c.contributions_count > 0) && (
+      {/* Contributions by Participant - Pie Chart (hide for direct_payment mode) */}
+      {summary?.contribution_mode !== 'direct_payment' && contributions.length > 0 && contributions.some(c => c.contributions_count > 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Aportes Totales por Participante</h3>
           <div className="w-full h-96">

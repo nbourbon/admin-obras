@@ -31,12 +31,13 @@ function Layout() {
   }
 
   const isIndividual = currentProject?.is_individual
+  const contributionMode = currentProject?.type_parameters?.contribution_mode || 'both'
 
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/expenses', icon: Receipt, label: 'Gastos' },
-    { to: '/contributions', icon: TrendingUp, label: 'Aportes' },
-    { to: '/my-payments', icon: CreditCard, label: 'Mis Pagos' },
+    // Hide "Aportes" if contribution_mode is "direct_payment"
+    ...(contributionMode !== 'direct_payment' ? [{ to: '/contributions', icon: TrendingUp, label: 'Aportes' }] : []),
     { to: '/notes', icon: FileText, label: 'Notas' },
     { to: '/projects', icon: Briefcase, label: 'Proyectos' },
   ]
@@ -47,6 +48,7 @@ function Layout() {
     { to: '/project-members', icon: Users, label: 'Participantes' },
     { to: '/providers', icon: Building2, label: 'Proveedores' },
     { to: '/categories', icon: FolderOpen, label: 'Categorias' },
+    { to: '/rubros', icon: Briefcase, label: 'Rubros' },
   ]
 
   const NavItem = ({ to, icon: Icon, label }) => (

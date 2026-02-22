@@ -69,13 +69,49 @@ async def list_expenses(
     if to_date:
         query = query.filter(Expense.expense_date <= to_date)
 
-    return (
+    expenses = (
         query
         .order_by(Expense.expense_date.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
+
+    # Enrich expenses with payment tracking info (similar to contributions)
+    enriched_expenses = []
+    for expense in expenses:
+        # Get all participant payments for this expense
+        payments = db.query(ParticipantPayment).filter(
+            ParticipantPayment.expense_id == expense.id
+        ).all()
+
+        # Find my payment
+        my_payment = next((p for p in payments if p.user_id == current_user.id), None)
+
+        # Calculate stats
+        paid_count = sum(1 for p in payments if p.is_paid)
+        total_count = len(payments)
+
+        # Calculate payment status
+        i_paid = my_payment.is_paid if my_payment else False
+        is_pending_approval = False
+        if my_payment and not my_payment.is_paid and my_payment.submitted_at is not None:
+            is_pending_approval = True
+
+        # Create enriched response
+        expense_dict = {
+            **{k: v for k, v in expense.__dict__.items() if not k.startswith('_')},
+            'my_amount_due': my_payment.amount_due_usd if my_payment else Decimal("0"),
+            'my_payment_id': my_payment.id if my_payment else None,
+            'i_paid': i_paid,
+            'is_pending_approval': is_pending_approval,
+            'is_complete': paid_count == total_count if total_count > 0 else False,
+            'paid_participants': paid_count,
+            'total_participants': total_count,
+        }
+        enriched_expenses.append(ExpenseResponse(**expense_dict))
+
+    return enriched_expenses
 
 
 @router.post("", response_model=ExpenseWithPayments, status_code=status.HTTP_201_CREATED)
@@ -122,6 +158,21 @@ async def create_expense(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Category does not belong to this project",
+            )
+
+    # Validate rubro exists and belongs to project (if provided)
+    if expense_data.rubro_id:
+        from app.models.rubro import Rubro
+        rubro = db.query(Rubro).filter(Rubro.id == expense_data.rubro_id).first()
+        if not rubro or not rubro.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or inactive rubro",
+            )
+        if rubro.project_id and rubro.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Rubro does not belong to this project",
             )
 
     # Determine currency mode from project
@@ -188,6 +239,10 @@ async def create_expense(
 
     # Create participant payments for project members
     payments = create_participant_payments(db, expense, currency_mode)
+
+    # Update expense status based on auto-paid payments
+    # (some payments may have been auto-paid from balance)
+    update_expense_status(db, expense.id)
 
     # Build response with payments — batch load users to avoid N+1
     user_ids = [p.user_id for p in payments]
@@ -434,7 +489,7 @@ async def update_expense(
     # Reload with relationships
     expense = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category))
+        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
         .filter(Expense.id == expense.id)
         .first()
     )
@@ -581,8 +636,36 @@ async def delete_expense(
             detail=f"No se puede eliminar el gasto. Los siguientes participantes deben eliminar su comprobante de pago primero: {', '.join(blocking_payments)}",
         )
 
+    # Get project and currency mode for balance restoration
+    from app.models.project_member import ProjectMember
+    project = db.query(Project).filter(Project.id == expense.project_id).first()
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
     # Auto-delete all payments that don't have a participant-uploaded receipt
+    # AND restore balance for auto-paid payments
     for payment in auto_delete_payments:
+        # If payment was auto-paid from balance, restore the balance
+        if payment.is_paid and not payment.receipt_file_path:
+            member = db.query(ProjectMember).filter(
+                ProjectMember.project_id == expense.project_id,
+                ProjectMember.user_id == payment.user_id,
+            ).first()
+
+            if member:
+                # Restore balance according to currency_mode
+                if currency_mode == "ARS":
+                    if payment.amount_paid_ars:
+                        member.balance_ars += payment.amount_paid_ars
+                elif currency_mode == "USD":
+                    if payment.amount_paid_usd:
+                        member.balance_usd += payment.amount_paid_usd
+                else:  # DUAL
+                    if payment.amount_paid_ars:
+                        member.balance_ars += payment.amount_paid_ars
+
+                member.balance_updated_at = datetime.utcnow()
+                print(f"[DEBUG delete_expense] Restored balance for user {payment.user_id}: +{payment.amount_paid_ars} ARS, new balance: {member.balance_ars}")
+
         payment.is_deleted = True
         payment.deleted_at = datetime.utcnow()
         payment.deleted_by = current_user.id
@@ -594,7 +677,7 @@ async def delete_expense(
 
     db.commit()
 
-    return {"message": "Gasto eliminado correctamente"}
+    return {"message": "Gasto eliminado correctamente. Los balances de cuenta corriente han sido restaurados."}
 
 
 @router.post("/{expense_id}/mark-all-paid")

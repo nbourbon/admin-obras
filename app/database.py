@@ -106,6 +106,37 @@ def _run_migrations():
         if 'currency_mode' not in projects_cols:
             pending.append(("ALTER TABLE projects ADD COLUMN currency_mode VARCHAR(10) DEFAULT 'DUAL'",
                             'Added currency_mode to projects'))
+        if 'project_type' not in projects_cols:
+            pending.append(("ALTER TABLE projects ADD COLUMN project_type VARCHAR(20) DEFAULT 'generico' NOT NULL",
+                            'Added project_type to projects'))
+
+        # Migrate from square_meters to type_parameters (JSON)
+        if 'square_meters' in projects_cols and 'type_parameters' not in projects_cols:
+            # Add new JSON column
+            pending.append(('ALTER TABLE projects ADD COLUMN type_parameters JSON',
+                            'Added type_parameters (JSON) to projects'))
+            # Migrate data: convert square_meters to JSON {"square_meters": value}
+            if not database_url.startswith("sqlite"):
+                # PostgreSQL: migrate existing square_meters to JSON
+                pending.append(("""
+                    UPDATE projects
+                    SET type_parameters = jsonb_build_object('square_meters', square_meters)
+                    WHERE square_meters IS NOT NULL AND project_type = 'construccion'
+                """, 'Migrated square_meters to type_parameters JSON'))
+            else:
+                # SQLite: use json_object function
+                pending.append(("""
+                    UPDATE projects
+                    SET type_parameters = json_object('square_meters', square_meters)
+                    WHERE square_meters IS NOT NULL AND project_type = 'construccion'
+                """, 'Migrated square_meters to type_parameters JSON'))
+            # Drop old column
+            pending.append(('ALTER TABLE projects DROP COLUMN IF EXISTS square_meters',
+                            'Removed square_meters column (migrated to type_parameters)'))
+        elif 'type_parameters' not in projects_cols:
+            # Fresh install: just add type_parameters
+            pending.append(('ALTER TABLE projects ADD COLUMN type_parameters JSON',
+                            'Added type_parameters (JSON) to projects'))
 
     # --- Project members table ---
     if members_cols:
@@ -152,6 +183,9 @@ def _run_migrations():
         if category_id_col and not category_id_col.get('nullable', True):
             pending.append(('ALTER TABLE expenses ALTER COLUMN category_id DROP NOT NULL',
                             'Made category_id nullable'))
+        if 'rubro_id' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN rubro_id INTEGER',
+                            'Added rubro_id to expenses'))
 
     # --- Participant payments table ---
     if payments_cols:
@@ -231,6 +265,12 @@ def _run_migrations():
         if 'amount_paid_ars' not in contribution_payments_cols:
             pending.append(('ALTER TABLE contribution_payments ADD COLUMN amount_paid_ars NUMERIC(15,2) DEFAULT 0',
                             'Added amount_paid_ars to contribution_payments'))
+        if 'is_pending_approval' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN is_pending_approval BOOLEAN DEFAULT FALSE',
+                            'Added is_pending_approval to contribution_payments'))
+        if 'rejection_reason' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN rejection_reason VARCHAR(500)',
+                            'Added rejection_reason to contribution_payments'))
 
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')

@@ -116,15 +116,13 @@ async def get_all_my_payments(
     pending_only: bool = False,
 ):
     """
-    Get ALL current user's payments (expenses + contributions) for the current project.
-    Returns a unified list sorted by creation date.
+    Get current user's EXPENSE payments (excluding contributions) for the current project.
+    Contributions are managed separately in the /contributions page.
+    Returns a list sorted by creation date.
     """
-    from app.models.contribution_payment import ContributionPayment
-    from app.models.contribution import Contribution
-
     result = []
 
-    # Get expense payments
+    # Get expense payments ONLY (contributions are shown in /contributions page)
     expense_payments_query = (
         db.query(ParticipantPayment)
         .filter(
@@ -189,74 +187,6 @@ async def get_all_my_payments(
             expense_date=expense.expense_date,
         ))
 
-    # Get contribution payments
-    contribution_payments_query = (
-        db.query(ContributionPayment)
-        .join(Contribution)
-        .filter(ContributionPayment.user_id == current_user.id)
-    )
-
-    if project:
-        contribution_payments_query = contribution_payments_query.filter(Contribution.project_id == project.id)
-
-    if pending_only:
-        contribution_payments_query = contribution_payments_query.filter(ContributionPayment.is_paid == False)
-
-    contribution_payments = contribution_payments_query.all()
-
-    # Convert contribution payments to MyPaymentItem
-    for payment in contribution_payments:
-        contribution = payment.contribution
-        # Get project to determine currency_mode
-        project_obj = db.query(Project).filter(Project.id == contribution.project_id).first()
-        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
-
-        # Determine dual currency amounts based on currency_mode
-        if currency_mode == "DUAL":
-            # DUAL mode: contributions are ALWAYS in ARS
-            amount_due_usd = Decimal(0)
-            amount_due_ars = payment.amount_due
-            amount_due = payment.amount_due
-            currency = "ARS"
-        elif currency_mode == "USD":
-            # Single currency USD
-            amount_due_usd = payment.amount_due
-            amount_due_ars = Decimal(0)
-            amount_due = payment.amount_due
-            currency = "USD"
-        else:  # ARS
-            # Single currency ARS
-            amount_due_usd = Decimal(0)
-            amount_due_ars = payment.amount_due
-            amount_due = payment.amount_due
-            currency = "ARS"
-
-        result.append(MyPaymentItem(
-            id=payment.id,
-            payment_type="contribution",
-            description=contribution.description,
-            amount_due=amount_due,
-            currency=currency,
-            is_paid=payment.is_paid,
-            paid_at=payment.paid_at,
-            created_at=payment.created_at,
-            # Dual currency amounts
-            amount_due_usd=amount_due_usd,
-            amount_due_ars=amount_due_ars,
-            # Payment submission fields (contributions auto-approve, so no pending approval)
-            is_pending_approval=False,
-            submitted_at=payment.submitted_at,
-            approved_at=payment.approved_at,
-            rejection_reason=None,
-            # Payment details
-            amount_paid=payment.amount_paid,
-            currency_paid=payment.currency_paid,
-            receipt_file_path=payment.receipt_file_path,
-            # Contribution fields
-            contribution_id=contribution.id,
-            created_by_name=contribution.created_by_user.full_name,
-        ))
-
     # Sort by created_at descending
     result.sort(key=lambda x: x.created_at, reverse=True)
 
@@ -271,8 +201,13 @@ async def get_pending_approval_payments(
 ):
     """
     Get all payments pending admin approval for the current project (project admin only).
+    Includes both expense payments and contribution payments.
     """
-    query = (
+    from app.models.contribution import Contribution
+    from app.models.contribution_payment import ContributionPayment
+
+    # Get expense payments
+    expense_query = (
         db.query(ParticipantPayment)
         .filter(ParticipantPayment.is_pending_approval == True)
         .options(
@@ -281,17 +216,40 @@ async def get_pending_approval_payments(
         )
     )
 
-    # Filter by project if specified
     if project:
-        query = query.join(Expense).filter(Expense.project_id == project.id)
+        expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
 
-    payments = query.order_by(ParticipantPayment.submitted_at.desc()).all()
+    expense_payments = expense_query.order_by(ParticipantPayment.submitted_at.desc()).all()
+
+    # Get contribution payments (pending approval OR submitted but not paid - for backwards compatibility)
+    contribution_query = (
+        db.query(ContributionPayment)
+        .filter(
+            (ContributionPayment.is_pending_approval == True) |
+            ((ContributionPayment.submitted_at != None) & (ContributionPayment.is_paid == False))
+        )
+        .options(
+            joinedload(ContributionPayment.contribution),
+            joinedload(ContributionPayment.user)
+        )
+    )
+
+    if project:
+        contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+
+    contribution_payments = contribution_query.order_by(ContributionPayment.submitted_at.desc()).all()
+
+    print(f"[DEBUG pending-approval] Found {len(contribution_payments)} contribution payments for project {project.id if project else 'all'}")
+    for cp in contribution_payments:
+        print(f"  - Payment {cp.id}: user={cp.user_id}, is_pending={cp.is_pending_approval}, submitted={cp.submitted_at}")
 
     # Cache projects by id to avoid N+1 queries
     project_cache: dict = {}
 
     result = []
-    for payment in payments:
+
+    # Process expense payments
+    for payment in expense_payments:
         expense = payment.expense
         user = payment.user
 
@@ -345,6 +303,72 @@ async def get_pending_approval_payments(
             user=user_info,
         )
         result.append(payment_with_expense)
+
+    # Process contribution payments (format as expenses for UI compatibility)
+    for payment in contribution_payments:
+        contribution = payment.contribution
+        user = payment.user
+
+        print(f"[DEBUG pending-approval] Processing contribution payment {payment.id}, contribution={contribution.id if contribution else 'None'}, user={user.id if user else 'None'}")
+
+        # Get currency_mode from project (cached)
+        project_id = contribution.project_id
+        if project_id not in project_cache:
+            project_cache[project_id] = db.query(Project).filter(Project.id == project_id).first() if project_id else None
+        project_obj = project_cache[project_id]
+        currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
+
+        # Format contribution as expense info for UI compatibility
+        expense_info = ExpenseInfo(
+            id=contribution.id,
+            description=f"[APORTE] {contribution.description}",  # Prefix to distinguish
+            amount_usd=Decimal("0"),  # Contributions track differently
+            amount_ars=contribution.amount if contribution.currency.value == "ARS" else Decimal("0"),
+            expense_date=contribution.created_at,
+            provider_name=None,
+            category_name="Aporte",
+            currency_mode=currency_mode,
+        )
+
+        user_info = UserInfo(
+            id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+        ) if user else None
+
+        # Use amount_due and currency from contribution payment
+        amount_due_usd = payment.amount_paid_usd or Decimal("0")
+        amount_due_ars = payment.amount_paid_ars or payment.amount_due
+
+        payment_with_expense = PaymentWithExpense(
+            id=payment.id,
+            expense_id=None,  # No expense_id for contributions
+            user_id=payment.user_id,
+            amount_due_usd=amount_due_usd,
+            amount_due_ars=amount_due_ars,
+            amount_paid=payment.amount_paid,
+            currency_paid=payment.currency_paid,
+            is_pending_approval=payment.is_pending_approval,
+            is_paid=payment.is_paid,
+            paid_at=payment.paid_at,
+            submitted_at=payment.submitted_at,
+            approved_by=payment.approved_by,
+            approved_at=payment.approved_at,
+            rejection_reason=payment.rejection_reason,
+            receipt_file_path=payment.receipt_file_path,
+            exchange_rate_at_payment=payment.exchange_rate_at_payment,
+            amount_paid_usd=payment.amount_paid_usd,
+            amount_paid_ars=payment.amount_paid_ars,
+            exchange_rate_source=payment.exchange_rate_source,
+            created_at=payment.created_at,
+            updated_at=payment.updated_at,
+            expense=expense_info,
+            user=user_info,
+        )
+        result.append(payment_with_expense)
+
+    # Sort all payments by submitted_at (most recent first)
+    result.sort(key=lambda x: x.submitted_at, reverse=True)
 
     return result
 
@@ -559,14 +583,123 @@ async def approve_payment(
 ):
     """
     Approve or reject a payment (project admin only).
+    Handles both expense payments (ParticipantPayment) and contribution payments (ContributionPayment).
     """
+    from app.models.contribution import Contribution
+    from app.models.contribution_payment import ContributionPayment
+    from app.models.project_member import ProjectMember
+    from app.models.project import Project
+
+    # Try to find payment in ParticipantPayment first
     payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
 
+    # If not found, try ContributionPayment
     if not payment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment not found",
-        )
+        contribution_payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+        if contribution_payment:
+            # Handle contribution payment approval
+            contribution = db.query(Contribution).filter(Contribution.id == contribution_payment.contribution_id).first()
+
+            if not contribution:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Contribution not found",
+                )
+
+            # Verify user is admin of the project
+            if not is_project_admin(db, current_user.id, contribution.project_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You must be an admin of this project",
+                )
+
+            # Check if payment is pending approval
+            if not contribution_payment.is_pending_approval and not (contribution_payment.submitted_at and not contribution_payment.is_paid):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Payment is not pending approval",
+                )
+
+            if approval.approved:
+                # Approve the contribution payment
+                contribution_payment.is_pending_approval = False
+                contribution_payment.is_paid = True
+                contribution_payment.paid_at = datetime.utcnow()
+                contribution_payment.approved_by = current_user.id
+                contribution_payment.approved_at = datetime.utcnow()
+                contribution_payment.rejection_reason = None
+
+                # Credit the balance to the member's account
+                member = db.query(ProjectMember).filter(
+                    ProjectMember.project_id == contribution.project_id,
+                    ProjectMember.user_id == contribution_payment.user_id,
+                ).first()
+
+                if member:
+                    project = db.query(Project).filter(Project.id == contribution.project_id).first()
+                    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+                    # Credit balance according to currency_mode
+                    if currency_mode == "ARS":
+                        member.balance_ars += contribution_payment.amount_paid_ars if contribution_payment.amount_paid_ars else contribution_payment.amount_paid
+                    elif currency_mode == "USD":
+                        member.balance_usd += contribution_payment.amount_paid_usd if contribution_payment.amount_paid_usd else contribution_payment.amount_paid
+                    else:  # DUAL - balance is stored ONLY in ARS
+                        member.balance_ars += contribution_payment.amount_paid_ars if contribution_payment.amount_paid_ars else contribution_payment.amount_paid
+
+                    member.balance_updated_at = datetime.utcnow()
+                    print(f"[DEBUG approve_payment] Contribution approved: credited balance to user {contribution_payment.user_id}, new balance ARS: {member.balance_ars}, USD: {member.balance_usd}")
+            else:
+                # Reject the contribution payment
+                contribution_payment.is_pending_approval = False
+                contribution_payment.is_paid = False
+                contribution_payment.paid_at = None
+                contribution_payment.amount_paid = None
+                contribution_payment.currency_paid = None
+                contribution_payment.amount_paid_usd = None
+                contribution_payment.amount_paid_ars = None
+                contribution_payment.exchange_rate_at_payment = None
+                contribution_payment.exchange_rate_source = None
+                contribution_payment.rejection_reason = approval.rejection_reason or "Rejected by admin"
+                contribution_payment.approved_by = current_user.id
+                contribution_payment.approved_at = datetime.utcnow()
+                print(f"[DEBUG approve_payment] Contribution rejected: payment {contribution_payment.id} for user {contribution_payment.user_id}")
+
+            db.commit()
+            db.refresh(contribution_payment)
+
+            # Return a PaymentResponse-compatible response (mimicking ParticipantPayment structure)
+            # This allows the frontend to handle it uniformly
+            return {
+                "id": contribution_payment.id,
+                "expense_id": None,
+                "user_id": contribution_payment.user_id,
+                "amount_due_usd": contribution_payment.amount_paid_usd or Decimal("0"),
+                "amount_due_ars": contribution_payment.amount_paid_ars or contribution_payment.amount_due,
+                "amount_paid": contribution_payment.amount_paid,
+                "currency_paid": contribution_payment.currency_paid,
+                "is_pending_approval": contribution_payment.is_pending_approval,
+                "is_paid": contribution_payment.is_paid,
+                "paid_at": contribution_payment.paid_at,
+                "submitted_at": contribution_payment.submitted_at,
+                "approved_by": contribution_payment.approved_by,
+                "approved_at": contribution_payment.approved_at,
+                "rejection_reason": contribution_payment.rejection_reason,
+                "receipt_file_path": contribution_payment.receipt_file_path,
+                "exchange_rate_at_payment": contribution_payment.exchange_rate_at_payment,
+                "amount_paid_usd": contribution_payment.amount_paid_usd,
+                "amount_paid_ars": contribution_payment.amount_paid_ars,
+                "exchange_rate_source": contribution_payment.exchange_rate_source,
+                "created_at": contribution_payment.created_at,
+                "updated_at": contribution_payment.updated_at,
+            }
+        else:
+            # Payment not found in either table
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment not found",
+            )
 
     # Verify user is admin of the payment's expense project
     expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()

@@ -6,7 +6,7 @@ from app.models.expense import Currency
 
 
 class PaymentBase(BaseModel):
-    expense_id: int
+    expense_id: Optional[int] = None  # None for contribution payments
     user_id: int
     amount_due_usd: Decimal
     amount_due_ars: Decimal

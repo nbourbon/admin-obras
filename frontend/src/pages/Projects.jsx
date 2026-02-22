@@ -9,24 +9,39 @@ const CURRENCY_MODE_OPTIONS = [
   { value: 'USD', label: 'Solo Dolares (USD)', description: 'Proyecto solo en dolares' },
 ]
 
+const PROJECT_TYPE_OPTIONS = [
+  { value: 'generico', label: 'Genérico' },
+  { value: 'construccion', label: 'Construcción' },
+]
+
 function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     currency_mode: 'DUAL',
+    project_type: 'generico',
+    square_meters: '',
+    contribution_mode: 'both',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (project) {
+      // Extract square_meters and contribution_mode from type_parameters JSON
+      const squareMeters = project.type_parameters?.square_meters || ''
+      const contributionMode = project.type_parameters?.contribution_mode || 'both'
+
       setFormData({
         name: project.name,
         description: project.description || '',
         currency_mode: project.currency_mode || 'DUAL',
+        project_type: project.project_type || 'generico',
+        square_meters: squareMeters,
+        contribution_mode: contributionMode,
       })
     } else {
-      setFormData({ name: '', description: '', currency_mode: 'DUAL' })
+      setFormData({ name: '', description: '', currency_mode: 'DUAL', project_type: 'generico', square_meters: '', contribution_mode: 'both' })
     }
   }, [project])
 
@@ -36,10 +51,29 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
     setLoading(true)
 
     try {
+      // Build type_parameters JSON based on project_type
+      let typeParameters = null
+      if (formData.project_type === 'construccion') {
+        typeParameters = {
+          contribution_mode: formData.contribution_mode,
+        }
+        if (formData.square_meters) {
+          typeParameters.square_meters = parseFloat(formData.square_meters)
+        }
+      }
+
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        currency_mode: formData.currency_mode,
+        project_type: formData.project_type,
+        type_parameters: typeParameters,
+      }
+
       if (project) {
-        await projectsAPI.update(project.id, formData)
+        await projectsAPI.update(project.id, payload)
       } else {
-        await projectsAPI.create(formData)
+        await projectsAPI.create(payload)
       }
       onSuccess()
       onClose()
@@ -116,6 +150,63 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
                 {CURRENCY_MODE_OPTIONS.find(o => o.value === formData.currency_mode)?.description}
               </p>
             </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tipo de Proyecto
+            </label>
+            <select
+              value={formData.project_type}
+              onChange={(e) => setFormData({ ...formData, project_type: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {PROJECT_TYPE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {formData.project_type === 'construccion' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Metros Cuadrados
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.square_meters}
+                  onChange={(e) => setFormData({ ...formData, square_meters: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: 150.5"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Superficie total de la construcción en m²
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Modalidad de Aporte
+                </label>
+                <select
+                  value={formData.contribution_mode}
+                  onChange={(e) => setFormData({ ...formData, contribution_mode: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="both">Ambos (Gastos + Aportes)</option>
+                  <option value="current_account">Aporte a la Cta Corriente</option>
+                  <option value="direct_payment">Pagos x Gasto</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {formData.contribution_mode === 'both' && 'Los usuarios pueden pagar gastos directamente y hacer aportes a cuenta corriente'}
+                  {formData.contribution_mode === 'current_account' && 'Los gastos se pagan desde el saldo de cuenta corriente. Los usuarios solo hacen aportes.'}
+                  {formData.contribution_mode === 'direct_payment' && 'Solo pagos directos por gasto. El sistema de aportes se desactiva.'}
+                </p>
+              </div>
+            </>
           )}
 
           <div className="flex gap-3 pt-4">

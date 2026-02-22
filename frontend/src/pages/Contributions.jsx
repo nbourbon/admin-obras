@@ -153,14 +153,179 @@ function CreateContributionModal({ isOpen, onClose, onCreated, currencyMode }) {
   )
 }
 
+function PayContributionModal({ isOpen, onClose, contribution, onSuccess, currencyMode }) {
+  const [formData, setFormData] = useState({
+    payment_date: new Date().toISOString().split('T')[0],
+    exchange_rate_override: '',
+  })
+  const [receiptFile, setReceiptFile] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const submitData = {
+        amount_paid: contribution.my_amount_due,
+        currency_paid: contribution.currency,
+        payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
+      }
+
+      // Include exchange rate override for DUAL mode
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+
+      // Use the user's payment ID
+      if (!contribution.my_payment_id) {
+        setError('No se encontró tu pago para este aporte')
+        setLoading(false)
+        return
+      }
+
+      await contributionsAPI.submitPayment(contribution.my_payment_id, submitData)
+
+      // Upload receipt if provided
+      if (receiptFile) {
+        try {
+          await contributionsAPI.uploadReceipt(paymentId, receiptFile)
+        } catch (uploadErr) {
+          console.error('Error uploading receipt:', uploadErr)
+        }
+      }
+
+      onSuccess()
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al enviar pago')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen || !contribution) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Pagar Aporte</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-500">Aporte</p>
+          <p className="font-medium">{contribution.description}</p>
+          <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
+          <p className="font-semibold text-blue-600">
+            {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha del Pago
+            </label>
+            <input
+              type="date"
+              required
+              value={formData.payment_date}
+              onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {currencyMode === 'DUAL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Cambio (opcional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchange_rate_override}
+                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Dejar vacío para usar TC automático"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Comprobante (opcional)
+            </label>
+            {receiptFile ? (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle2 className="text-green-600" size={18} />
+                <span className="text-sm text-green-700 flex-1 truncate">{receiptFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setReceiptFile(null)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setReceiptFile(e.target.files[0])}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {loading ? 'Enviando...' : 'Pagar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function Contributions() {
   const { currentProject, isProjectAdmin } = useProject()
   const [contributions, setContributions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showPayModal, setShowPayModal] = useState(false)
+  const [selectedContribution, setSelectedContribution] = useState(null)
 
   const currencyMode = currentProject?.currency_mode || 'DUAL'
+
+  const handlePayClick = (contribution) => {
+    setSelectedContribution(contribution)
+    setShowPayModal(true)
+  }
 
   useEffect(() => {
     loadContributions()
@@ -196,6 +361,21 @@ export default function Contributions() {
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false)
+          loadContributions()
+        }}
+        currencyMode={currencyMode}
+      />
+
+      <PayContributionModal
+        isOpen={showPayModal}
+        onClose={() => {
+          setShowPayModal(false)
+          setSelectedContribution(null)
+        }}
+        contribution={selectedContribution}
+        onSuccess={() => {
+          setShowPayModal(false)
+          setSelectedContribution(null)
           loadContributions()
         }}
         currencyMode={currencyMode}
@@ -318,8 +498,20 @@ export default function Contributions() {
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {contribution.i_paid ? (
                         <Check size={20} className="inline text-green-600" />
+                      ) : contribution.is_pending_approval ? (
+                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                          Pendiente
+                        </span>
                       ) : (
-                        <span className="text-gray-300">-</span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handlePayClick(contribution)
+                          }}
+                          className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          Pagar
+                        </button>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -351,23 +543,26 @@ export default function Contributions() {
           {/* Mobile cards */}
           <div className="md:hidden space-y-4">
             {contributions.map((contribution) => (
-              <Link
+              <div
                 key={contribution.id}
-                to={`/contributions/${contribution.id}`}
-                className="block bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 flex-1">
-                    <Coins size={18} className="text-green-600 flex-shrink-0" />
-                    <span className="text-sm font-medium text-gray-900 truncate">
-                      {contribution.description}
-                    </span>
+                <Link
+                  to={`/contributions/${contribution.id}`}
+                  className="block hover:opacity-75 transition-opacity"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <Coins size={18} className="text-green-600 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {contribution.description}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      {contribution.i_paid && <Check size={18} className="text-green-600" />}
+                      {contribution.is_complete && <CheckCircle2 size={18} className="text-green-600" />}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    {contribution.i_paid && <Check size={18} className="text-green-600" />}
-                    {contribution.is_complete && <CheckCircle2 size={18} className="text-green-600" />}
-                  </div>
-                </div>
 
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
@@ -392,7 +587,24 @@ export default function Contributions() {
                     </div>
                   </div>
                 </div>
-              </Link>
+                </Link>
+
+                {/* Pay button or pending status (outside Link so it doesn't trigger navigation) */}
+                {!contribution.i_paid && (
+                  contribution.is_pending_approval ? (
+                    <div className="w-full mt-3 px-4 py-2 bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-medium rounded-lg text-center">
+                      ⏳ Pendiente de aprobación
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handlePayClick(contribution)}
+                      className="w-full mt-3 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Pagar mi parte
+                    </button>
+                  )
+                )}
+              </div>
             ))}
           </div>
 

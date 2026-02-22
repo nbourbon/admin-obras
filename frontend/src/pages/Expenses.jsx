@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { expensesAPI, providersAPI, categoriesAPI } from '../api/client'
+import { expensesAPI, providersAPI, categoriesAPI, rubrosAPI, paymentsAPI, dashboardAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, TrendingUp } from 'lucide-react'
+import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, TrendingUp, Check, CheckCircle2, Users } from 'lucide-react'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -147,6 +147,99 @@ function QuickCreateProviderModal({ isOpen, onClose, onCreated }) {
   )
 }
 
+function QuickCreateRubroModal({ isOpen, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const response = await rubrosAPI.create({ name, description })
+      onCreated(response.data)
+      onClose()
+      setName('')
+      setDescription('')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear rubro')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold">Nuevo Rubro</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej: Infraestructura, Terminaciones"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Descripcion (opcional)
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              placeholder="Descripcion del rubro"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -261,13 +354,14 @@ function QuickCreateCategoryModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: initialProviders, categories: initialCategories, currencyMode = 'DUAL' }) {
+function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: initialProviders, categories: initialCategories, rubros: initialRubros, currencyMode = 'DUAL' }) {
   const [formData, setFormData] = useState({
     description: '',
     amount_original: '',
     currency_original: 'USD',
     provider_id: '',
     category_id: '',
+    rubro_id: '',
     expense_date: '',
     exchange_rate_override: '',
   })
@@ -275,13 +369,16 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
   const [error, setError] = useState('')
   const [providers, setProviders] = useState(initialProviders)
   const [categories, setCategories] = useState(initialCategories)
+  const [rubros, setRubros] = useState(initialRubros)
   const [showProviderModal, setShowProviderModal] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showRubroModal, setShowRubroModal] = useState(false)
 
   useEffect(() => {
     setProviders(initialProviders)
     setCategories(initialCategories)
-  }, [initialProviders, initialCategories])
+    setRubros(initialRubros)
+  }, [initialProviders, initialCategories, initialRubros])
 
   useEffect(() => {
     if (expense) {
@@ -291,6 +388,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
         currency_original: expense.currency_original || 'USD',
         provider_id: expense.provider_id || '',
         category_id: expense.category_id || '',
+        rubro_id: expense.rubro_id || '',
         expense_date: expense.expense_date ? new Date(expense.expense_date).toISOString().split('T')[0] : '',
         exchange_rate_override: '',
       })
@@ -307,6 +405,11 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
     setFormData({ ...formData, category_id: newCategory.id.toString() })
   }
 
+  const handleRubroCreated = (newRubro) => {
+    setRubros([...rubros, newRubro])
+    setFormData({ ...formData, rubro_id: newRubro.id.toString() })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -319,6 +422,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
         currency_original: formData.currency_original,
         provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        rubro_id: formData.rubro_id ? parseInt(formData.rubro_id) : null,
         expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
       }
       if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
@@ -477,6 +581,32 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rubro (opcional)
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.rubro_id}
+                onChange={(e) => setFormData({ ...formData, rubro_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {rubros?.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowRubroModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nuevo rubro"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Fecha del Gasto
             </label>
             <input
@@ -517,12 +647,18 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
           onClose={() => setShowCategoryModal(false)}
           onCreated={handleCategoryCreated}
         />
+
+        <QuickCreateRubroModal
+          isOpen={showRubroModal}
+          onClose={() => setShowRubroModal(false)}
+          onCreated={handleRubroCreated}
+        />
       </div>
     </div>
   )
 }
 
-function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, currencyMode = 'DUAL' }) {
+function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, rubros: initialRubros, currencyMode = 'DUAL' }) {
   const defaultCurrency = currencyMode === 'ARS' ? 'ARS' : 'USD'
   const [formData, setFormData] = useState({
     description: '',
@@ -530,6 +666,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     currency_original: defaultCurrency,
     provider_id: '',
     category_id: '',
+    rubro_id: '',
     expense_date: new Date().toISOString().split('T')[0], // Default to today
     exchange_rate_override: '',
   })
@@ -538,13 +675,16 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
   const [error, setError] = useState('')
   const [showProviderModal, setShowProviderModal] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showRubroModal, setShowRubroModal] = useState(false)
   const [providers, setProviders] = useState(initialProviders)
   const [categories, setCategories] = useState(initialCategories)
+  const [rubros, setRubros] = useState(initialRubros)
 
   useEffect(() => {
     setProviders(initialProviders)
     setCategories(initialCategories)
-  }, [initialProviders, initialCategories])
+    setRubros(initialRubros)
+  }, [initialProviders, initialCategories, initialRubros])
 
   const handleProviderCreated = (newProvider) => {
     setProviders([...providers, newProvider])
@@ -554,6 +694,11 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
   const handleCategoryCreated = (newCategory) => {
     setCategories([...categories, newCategory])
     setFormData({ ...formData, category_id: newCategory.id.toString() })
+  }
+
+  const handleRubroCreated = (newRubro) => {
+    setRubros([...rubros, newRubro])
+    setFormData({ ...formData, rubro_id: newRubro.id.toString() })
   }
 
   const handleSubmit = async (e) => {
@@ -569,6 +714,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         currency_original: formData.currency_original,
         provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        rubro_id: formData.rubro_id ? parseInt(formData.rubro_id) : null,
         expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
         is_contribution: false, // Regular expense, not a contribution
       }
@@ -596,6 +742,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         currency_original: defaultCurrency,
         provider_id: '',
         category_id: '',
+        rubro_id: '',
         expense_date: new Date().toISOString().split('T')[0],
         exchange_rate_override: '',
       })
@@ -752,6 +899,32 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rubro (opcional)
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.rubro_id}
+                onChange={(e) => setFormData({ ...formData, rubro_id: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sin definir</option>
+                {rubros?.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowRubroModal(true)}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                title="Crear nuevo rubro"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Fecha del Gasto
             </label>
             <input
@@ -822,16 +995,192 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
           onClose={() => setShowCategoryModal(false)}
           onCreated={handleCategoryCreated}
         />
+        <QuickCreateRubroModal
+          isOpen={showRubroModal}
+          onClose={() => setShowRubroModal(false)}
+          onCreated={handleRubroCreated}
+        />
+      </div>
+    </div>
+  )
+}
+
+function PayExpenseModal({ isOpen, onClose, expense, onSuccess, currencyMode }) {
+  const [formData, setFormData] = useState({
+    payment_date: new Date().toISOString().split('T')[0],
+    exchange_rate_override: '',
+  })
+  const [receiptFile, setReceiptFile] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      // Determine currency_paid based on currency_mode
+      let currencyPaid = 'USD'
+      if (currencyMode === 'ARS') {
+        currencyPaid = 'ARS'
+      } else if (currencyMode === 'USD') {
+        currencyPaid = 'USD'
+      } else {
+        // DUAL mode: use the expense's original currency
+        currencyPaid = expense.currency_original || 'USD'
+      }
+
+      const submitData = {
+        amount_paid: expense.my_amount_due,
+        currency_paid: currencyPaid,
+        payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
+      }
+
+      // Include exchange rate override for DUAL mode
+      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
+        submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+
+      // Use the user's payment ID
+      if (!expense.my_payment_id) {
+        setError('No se encontró tu pago para este gasto')
+        setLoading(false)
+        return
+      }
+
+      await paymentsAPI.submitPayment(expense.my_payment_id, submitData)
+
+      // Upload receipt if provided
+      if (receiptFile) {
+        try {
+          await paymentsAPI.uploadReceipt(expense.my_payment_id, receiptFile)
+        } catch (uploadErr) {
+          console.error('Error uploading receipt:', uploadErr)
+        }
+      }
+
+      onSuccess()
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al enviar pago')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen || !expense) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Pagar Gasto</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-500">Gasto</p>
+          <p className="font-medium">{expense.description}</p>
+          <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
+          <p className="font-semibold text-blue-600">
+            {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha del Pago
+            </label>
+            <input
+              type="date"
+              required
+              value={formData.payment_date}
+              onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {currencyMode === 'DUAL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Cambio (opcional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchange_rate_override}
+                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Dejar vacío para usar TC automático"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Comprobante (opcional)
+            </label>
+            {receiptFile ? (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle2 className="text-green-600" size={18} />
+                <span className="text-sm text-green-700 flex-1 truncate">{receiptFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setReceiptFile(null)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setReceiptFile(e.target.files[0])}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Enviando...' : 'Pagar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
 }
 
 function Expenses() {
-  const { isProjectAdmin, currencyMode } = useProject()
+  const { isProjectAdmin, currencyMode, currentProject } = useProject()
+  const isIndividual = currentProject?.is_individual
   const [expenses, setExpenses] = useState([])
   const [providers, setProviders] = useState([])
   const [categories, setCategories] = useState([])
+  const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -840,23 +1189,44 @@ function Expenses() {
   const [showFilters, setShowFilters] = useState(false)
   const [filterProvider, setFilterProvider] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterRubro, setFilterRubro] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedExpense, setSelectedExpense] = useState(null)
+  const [contributionMode, setContributionMode] = useState('both')
 
   useEffect(() => {
     loadData()
+    loadContributionMode()
   }, [showDeleted])
+
+  const loadContributionMode = async () => {
+    try {
+      const response = await dashboardAPI.summary()
+      setContributionMode(response.data.contribution_mode || 'both')
+    } catch (err) {
+      console.error('Error loading contribution mode:', err)
+    }
+  }
+
+  const handlePayClick = (expense) => {
+    setSelectedExpense(expense)
+    setShowPaymentModal(true)
+  }
 
   const loadData = async () => {
     try {
-      const [expensesRes, providersRes, categoriesRes] = await Promise.all([
+      const [expensesRes, providersRes, categoriesRes, rubrosRes] = await Promise.all([
         expensesAPI.list({ include_deleted: showDeleted }),
         providersAPI.list(),
         categoriesAPI.list(),
+        rubrosAPI.list(),
       ])
       setExpenses(expensesRes.data)
       setProviders(providersRes.data)
       setCategories(categoriesRes.data)
+      setRubros(rubrosRes.data)
     } catch (err) {
       console.error('Error loading data:', err)
     } finally {
@@ -883,17 +1253,19 @@ function Expenses() {
     return expenses.filter((expense) => {
       if (filterProvider && String(expense.provider?.id ?? '') !== filterProvider) return false
       if (filterCategory && String(expense.category?.id ?? '') !== filterCategory) return false
+      if (filterRubro && String(expense.rubro?.id ?? '') !== filterRubro) return false
       if (filterDateFrom && expense.expense_date < filterDateFrom) return false
       if (filterDateTo && expense.expense_date > filterDateTo + 'T23:59:59') return false
       return true
     })
-  }, [expenses, filterProvider, filterCategory, filterDateFrom, filterDateTo])
+  }, [expenses, filterProvider, filterCategory, filterRubro, filterDateFrom, filterDateTo])
 
-  const activeFilterCount = [filterProvider, filterCategory, filterDateFrom, filterDateTo, showDeleted ? '1' : ''].filter(Boolean).length
+  const activeFilterCount = [filterProvider, filterCategory, filterRubro, filterDateFrom, filterDateTo, showDeleted ? '1' : ''].filter(Boolean).length
 
   const clearFilters = () => {
     setFilterProvider('')
     setFilterCategory('')
+    setFilterRubro('')
     setFilterDateFrom('')
     setFilterDateTo('')
     setShowDeleted(false)
@@ -940,7 +1312,7 @@ function Expenses() {
 
       {showFilters && (
         <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Proveedor</label>
               <select
@@ -964,6 +1336,19 @@ function Expenses() {
                 <option value="">Todas</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Rubro</label>
+              <select
+                value={filterRubro}
+                onChange={(e) => setFilterRubro(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos</option>
+                {rubros.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
             </div>
@@ -1034,114 +1419,115 @@ function Expenses() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Descripcion
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Proveedor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categoria
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Fecha
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Descripción
                   </th>
-                  {isProjectAdmin && (
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Monto Total
+                  </th>
+                  {!isIndividual && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Mi Parte
                     </th>
                   )}
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Yo Pagué
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Completo
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredExpenses.map((expense) => (
                   <tr
                     key={expense.id}
-                    className={`hover:opacity-80 transition-opacity ${expense.is_deleted ? 'opacity-50' : ''}`}
-                    style={{ backgroundColor: expense.is_deleted ? '#fee' : (expense.category?.color || '#ffffff') }}
+                    className={`hover:bg-gray-50 ${expense.is_deleted ? 'opacity-50' : ''}`}
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formatDate(expense.expense_date)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="flex items-center gap-2">
-                        <Link
-                          to={`/expenses/${expense.id}`}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          {expense.description}
-                        </Link>
-                        {expense.invoice_file_path && (
-                          <FileText size={14} className="text-gray-400" />
-                        )}
+                        <FileText size={16} className="text-blue-600 flex-shrink-0" />
+                        <span className="truncate">{expense.description}</span>
                         {expense.is_deleted && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
                             ELIMINADO
                           </span>
                         )}
-                        {expense.is_contribution && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded flex items-center gap-1">
-                            <TrendingUp size={12} />
-                            APORTE
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
+                      {currencyMode === 'ARS'
+                        ? formatCurrency(expense.amount_ars, 'ARS')
+                        : formatCurrency(expense.amount_usd)}
+                    </td>
+                    {!isIndividual && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-semibold">
+                        {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+                      </td>
+                    )}
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {expense.i_paid ? (
+                        <Check size={20} className="inline text-green-600" />
+                      ) : expense.is_pending_approval ? (
+                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                          Pendiente
+                        </span>
+                      ) : contributionMode === 'current_account' ? (
+                        <span className="text-xs text-gray-500 italic">
+                          Desde saldo
+                        </span>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handlePayClick(expense)
+                          }}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Pagar
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {expense.is_complete ? (
+                        <CheckCircle2 size={20} className="inline text-green-600" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-1">
+                          <Users size={16} className="text-gray-400" />
+                          <span className="text-xs text-gray-500">
+                            {expense.paid_participants}/{expense.total_participants}
                           </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Link
+                          to={`/expenses/${expense.id}`}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          Ver detalle
+                        </Link>
+                        {isProjectAdmin && !expense.is_deleted && (
+                          <button
+                            onClick={() => handleEditExpense(expense)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 size={14} />
+                          </button>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      {currencyMode === 'ARS' ? (
-                        <div className="font-medium">{formatCurrency(expense.amount_ars, 'ARS')}</div>
-                      ) : currencyMode === 'USD' ? (
-                        <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
-                      ) : (
-                        <>
-                          <div className="font-medium">{formatCurrency(expense.amount_usd)}</div>
-                          <div className="text-sm text-gray-500">
-                            {formatCurrency(expense.amount_ars, 'ARS')}
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {expense.provider?.name || 'Sin definir'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-gray-700">
-                        {expense.category?.name || 'Sin definir'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {formatDate(expense.expense_date)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={expense.status} />
-                    </td>
-                    {isProjectAdmin && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          {!expense.is_deleted && (
-                            <button
-                              onClick={() => handleEditExpense(expense)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Editar gasto"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                          )}
-                          {showDeleted && expense.is_deleted && (
-                            <button
-                              onClick={() => handleRestoreExpense(expense.id)}
-                              className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                            >
-                              <RotateCcw size={14} />
-                              Restaurar
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1156,6 +1542,7 @@ function Expenses() {
         onCreated={loadData}
         providers={providers}
         categories={categories}
+        rubros={rubros}
         currencyMode={currencyMode}
       />
 
@@ -1169,6 +1556,22 @@ function Expenses() {
         expense={expenseToEdit}
         providers={providers}
         categories={categories}
+        rubros={rubros}
+        currencyMode={currencyMode}
+      />
+
+      <PayExpenseModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false)
+          setSelectedExpense(null)
+        }}
+        expense={selectedExpense}
+        onSuccess={() => {
+          setShowPaymentModal(false)
+          setSelectedExpense(null)
+          loadData()
+        }}
         currencyMode={currencyMode}
       />
     </div>

@@ -20,6 +20,12 @@ class DashboardSummary(BaseModel):
     total_contributions_ars: Optional[Decimal] = Decimal("0")
     total_balance_usd: Optional[Decimal] = Decimal("0")
     total_balance_ars: Optional[Decimal] = Decimal("0")
+    # Construction project fields
+    project_type: Optional[str] = None
+    square_meters: Optional[Decimal] = None
+    cost_per_square_meter_usd: Optional[Decimal] = None
+    cost_per_square_meter_ars: Optional[Decimal] = None
+    contribution_mode: Optional[str] = None  # both, current_account, direct_payment
 
 
 class MonthlyExpense(BaseModel):
@@ -47,6 +53,10 @@ class UserPaymentStatus(BaseModel):
     pending_usd: Decimal
     pending_ars: Decimal
     pending_payments_count: int
+    # User's contribution balance
+    balance_aportes_usd: Optional[Decimal] = Decimal("0")
+    balance_aportes_ars: Optional[Decimal] = Decimal("0")
+    has_pending_contribution: bool = False
 
 
 class ParticipantStatus(BaseModel):
@@ -63,6 +73,7 @@ class ParticipantStatus(BaseModel):
     exchange_rate_at_payment: Optional[Decimal] = None
     amount_paid_usd: Optional[Decimal] = None
     amount_paid_ars: Optional[Decimal] = None
+    receipt_file_path: Optional[str] = None
 
 
 class ExpensePaymentStatus(BaseModel):

@@ -115,8 +115,20 @@ async def get_dashboard_summary(
             .count()
         )
 
-    # Get currency_mode from project
+    # Get currency_mode and project type from project
     currency_mode = getattr(project, 'currency_mode', None) or "DUAL" if project else "DUAL"
+    project_type = getattr(project, 'project_type', None) if project else None
+
+    # Extract square_meters and contribution_mode from type_parameters JSON
+    square_meters = None
+    contribution_mode = None
+    if project and project_type and project_type == "construccion":
+        type_params = getattr(project, 'type_parameters', None)
+        if type_params and isinstance(type_params, dict):
+            square_meters = type_params.get('square_meters')
+            if square_meters:
+                square_meters = Decimal(str(square_meters))
+            contribution_mode = type_params.get('contribution_mode', 'both')  # Default to 'both'
 
     # Get current exchange rate (skip for single-currency projects)
     if currency_mode == "DUAL":
@@ -170,6 +182,13 @@ async def get_dashboard_summary(
             total_balance_usd = sum(Decimal(str(m.balance_usd)) for m in members_balances)
             total_balance_ars = sum(Decimal(str(m.balance_ars)) for m in members_balances)
 
+    # Calculate cost per square meter for construction projects
+    cost_per_square_meter_usd = None
+    cost_per_square_meter_ars = None
+    if project_type == "construccion" and square_meters and square_meters > 0:
+        cost_per_square_meter_usd = (total_expenses_usd / square_meters).quantize(Decimal("0.01"))
+        cost_per_square_meter_ars = (total_expenses_ars / square_meters).quantize(Decimal("0.01"))
+
     return DashboardSummary(
         total_expenses_usd=total_expenses_usd,
         total_expenses_ars=total_expenses_ars,
@@ -185,6 +204,11 @@ async def get_dashboard_summary(
         total_contributions_ars=total_contributions_ars,
         total_balance_usd=total_balance_usd,
         total_balance_ars=total_balance_ars,
+        project_type=project_type,
+        square_meters=square_meters,
+        cost_per_square_meter_usd=cost_per_square_meter_usd,
+        cost_per_square_meter_ars=cost_per_square_meter_ars,
+        contribution_mode=contribution_mode,
     )
 
 
@@ -268,8 +292,12 @@ async def get_my_payment_status(
     project_id = project.id if project else None
     summary = get_user_payment_summary(db, current_user.id, project_id)
 
-    # Get participation percentage from project member if project selected
+    # Get participation percentage and contribution balance from project member
     participation_percentage = Decimal(str(current_user.participation_percentage))
+    balance_aportes_usd = Decimal("0")
+    balance_aportes_ars = Decimal("0")
+    has_pending_contribution = False
+
     if project:
         member = (
             db.query(ProjectMember)
@@ -279,6 +307,38 @@ async def get_my_payment_status(
         )
         if member:
             participation_percentage = Decimal(str(member.participation_percentage))
+            balance_aportes_ars = Decimal(str(member.balance_ars))
+
+            # Calculate USD equivalent based on currency mode
+            currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+            if currency_mode == "DUAL":
+                # Convert ARS to USD at current rate
+                try:
+                    current_rate = fetch_blue_dollar_rate_sync()
+                    if current_rate > 0:
+                        balance_aportes_usd = (balance_aportes_ars / current_rate).quantize(Decimal("0.01"))
+                except Exception:
+                    balance_aportes_usd = Decimal("0")
+            elif currency_mode == "USD":
+                balance_aportes_usd = Decimal(str(member.balance_usd))
+                balance_aportes_ars = Decimal("0")
+            # else ARS mode: balance_aportes_usd stays 0
+
+        # Check for pending contribution payments
+        from app.models.contribution_payment import ContributionPayment
+        from app.models.contribution import Contribution
+
+        pending_contrib = (
+            db.query(ContributionPayment)
+            .join(Contribution)
+            .filter(
+                ContributionPayment.user_id == current_user.id,
+                Contribution.project_id == project.id,
+                ContributionPayment.is_paid == False,
+            )
+            .first()
+        )
+        has_pending_contribution = pending_contrib is not None
 
     return UserPaymentStatus(
         user_id=current_user.id,
@@ -291,6 +351,9 @@ async def get_my_payment_status(
         pending_usd=summary["pending_usd"],
         pending_ars=summary["pending_ars"],
         pending_payments_count=summary["pending_payments_count"],
+        balance_aportes_usd=balance_aportes_usd,
+        balance_aportes_ars=balance_aportes_ars,
+        has_pending_contribution=has_pending_contribution,
     )
 
 
@@ -376,6 +439,7 @@ async def get_expense_payment_status(
             exchange_rate_at_payment=Decimal(str(payment.exchange_rate_at_payment)) if payment.exchange_rate_at_payment else None,
             amount_paid_usd=Decimal(str(payment.amount_paid_usd)) if payment.amount_paid_usd else None,
             amount_paid_ars=Decimal(str(payment.amount_paid_ars)) if payment.amount_paid_ars else None,
+            receipt_file_path=payment.receipt_file_path,
         ))
 
         if payment.is_paid:

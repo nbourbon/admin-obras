@@ -1,7 +1,15 @@
 from pydantic import BaseModel
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from app.models.project import ProjectType
+import enum
+
+
+class ContributionMode(str, enum.Enum):
+    BOTH = "both"  # Ambos: gastos + aportes (default)
+    CURRENT_ACCOUNT = "current_account"  # Solo aportes a cuenta corriente, gastos se pagan desde saldo
+    DIRECT_PAYMENT = "direct_payment"  # Solo pagos directos por gasto, sin aportes
 
 
 # Project Schemas
@@ -13,6 +21,8 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     is_individual: bool = True  # New projects are individual (single-user) by default
     currency_mode: str = "DUAL"  # ARS, USD, or DUAL
+    project_type: ProjectType = ProjectType.GENERICO
+    type_parameters: Optional[Dict[str, Any]] = None  # Flexible params: {"square_meters": 150.5} for construction, etc.
 
 
 class ProjectUpdate(BaseModel):
@@ -20,6 +30,8 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     is_individual: Optional[bool] = None
     currency_mode: Optional[str] = None
+    project_type: Optional[ProjectType] = None
+    type_parameters: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
 
 
@@ -28,6 +40,8 @@ class ProjectResponse(ProjectBase):
     created_by: int
     is_individual: bool
     currency_mode: str = "DUAL"
+    project_type: ProjectType = ProjectType.GENERICO
+    type_parameters: Optional[Dict[str, Any]] = None
     is_active: bool
     created_at: datetime
     current_user_is_admin: Optional[bool] = None  # Whether the current user is admin of this project

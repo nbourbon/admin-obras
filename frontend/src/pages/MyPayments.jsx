@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { paymentsAPI, contributionsAPI } from '../api/client'
+import { paymentsAPI, contributionsAPI, dashboardAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import {
   CreditCard,
@@ -310,12 +310,23 @@ function MyPayments() {
   const [showFilters, setShowFilters] = useState(false)
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
+  const [contributionMode, setContributionMode] = useState('both')
 
   const isIndividual = currentProject?.is_individual || false
 
   useEffect(() => {
     loadPayments()
+    loadContributionMode()
   }, [])
+
+  const loadContributionMode = async () => {
+    try {
+      const response = await dashboardAPI.summary()
+      setContributionMode(response.data.contribution_mode || 'both')
+    } catch (err) {
+      console.error('Error loading contribution mode:', err)
+    }
+  }
 
   const loadPayments = async () => {
     try {
@@ -656,24 +667,31 @@ function MyPayments() {
                       </div>
                       <p className="text-sm text-red-500 ml-7">{payment.rejection_reason}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleMarkPaid(payment)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Enviar nuevamente
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPaymentToDelete(payment)
-                          setShowDeleteConfirm(true)
-                        }}
-                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
-                        title="Eliminar pago"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {/* In current_account mode, expense payments cannot be paid directly */}
+                    {contributionMode === 'current_account' && payment.payment_type === 'expense' ? (
+                      <div className="text-sm text-gray-500 italic">
+                        Se paga desde saldo de cuenta corriente
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleMarkPaid(payment)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Enviar nuevamente
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPaymentToDelete(payment)
+                            setShowDeleteConfirm(true)
+                          }}
+                          className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
+                          title="Eliminar pago"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
@@ -681,24 +699,31 @@ function MyPayments() {
                       <Clock size={20} />
                       <span className="font-medium">Pendiente de pago</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleMarkPaid(payment)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Enviar pago
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPaymentToDelete(payment)
-                          setShowDeleteConfirm(true)
-                        }}
-                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
-                        title="Eliminar pago"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {/* In current_account mode, expense payments cannot be paid directly */}
+                    {contributionMode === 'current_account' && payment.payment_type === 'expense' ? (
+                      <div className="text-sm text-gray-500 italic">
+                        Se paga desde saldo de cuenta corriente
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleMarkPaid(payment)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Enviar pago
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPaymentToDelete(payment)
+                            setShowDeleteConfirm(true)
+                          }}
+                          className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1"
+                          title="Eliminar pago"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

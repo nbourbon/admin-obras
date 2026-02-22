@@ -24,8 +24,10 @@ class ContributionPayment(Base):
     submitted_at = Column(DateTime(timezone=True), nullable=True)
 
     # Approval info (for non-individual projects)
+    is_pending_approval = Column(Boolean, default=False)
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
 
     # Receipt file
     receipt_file_path = Column(String(500), nullable=True)

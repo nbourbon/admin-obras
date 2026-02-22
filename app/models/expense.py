@@ -45,6 +45,7 @@ class Expense(Base):
     # Foreign keys
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    rubro_id = Column(Integer, ForeignKey("rubros.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
 
@@ -70,6 +71,7 @@ class Expense(Base):
     # Relationships
     provider = relationship("Provider", back_populates="expenses")
     category = relationship("Category", back_populates="expenses")
+    rubro = relationship("Rubro", back_populates="expenses")
     created_by_user = relationship("User", back_populates="expenses_created", foreign_keys=[created_by])
     participant_payments = relationship("ParticipantPayment", back_populates="expense", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="expenses")

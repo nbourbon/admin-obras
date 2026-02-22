@@ -14,7 +14,7 @@ from app.schemas.contribution import (
     ContributionDetailResponse,
     ContributionPaymentDetail,
 )
-from app.schemas.payment import PaymentMarkPaid
+from app.schemas.payment import PaymentMarkPaid, PaymentApproval
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.contribution import Contribution, Currency
@@ -58,8 +58,14 @@ async def list_contributions(
 
         # Find current user's payment
         my_payment = next((p for p in payments if p.user_id == current_user.id), None)
+        my_payment_id = my_payment.id if my_payment else None
         my_amount_due = my_payment.amount_due if my_payment else Decimal("0")
+
+        # Calculate payment status
         i_paid = my_payment.is_paid if my_payment else False
+        is_pending_approval = False
+        if my_payment and not my_payment.is_paid and my_payment.submitted_at is not None:
+            is_pending_approval = True
 
         paid_count = sum(1 for p in payments if p.is_paid)
         is_complete = paid_count == len(payments) if payments else False
@@ -68,8 +74,10 @@ async def list_contributions(
             **contrib.__dict__,
             created_by_name=contrib.created_by_user.full_name,
             created_by_email=contrib.created_by_user.email,
+            my_payment_id=my_payment_id,
             my_amount_due=my_amount_due,
             i_paid=i_paid,
+            is_pending_approval=is_pending_approval,
             is_complete=is_complete,
             total_participants=len(payments),
             paid_participants=paid_count,
@@ -110,6 +118,8 @@ async def get_contribution(
             amount_due=payment.amount_due,
             is_paid=payment.is_paid,
             paid_at=payment.paid_at,
+            receipt_file_path=payment.receipt_file_path,
+            amount_paid=payment.amount_paid,
         ))
 
     paid_count = sum(1 for p in payments if p.is_paid)
@@ -273,21 +283,131 @@ async def submit_contribution_payment(
         payment.exchange_rate_at_payment = None
         payment.exchange_rate_source = None
 
-    # Auto-approve for individual projects or if user is admin
+    # Auto-approve for individual projects OR if user is admin
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == contribution.project_id,
+        ProjectMember.user_id == current_user.id,
+    ).first()
+
     if is_individual or user_is_admin:
         payment.is_paid = True
         payment.paid_at = datetime.utcnow()
         payment.approved_at = datetime.utcnow()
-        payment.approved_by = current_user.id if user_is_admin else None
-    # Otherwise, mark as pending approval (would need approval endpoint)
-    # For now, since contributions don't have pending_approval field, auto-approve
+        payment.approved_by = current_user.id
+
+        # IMPORTANT: Credit the balance to the user's account
+        if member:
+            # Credit balance according to currency_mode
+            if currency_mode == "ARS":
+                member.balance_ars += payment.amount_paid_ars
+            elif currency_mode == "USD":
+                member.balance_usd += payment.amount_paid_usd
+            else:  # DUAL - balance is stored ONLY in ARS
+                member.balance_ars += payment.amount_paid_ars
+
+            member.balance_updated_at = datetime.utcnow()
+            print(f"[DEBUG submit_contribution_payment] Auto-approved: credited {payment.amount_paid_ars} ARS to user {current_user.id}, new balance: {member.balance_ars}")
     else:
-        payment.is_paid = True
-        payment.paid_at = datetime.utcnow()
-        payment.approved_at = datetime.utcnow()
+        # Multi-participant project: Mark as submitted, pending admin approval
+        # Do NOT set is_paid=True or credit balance yet
+        payment.is_paid = False
+        payment.is_pending_approval = True
+        payment.paid_at = None
+        payment.approved_at = None
+        payment.approved_by = None
+        payment.rejection_reason = None
+        print(f"[DEBUG submit_contribution_payment] Pending approval: payment {payment.id} for user {current_user.id}")
 
     db.commit()
     db.refresh(payment)
+
+    # NEW: Auto-pay pending expenses if balance is sufficient
+    if member:
+        from app.models.payment import ParticipantPayment
+        from app.models.expense import Expense
+        from app.services.expense_splitter import check_sufficient_balance, auto_pay_from_balance, update_expense_status
+
+        # Get all pending payments for this user in this project (oldest first)
+        pending_payments = (
+            db.query(ParticipantPayment)
+            .join(Expense)
+            .filter(
+                ParticipantPayment.user_id == current_user.id,
+                ParticipantPayment.is_paid == False,
+                ParticipantPayment.is_deleted == False,
+                Expense.project_id == contribution.project_id,
+                Expense.is_deleted == False,
+            )
+            .order_by(Expense.created_at.asc())  # Pay oldest expenses first
+            .all()
+        )
+
+        auto_paid_count = 0
+        for pending_payment in pending_payments:
+            expense = pending_payment.expense
+
+            # Check if current balance is sufficient for this expense
+            has_sufficient_balance = check_sufficient_balance(
+                member,
+                pending_payment.amount_due_usd,
+                pending_payment.amount_due_ars,
+                currency_mode,
+                expense,
+            )
+
+            if has_sufficient_balance:
+                # Auto-pay this expense
+                pending_payment.is_paid = True
+                pending_payment.paid_at = datetime.utcnow()
+                pending_payment.payment_date = datetime.utcnow()
+                pending_payment.submitted_at = datetime.utcnow()
+                pending_payment.approved_at = datetime.utcnow()
+                pending_payment.approved_by = current_user.id
+
+                # Set payment amounts and currency
+                if currency_mode == "USD":
+                    pending_payment.amount_paid = pending_payment.amount_due_usd
+                    pending_payment.currency_paid = "USD"
+                    pending_payment.amount_paid_usd = pending_payment.amount_due_usd
+                    pending_payment.amount_paid_ars = Decimal(0)
+                else:
+                    pending_payment.amount_paid = pending_payment.amount_due_ars
+                    pending_payment.currency_paid = "ARS"
+                    pending_payment.amount_paid_ars = pending_payment.amount_due_ars
+                    if currency_mode == "DUAL":
+                        pending_payment.amount_paid_usd = pending_payment.amount_due_usd
+                    else:
+                        pending_payment.amount_paid_usd = Decimal(0)
+
+                pending_payment.exchange_rate_at_payment = expense.exchange_rate_used
+                pending_payment.exchange_rate_source = expense.exchange_rate_source
+
+                # Deduct from balance
+                if currency_mode == "ARS":
+                    member.balance_ars -= pending_payment.amount_due_ars
+                elif currency_mode == "USD":
+                    member.balance_usd -= pending_payment.amount_due_usd
+                else:  # DUAL
+                    if expense.currency_original.value == "ARS":
+                        member.balance_ars -= pending_payment.amount_due_ars
+                    else:
+                        amount_due_ars_equivalent = pending_payment.amount_due_usd * expense.exchange_rate_used
+                        member.balance_ars -= amount_due_ars_equivalent
+
+                member.balance_updated_at = datetime.utcnow()
+                auto_paid_count += 1
+
+                print(f"[DEBUG submit_contribution_payment] Auto-paid expense {expense.id} for user {current_user.id}, new balance: {member.balance_ars}")
+
+                # Update expense status
+                db.commit()
+                update_expense_status(db, expense.id)
+            else:
+                # Balance not sufficient, stop trying (since we process oldest first)
+                break
+
+        if auto_paid_count > 0:
+            print(f"[DEBUG submit_contribution_payment] Auto-paid {auto_paid_count} pending expenses after contribution payment")
 
     return {"message": "Payment submitted successfully", "is_paid": payment.is_paid}
 
@@ -356,5 +476,98 @@ async def download_contribution_receipt(
         media_type='application/octet-stream',
         filename=payment.receipt_file_path.split('/')[-1]
     )
+
+
+@router.put("/payments/{payment_id}/approve", status_code=status.HTTP_200_OK)
+async def approve_contribution_payment(
+    payment_id: int,
+    approval: PaymentApproval,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Approve or reject a contribution payment (project admin only).
+    """
+    from datetime import datetime
+    from app.utils.dependencies import is_project_admin
+
+    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution payment not found",
+        )
+
+    # Get contribution and verify user is admin of the project
+    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    if not contribution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution not found",
+        )
+
+    if not is_project_admin(db, current_user.id, contribution.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
+        )
+
+    # Check if payment is pending approval (or backwards compatible check)
+    if not payment.is_pending_approval and not (payment.submitted_at and not payment.is_paid):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is not pending approval",
+        )
+
+    if approval.approved:
+        # Approve the payment
+        payment.is_pending_approval = False
+        payment.is_paid = True
+        payment.paid_at = datetime.utcnow()
+        payment.approved_by = current_user.id
+        payment.approved_at = datetime.utcnow()
+        payment.rejection_reason = None
+
+        # Credit the balance to the member's account
+        member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == contribution.project_id,
+            ProjectMember.user_id == payment.user_id,
+        ).first()
+
+        if member:
+            project = db.query(Project).filter(Project.id == contribution.project_id).first()
+            currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+            # Credit balance according to currency_mode
+            if currency_mode == "ARS":
+                member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+            elif currency_mode == "USD":
+                member.balance_usd += payment.amount_paid_usd if payment.amount_paid_usd else payment.amount_paid
+            else:  # DUAL - balance is stored ONLY in ARS
+                member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+
+            member.balance_updated_at = datetime.utcnow()
+            print(f"[DEBUG approve_contribution_payment] Approved: credited balance to user {payment.user_id}, new balance ARS: {member.balance_ars}, USD: {member.balance_usd}")
+    else:
+        # Reject the payment
+        payment.is_pending_approval = False
+        payment.is_paid = False
+        payment.paid_at = None
+        payment.amount_paid = None
+        payment.currency_paid = None
+        payment.amount_paid_usd = None
+        payment.amount_paid_ars = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+        payment.rejection_reason = approval.rejection_reason or "Rejected by admin"
+        payment.approved_by = current_user.id
+        payment.approved_at = datetime.utcnow()
+        print(f"[DEBUG approve_contribution_payment] Rejected: payment {payment.id} for user {payment.user_id}, reason: {payment.rejection_reason}")
+
+    db.commit()
+    db.refresh(payment)
+
+    return {"message": "Payment processed successfully", "is_paid": payment.is_paid}
 
 
