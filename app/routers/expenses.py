@@ -45,7 +45,7 @@ async def list_expenses(
     """
     query = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category))
+        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
     )
 
     if project:
@@ -263,7 +263,7 @@ async def create_expense(
     # Reload with relationships
     expense = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category))
+        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
         .filter(Expense.id == expense.id)
         .first()
     )
@@ -279,6 +279,7 @@ async def create_expense(
         "exchange_rate_used": expense.exchange_rate_used,
         "provider_id": expense.provider_id,
         "category_id": expense.category_id,
+        "rubro_id": expense.rubro_id,
         "created_by": expense.created_by,
         "invoice_file_path": expense.invoice_file_path,
         "status": expense.status,
@@ -287,6 +288,7 @@ async def create_expense(
         "updated_at": expense.updated_at,
         "provider": expense.provider,
         "category": expense.category,
+        "rubro": expense.rubro,
         "participant_payments": payment_summaries,
         "total_paid_usd": Decimal("0"),
         "total_pending_usd": sum(Decimal(str(p.amount_due_usd)) for p in payment_summaries),
@@ -347,7 +349,7 @@ async def get_expense(
     """
     expense = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category))
+        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
         .filter(Expense.id == expense_id)
         .first()
     )
@@ -401,6 +403,7 @@ async def get_expense(
         "exchange_rate_source": expense.exchange_rate_source,
         "provider_id": expense.provider_id,
         "category_id": expense.category_id,
+        "rubro_id": expense.rubro_id,
         "created_by": expense.created_by,
         "invoice_file_path": expense.invoice_file_path,
         "status": expense.status,
@@ -409,6 +412,7 @@ async def get_expense(
         "updated_at": expense.updated_at,
         "provider": expense.provider,
         "category": expense.category,
+        "rubro": expense.rubro,
         "participant_payments": payment_summaries,
         "total_paid_usd": total_paid_usd,
         "total_pending_usd": total_pending_usd,
