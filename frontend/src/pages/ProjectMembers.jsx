@@ -391,7 +391,7 @@ function ProjectMembers() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Participantes</h1>
+          <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Participantes</h1>
           <p className="text-gray-500">{currentProject.name}</p>
         </div>
         {isProjectAdmin && (

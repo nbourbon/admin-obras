@@ -19,6 +19,7 @@ import ProjectMembers from './pages/ProjectMembers'
 import ProjectSelector from './pages/ProjectSelector'
 import Notes from './pages/Notes'
 import NoteDetail from './pages/NoteDetail'
+import AvanceObra from './pages/AvanceObra'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -81,6 +82,7 @@ function App() {
         <Route path="providers" element={<AdminRoute><Providers /></AdminRoute>} />
         <Route path="categories" element={<AdminRoute><Categories /></AdminRoute>} />
         <Route path="rubros" element={<AdminRoute><Rubros /></AdminRoute>} />
+        <Route path="avance-obra" element={<AdminRoute><AvanceObra /></AdminRoute>} />
       </Route>
     </Routes>
   )

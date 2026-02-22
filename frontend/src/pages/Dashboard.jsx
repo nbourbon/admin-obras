@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { dashboardAPI, exchangeRateAPI } from '../api/client'
+import { dashboardAPI, exchangeRateAPI, avanceObraAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
 import { AlertCircle, ArrowRight, Download, Calendar } from 'lucide-react'
@@ -37,7 +37,7 @@ function Dashboard() {
   const [exchangeRate, setExchangeRate] = useState(null)
   const [byCategory, setByCategory] = useState([])
   const [balances, setBalances] = useState([])
-  const [contributions, setContributions] = useState([])
+  const [avanceData, setAvanceData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [downloadingExcel, setDownloadingExcel] = useState(false)
@@ -81,14 +81,14 @@ function Dashboard() {
       setLoading(true)
       const params = getDateParams()
 
-      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, balancesRes, contributionsRes] = await Promise.all([
+      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, balancesRes, avanceRes] = await Promise.all([
         dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
         dashboardAPI.evolution(params),
         exchangeRateAPI.current().catch(() => null),
         dashboardAPI.expensesByCategory(params),
         dashboardAPI.balances().catch(() => ({ data: [] })),
-        dashboardAPI.contributionsByParticipant().catch(() => ({ data: [] })),
+        avanceObraAPI.list().catch(() => ({ data: [] })),
       ])
 
       setSummary(summaryRes.data)
@@ -96,7 +96,7 @@ function Dashboard() {
       setEvolution(evolutionRes.data)
       setByCategory(categoryRes.data)
       setBalances(balancesRes.data || [])
-      setContributions(contributionsRes.data || [])
+      setAvanceData(avanceRes.data || [])
       if (rateRes) setExchangeRate(rateRes.data)
     } catch (err) {
       setError('Error al cargar datos del dashboard')
@@ -438,48 +438,70 @@ function Dashboard() {
       )}
 
 
-      {/* Contributions by Participant - Pie Chart (hide for direct_payment mode) */}
-      {summary?.contribution_mode !== 'direct_payment' && contributions.length > 0 && contributions.some(c => c.contributions_count > 0) && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Aportes Totales por Participante</h3>
-          <div className="w-full h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={contributions.filter(c => c.contributions_count > 0).map(contrib => ({
-                    name: contrib.user_name,
-                    value: parseFloat(currencyMode === 'ARS' ? contrib.total_ars : contrib.total_usd),
-                    count: contrib.contributions_count,
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={130}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {contributions.map((entry, index) => {
-                    const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
-                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  })}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry) => {
-                    const total = contributions.reduce((sum, c) => sum + parseFloat(currencyMode === 'ARS' ? c.total_ars : c.total_usd), 0)
-                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
-                    return `${value} (${percent}%) - ${entry.payload.count} aportes`
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* Avance de Obra (solo proyectos tipo construccion) */}
+      {summary?.project_type === 'construccion' && avanceData.length > 0 && (
+        <AvanceObraWidget avanceData={avanceData} />
       )}
+
+    </div>
+  )
+}
+
+function ProgressBar({ percentage }) {
+  const pct = parseFloat(percentage)
+  const color = pct >= 80 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-400' : 'bg-orange-400'
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
+      <span className="text-sm font-semibold text-gray-700 w-12 text-right">{pct.toFixed(0)}%</span>
+    </div>
+  )
+}
+
+function AvanceObraWidget({ avanceData }) {
+  // Group by rubro
+  const byRubro = {}
+  for (const entry of avanceData) {
+    const rid = entry.rubro.id
+    if (!byRubro[rid]) byRubro[rid] = { rubro: entry.rubro, rubroEntry: null, categories: [] }
+    if (entry.category === null) {
+      byRubro[rid].rubroEntry = entry
+    } else {
+      byRubro[rid].categories.push(entry)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 border-b">
+        <h2 className="font-semibold text-gray-900">Avance de Obra</h2>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {Object.values(byRubro).map(({ rubro, rubroEntry, categories }) => (
+          <div key={rubro.id}>
+            {/* Rubro header row */}
+            <div className="px-4 py-2 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-gray-800 text-sm uppercase tracking-wide w-32 shrink-0">{rubro.name}</span>
+                {rubroEntry && <ProgressBar percentage={rubroEntry.percentage} />}
+                {!rubroEntry && <div className="flex-1" />}
+              </div>
+            </div>
+            {/* Category rows */}
+            {categories.map(entry => (
+              <div key={entry.id} className="flex items-center gap-3 px-4 py-2 pl-10">
+                <span className="text-sm text-gray-600 w-28 shrink-0">{entry.category.name}</span>
+                <ProgressBar percentage={entry.percentage} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

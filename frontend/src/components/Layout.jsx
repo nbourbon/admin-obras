@@ -16,6 +16,7 @@ import {
   ChevronDown,
   FileText,
   TrendingUp,
+  HardHat,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -37,6 +38,7 @@ function Layout() {
     if (pathname.startsWith('/providers')) return 'Proveedores'
     if (pathname.startsWith('/categories')) return 'Categorías'
     if (pathname.startsWith('/rubros')) return 'Rubros'
+    if (pathname.startsWith('/avance-obra')) return 'Avance de Obra'
     return currentProject?.name || 'Tus Proyectos'
   }
 
@@ -64,6 +66,9 @@ function Layout() {
     { to: '/providers', icon: Building2, label: 'Proveedores' },
     { to: '/categories', icon: FolderOpen, label: 'Categorias' },
     { to: '/rubros', icon: Briefcase, label: 'Rubros' },
+    ...(currentProject?.project_type === 'construccion'
+      ? [{ to: '/avance-obra', icon: HardHat, label: 'Avance de Obra' }]
+      : []),
   ]
 
   const NavItem = ({ to, icon: Icon, label }) => (

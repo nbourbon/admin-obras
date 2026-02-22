@@ -65,6 +65,7 @@ def init_db():
         UserVote,
         Contribution,
         ContributionPayment,
+        AvanceObra,
     )
     Base.metadata.create_all(bind=engine)
 
@@ -272,6 +273,36 @@ def _run_migrations():
         if 'rejection_reason' not in contribution_payments_cols:
             pending.append(('ALTER TABLE contribution_payments ADD COLUMN rejection_reason VARCHAR(500)',
                             'Added rejection_reason to contribution_payments'))
+
+    # --- Avance de Obra table ---
+    # Note: for new installs, create_all() handles this; migration handles existing DBs
+    if 'avance_obra' not in table_names:
+        if database_url.startswith("sqlite"):
+            pending.append(('''
+                CREATE TABLE IF NOT EXISTS avance_obra (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL REFERENCES projects(id),
+                    rubro_id INTEGER NOT NULL REFERENCES rubros(id),
+                    category_id INTEGER REFERENCES categories(id),
+                    percentage NUMERIC(5,2) NOT NULL,
+                    notes TEXT,
+                    updated_by INTEGER NOT NULL REFERENCES users(id),
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''', 'Created avance_obra table (SQLite)'))
+        else:
+            pending.append(('''
+                CREATE TABLE IF NOT EXISTS avance_obra (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER NOT NULL REFERENCES projects(id),
+                    rubro_id INTEGER NOT NULL REFERENCES rubros(id),
+                    category_id INTEGER REFERENCES categories(id),
+                    percentage NUMERIC(5,2) NOT NULL,
+                    notes TEXT,
+                    updated_by INTEGER NOT NULL REFERENCES users(id),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            ''', 'Created avance_obra table (PostgreSQL)'))
 
     # --- Category rubros table (many-to-many) ---
     if 'category_rubros' not in table_names:

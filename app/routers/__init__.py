@@ -10,6 +10,7 @@ from app.routers.exchange_rate import router as exchange_rate_router
 from app.routers.projects import router as projects_router
 from app.routers.notes import router as notes_router
 from app.routers.contributions import router as contributions_router
+from app.routers.avance_obra import router as avance_obra_router
 
 __all__ = [
     "auth_router",
@@ -24,4 +25,5 @@ __all__ = [
     "projects_router",
     "notes_router",
     "contributions_router",
+    "avance_obra_router",
 ]

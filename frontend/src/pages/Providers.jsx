@@ -164,7 +164,7 @@ function Providers() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Proveedores</h1>
+        <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Proveedores</h1>
         <button
           onClick={handleCreate}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"

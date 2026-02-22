@@ -20,6 +20,7 @@ from app.routers import (
     projects_router,
     notes_router,
     contributions_router,
+    avance_obra_router,
 )
 
 # Configure logging
@@ -78,6 +79,7 @@ app.include_router(exchange_rate_router)
 app.include_router(projects_router)
 app.include_router(notes_router)
 app.include_router(contributions_router)
+app.include_router(avance_obra_router)
 
 
 @app.on_event("startup")

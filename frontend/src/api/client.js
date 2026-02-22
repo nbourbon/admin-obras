@@ -214,4 +214,10 @@ export const notesAPI = {
   closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
 }
 
+// Avance de Obra API
+export const avanceObraAPI = {
+  list: () => client.get('/avance-obra'),
+  save: (entries) => client.put('/avance-obra', entries),
+}
+
 export default client
