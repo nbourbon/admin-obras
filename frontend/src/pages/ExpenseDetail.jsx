@@ -34,7 +34,7 @@ function EditExpenseInlineModal({ isOpen, onClose, onSaved, expense, currencyMod
         provider_id: expense.provider_id ? String(expense.provider_id) : '',
         category_id: expense.category_id ? String(expense.category_id) : '',
         rubro_id: expense.rubro_id ? String(expense.rubro_id) : '',
-        expense_date: expense.expense_date ? new Date(expense.expense_date).toISOString().split('T')[0] : '',
+        expense_date: expense.expense_date ? expense.expense_date.split('T')[0] : '',
         exchange_rate_override: '',
       })
       setError('')
@@ -77,7 +77,7 @@ function EditExpenseInlineModal({ isOpen, onClose, onSaved, expense, currencyMod
         provider_id: formData.provider_id ? parseInt(formData.provider_id) : null,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
         rubro_id: formData.rubro_id ? parseInt(formData.rubro_id) : null,
-        expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : null,
+        expense_date: formData.expense_date ? formData.expense_date + 'T00:00:00' : null,
       }
       if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
         payload.exchange_rate_override = parseFloat(formData.exchange_rate_override)

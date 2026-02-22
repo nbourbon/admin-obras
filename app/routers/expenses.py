@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import update as sa_update
 
 from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
@@ -480,9 +481,9 @@ async def update_expense(
             update_data["amount_ars"] = amount_ars
             update_data["exchange_rate_used"] = exchange_rate
 
-    for field, value in update_data.items():
-        setattr(expense, field, value)
-
+    db.execute(
+        sa_update(Expense).where(Expense.id == expense_id).values(**update_data)
+    )
     db.commit()
     db.refresh(expense)
 
