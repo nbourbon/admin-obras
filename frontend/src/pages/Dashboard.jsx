@@ -15,7 +15,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
 } from 'recharts'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -446,13 +445,13 @@ function PieChartCard({ title, data, currencyMode }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
       <h3 className="text-lg font-semibold text-gray-900 mb-3">{title}</h3>
-      <div className="w-full h-64">
+      <div className="w-full h-48">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={chartData}
               cx="50%"
-              cy="45%"
+              cy="50%"
               outerRadius={80}
               dataKey="value"
             >
@@ -464,16 +463,19 @@ function PieChartCard({ title, data, currencyMode }) {
               formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
               contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
             />
-            <Legend
-              verticalAlign="bottom"
-              iconSize={10}
-              formatter={(value, entry) => {
-                const percent = total > 0 ? ((entry.payload.value / total) * 100).toFixed(1) : 0
-                return `${value} (${percent}%)`
-              }}
-            />
           </PieChart>
         </ResponsiveContainer>
+      </div>
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-3">
+        {chartData.map((entry, index) => {
+          const percent = total > 0 ? ((entry.value / total) * 100).toFixed(1) : 0
+          return (
+            <div key={index} className="flex items-center gap-1.5 text-xs text-gray-700">
+              <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+              <span>{entry.name} ({percent}%)</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
