@@ -1,15 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
-
-# Association table kept for backward compatibility (DB table still exists)
-category_rubros = Table(
-    'category_rubros',
-    Base.metadata,
-    Column('category_id', Integer, ForeignKey('categories.id'), primary_key=True),
-    Column('rubro_id', Integer, ForeignKey('rubros.id'), primary_key=True),
-)
 
 
 class Category(Base):

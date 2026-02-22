@@ -323,17 +323,10 @@ def _run_migrations():
             )
         ''', 'Migrated category_rubros data to categories.rubro_id'))
 
-    # --- Category rubros table (many-to-many, kept for backward compat) ---
-    if 'category_rubros' not in table_names:
-        pending.append(('''
-            CREATE TABLE IF NOT EXISTS category_rubros (
-                category_id INTEGER NOT NULL,
-                rubro_id INTEGER NOT NULL,
-                PRIMARY KEY (category_id, rubro_id),
-                FOREIGN KEY (category_id) REFERENCES categories(id),
-                FOREIGN KEY (rubro_id) REFERENCES rubros(id)
-            )
-        ''', 'Created category_rubros table'))
+    # --- Drop category_rubros (replaced by categories.rubro_id one-to-many) ---
+    if 'category_rubros' in table_names:
+        pending.append(('DROP TABLE category_rubros',
+                        'Dropped category_rubros (replaced by categories.rubro_id)'))
 
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')
