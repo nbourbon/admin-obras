@@ -92,9 +92,26 @@ async def get_dashboard_summary(
     total_paid_usd = Decimal(str(paid_payments.paid_usd or 0))
     total_paid_ars = Decimal(str(paid_payments.paid_ars or 0))
 
-    # Calculate pending
-    total_pending_usd = total_expenses_usd - total_paid_usd
-    total_pending_ars = total_expenses_ars - total_paid_ars
+    # Calculate pending as direct sum of unpaid dues (avoids rounding drift)
+    pending_query = db.query(
+        func.sum(ParticipantPayment.amount_due_usd).label("pending_usd"),
+        func.sum(ParticipantPayment.amount_due_ars).label("pending_ars"),
+    ).join(Expense).filter(
+        ParticipantPayment.expense_id.isnot(None),
+        ParticipantPayment.is_paid == False,
+        ParticipantPayment.is_deleted == False,
+        Expense.is_deleted == False,
+    )
+    if project:
+        pending_query = pending_query.filter(Expense.project_id == project.id)
+    if start_date:
+        pending_query = pending_query.filter(Expense.expense_date >= datetime.fromisoformat(start_date))
+    if end_date:
+        pending_query = pending_query.filter(Expense.expense_date <= datetime.fromisoformat(end_date))
+
+    pending_result = pending_query.first()
+    total_pending_usd = Decimal(str(pending_result.pending_usd or 0))
+    total_pending_ars = Decimal(str(pending_result.pending_ars or 0))
 
     # Get participant count
     if project:

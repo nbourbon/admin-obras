@@ -160,11 +160,29 @@ def create_participant_payments(
     # Use project members if expense has a project, otherwise fall back to global users
     if expense.project_id:
         members = get_project_members(db, expense.project_id)
+
+        # First pass: calculate amounts for all members
+        member_amounts = []
         for member in members:
             percentage = Decimal(str(member.participation_percentage)) / Decimal("100")
             amount_due_usd, amount_due_ars = calc_amounts(percentage)
+            member_amounts.append([member, amount_due_usd, amount_due_ars])
 
-            # NEW LOGIC: Check if member has sufficient balance to auto-pay
+        # Rounding correction: assign leftover cent to the member with the highest %
+        # This ensures sum(amount_due) == expense.amount exactly
+        if member_amounts:
+            diff_usd = Decimal(str(expense.amount_usd)) - sum(a[1] for a in member_amounts)
+            diff_ars = Decimal(str(expense.amount_ars)) - sum(a[2] for a in member_amounts)
+            if diff_usd != 0 or diff_ars != 0:
+                max_idx = max(
+                    range(len(member_amounts)),
+                    key=lambda i: member_amounts[i][0].participation_percentage,
+                )
+                member_amounts[max_idx][1] += diff_usd
+                member_amounts[max_idx][2] += diff_ars
+
+        # Second pass: create payments with corrected amounts
+        for member, amount_due_usd, amount_due_ars in member_amounts:
             has_sufficient_balance = check_sufficient_balance(
                 member, amount_due_usd, amount_due_ars, currency_mode, expense
             )
@@ -185,7 +203,6 @@ def create_participant_payments(
                     if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
                         member.balance_ars -= amount_due_ars
                     else:  # Expense was in USD
-                        # Convert to ARS to deduct
                         amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
                         member.balance_ars -= amount_due_ars_equivalent
 
@@ -205,10 +222,27 @@ def create_participant_payments(
     else:
         # Legacy: use global participants
         participants = get_active_participants(db)
+
+        # First pass: calculate amounts
+        participant_amounts = []
         for participant in participants:
             percentage = Decimal(str(participant.participation_percentage)) / Decimal("100")
             amount_due_usd, amount_due_ars = calc_amounts(percentage)
+            participant_amounts.append([participant, amount_due_usd, amount_due_ars])
 
+        # Rounding correction
+        if participant_amounts:
+            diff_usd = Decimal(str(expense.amount_usd)) - sum(a[1] for a in participant_amounts)
+            diff_ars = Decimal(str(expense.amount_ars)) - sum(a[2] for a in participant_amounts)
+            if diff_usd != 0 or diff_ars != 0:
+                max_idx = max(
+                    range(len(participant_amounts)),
+                    key=lambda i: participant_amounts[i][0].participation_percentage,
+                )
+                participant_amounts[max_idx][1] += diff_usd
+                participant_amounts[max_idx][2] += diff_ars
+
+        for participant, amount_due_usd, amount_due_ars in participant_amounts:
             payment = ParticipantPayment(
                 expense_id=expense.id,
                 user_id=participant.id,
