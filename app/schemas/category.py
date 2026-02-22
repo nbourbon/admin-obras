@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 
 class RubroInfo(BaseModel):
@@ -14,11 +14,11 @@ class RubroInfo(BaseModel):
 class CategoryBase(BaseModel):
     name: str
     description: Optional[str] = None
-    color: Optional[str] = None  # Hex color like #FF5733
+    color: Optional[str] = None
 
 
 class CategoryCreate(CategoryBase):
-    rubro_ids: List[int] = []
+    rubro_id: Optional[int] = None
 
 
 class CategoryUpdate(BaseModel):
@@ -26,14 +26,14 @@ class CategoryUpdate(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     is_active: Optional[bool] = None
-    rubro_ids: Optional[List[int]] = None  # None = no cambiar, [] = hacer genérica
+    rubro_id: Optional[int] = None
 
 
 class CategoryResponse(CategoryBase):
     id: int
     is_active: bool
     created_at: datetime
-    rubros: List[RubroInfo] = []
+    rubro: Optional[RubroInfo] = None
 
     class Config:
         from_attributes = True

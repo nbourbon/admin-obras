@@ -21,7 +21,7 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null, rubros = [
     name: '',
     description: '',
     color: null,
-    rubroIds: [],
+    rubroId: null,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,21 +32,12 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null, rubros = [
         name: category.name,
         description: category.description || '',
         color: category.color || null,
-        rubroIds: category.rubros ? category.rubros.map(r => r.id) : [],
+        rubroId: category.rubro ? category.rubro.id : null,
       })
     } else {
-      setFormData({ name: '', description: '', color: null, rubroIds: [] })
+      setFormData({ name: '', description: '', color: null, rubroId: null })
     }
   }, [category, isOpen])
-
-  const toggleRubro = (rubroId) => {
-    setFormData(prev => ({
-      ...prev,
-      rubroIds: prev.rubroIds.includes(rubroId)
-        ? prev.rubroIds.filter(id => id !== rubroId)
-        : [...prev.rubroIds, rubroId],
-    }))
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,7 +49,7 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null, rubros = [
         name: formData.name,
         description: formData.description,
         color: formData.color,
-        rubro_ids: formData.rubroIds,
+        rubro_id: formData.rubroId,
       }
       if (category) {
         await categoriesAPI.update(category.id, payload)
@@ -153,30 +144,22 @@ function CategoryModal({ isOpen, onClose, onSuccess, category = null, rubros = [
           {rubros.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rubros asociados
+                Rubro
               </label>
-              <p className="text-xs text-gray-500 mb-2">
-                {formData.rubroIds.length === 0
-                  ? 'Sin seleccionar — la categoria sera generica (visible en todos los rubros)'
-                  : 'Solo visible cuando se seleccione uno de estos rubros'}
-              </p>
-              <div className="space-y-1 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+              <select
+                value={formData.rubroId ?? ''}
+                onChange={(e) => setFormData({ ...formData, rubroId: e.target.value ? parseInt(e.target.value) : null })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Sin rubro (genérica) —</option>
                 {rubros.map(rubro => (
-                  <label key={rubro.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.rubroIds.includes(rubro.id)}
-                      onChange={() => toggleRubro(rubro.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">{rubro.name}</span>
-                  </label>
+                  <option key={rubro.id} value={rubro.id}>{rubro.name}</option>
                 ))}
-              </div>
-              {formData.rubroIds.length === 0 && (
+              </select>
+              {!formData.rubroId && (
                 <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
                   <Tag size={12} />
-                  Generica (aparece en todos los rubros)
+                  Genérica (aparece en todos los rubros)
                 </p>
               )}
             </div>
@@ -254,7 +237,7 @@ function Categories() {
 
   const filteredCategories = filterRubro === null
     ? categories
-    : categories.filter(c => c.rubros.length === 0 || c.rubros.some(r => r.id === filterRubro))
+    : categories.filter(c => !c.rubro || c.rubro.id === filterRubro)
 
   if (loading) {
     return (
@@ -340,12 +323,10 @@ function Categories() {
                       </p>
                     )}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {category.rubros && category.rubros.length > 0 ? (
-                        category.rubros.map(r => (
-                          <span key={r.id} className="px-2 py-0.5 bg-white bg-opacity-70 border border-gray-300 text-gray-600 text-xs rounded-full">
-                            {r.name}
-                          </span>
-                        ))
+                      {category.rubro ? (
+                        <span className="px-2 py-0.5 bg-white bg-opacity-70 border border-gray-300 text-gray-600 text-xs rounded-full">
+                          {category.rubro.name}
+                        </span>
                       ) : (
                         <span className="px-2 py-0.5 bg-white bg-opacity-70 border border-blue-200 text-blue-600 text-xs rounded-full flex items-center gap-1">
                           <Tag size={10} />

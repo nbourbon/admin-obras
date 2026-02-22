@@ -4,19 +4,13 @@ import { Briefcase, Plus, Edit2, Trash2, X } from 'lucide-react'
 import { useProject } from '../context/ProjectContext'
 
 function RubroModal({ isOpen, onClose, onSuccess, rubro = null }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-  })
+  const [formData, setFormData] = useState({ name: '', description: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (rubro) {
-      setFormData({
-        name: rubro.name,
-        description: rubro.description || '',
-      })
+      setFormData({ name: rubro.name, description: rubro.description || '' })
     } else {
       setFormData({ name: '', description: '' })
     }
@@ -26,7 +20,6 @@ function RubroModal({ isOpen, onClose, onSuccess, rubro = null }) {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     try {
       if (rubro) {
         await rubrosAPI.update(rubro.id, formData)
@@ -48,9 +41,7 @@ function RubroModal({ isOpen, onClose, onSuccess, rubro = null }) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">
-            {rubro ? 'Editar Rubro' : 'Nuevo Rubro'}
-          </h2>
+          <h2 className="text-xl font-bold">{rubro ? 'Editar Rubro' : 'Nuevo Rubro'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
           </button>
@@ -64,23 +55,18 @@ function RubroModal({ isOpen, onClose, onSuccess, rubro = null }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ej: Infraestructura, Terminaciones, Servicios"
+              placeholder="Ej: Estructura, Terminaciones, Instalaciones"
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripcion
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -89,7 +75,6 @@ function RubroModal({ isOpen, onClose, onSuccess, rubro = null }) {
               placeholder="Descripcion opcional"
             />
           </div>
-
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -119,9 +104,7 @@ function Rubros() {
   const [showModal, setShowModal] = useState(false)
   const [editingRubro, setEditingRubro] = useState(null)
 
-  useEffect(() => {
-    loadRubros()
-  }, [])
+  useEffect(() => { loadRubros() }, [])
 
   const loadRubros = async () => {
     try {
@@ -134,14 +117,10 @@ function Rubros() {
     }
   }
 
-  const handleEdit = (rubro) => {
-    setEditingRubro(rubro)
-    setShowModal(true)
-  }
+  const handleEdit = (rubro) => { setEditingRubro(rubro); setShowModal(true) }
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Estas seguro de desactivar este rubro?')) return
-
     try {
       await rubrosAPI.delete(id)
       loadRubros()
@@ -150,10 +129,7 @@ function Rubros() {
     }
   }
 
-  const handleModalClose = () => {
-    setShowModal(false)
-    setEditingRubro(null)
-  }
+  const handleModalClose = () => { setShowModal(false); setEditingRubro(null) }
 
   if (loading) {
     return (
@@ -189,63 +165,42 @@ function Rubros() {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nombre
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Descripcion
-                </th>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {rubros.map((rubro) => (
+            <div key={rubro.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Briefcase className="text-blue-600" size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{rubro.name}</p>
+                    {rubro.description && (
+                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{rubro.description}</p>
+                    )}
+                  </div>
+                </div>
                 {isProjectAdmin && (
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleEdit(rubro)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                      title="Editar"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(rubro.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Desactivar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {rubros.map((rubro) => (
-                <tr key={rubro.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Briefcase className="text-blue-600" size={20} />
-                      </div>
-                      <div className="font-medium text-gray-900">{rubro.name}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-600">
-                      {rubro.description || '-'}
-                    </div>
-                  </td>
-                  {isProjectAdmin && (
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleEdit(rubro)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                          title="Editar"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(rubro.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                          title="Desactivar"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

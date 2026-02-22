@@ -113,14 +113,14 @@ function AvanceObra() {
   const catsByRubro = {}
   for (const cat of categories) {
     if (!cat.is_active) continue
-    for (const rubro of cat.rubros) {
-      if (!catsByRubro[rubro.id]) catsByRubro[rubro.id] = []
-      catsByRubro[rubro.id].push(cat)
+    if (cat.rubro) {
+      if (!catsByRubro[cat.rubro.id]) catsByRubro[cat.rubro.id] = []
+      catsByRubro[cat.rubro.id].push(cat)
     }
   }
 
-  // Categories with no rubros at all
-  const genericCats = categories.filter(c => c.is_active && c.rubros.length === 0)
+  // Categories with no rubro assigned
+  const genericCats = categories.filter(c => c.is_active && !c.rubro)
 
   return (
     <div className="space-y-6 max-w-3xl">

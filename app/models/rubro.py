@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, T
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
-from app.models.category import category_rubros
 
 
 class Rubro(Base):
@@ -19,4 +18,4 @@ class Rubro(Base):
     # Relationships
     project = relationship("Project", back_populates="rubros")
     expenses = relationship("Expense", back_populates="rubro")
-    categories = relationship("Category", secondary=category_rubros, back_populates="rubros")
+    categories = relationship("Category", back_populates="rubro", foreign_keys="[Category.rubro_id]")

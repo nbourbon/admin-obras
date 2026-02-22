@@ -399,89 +399,27 @@ function Dashboard() {
 
       {/* Expenses by Category - Pie Chart */}
       {byCategory.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Gastos por Categoría</h3>
-          <div className="w-full h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={byCategory.map(cat => ({
-                    name: cat.category_name,
-                    value: parseFloat(cat.total_usd),
-                    count: cat.expenses_count,
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={130}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {byCategory.map((entry, index) => {
-                    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
-                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  })}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => formatCurrency(value)}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry) => {
-                    const total = byCategory.reduce((sum, cat) => sum + parseFloat(cat.total_usd), 0)
-                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
-                    return `${value} (${percent}%)`
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <PieChartCard
+          title="Distribución de Gastos por Categoría"
+          data={byCategory.map(cat => ({
+            name: cat.category_name,
+            value: parseFloat(currencyMode === 'ARS' ? cat.total_ars : cat.total_usd),
+          }))}
+          currencyMode={currencyMode}
+        />
       )}
 
 
       {/* Expenses by Rubro - Pie Chart */}
       {byRubro.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Gastos por Rubro</h3>
-          <div className="w-full h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={byRubro.map(r => ({
-                    name: r.rubro_name,
-                    value: parseFloat(currencyMode === 'ARS' ? r.total_ars : r.total_usd),
-                    count: r.expenses_count,
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={130}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {byRubro.map((entry, index) => {
-                    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
-                    return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  })}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry) => {
-                    const total = byRubro.reduce((sum, r) => sum + parseFloat(currencyMode === 'ARS' ? r.total_ars : r.total_usd), 0)
-                    const percent = ((parseFloat(entry.payload.value) / total) * 100).toFixed(1)
-                    return `${value} (${percent}%)`
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <PieChartCard
+          title="Distribución de Gastos por Rubro"
+          data={byRubro.map(r => ({
+            name: r.rubro_name,
+            value: parseFloat(currencyMode === 'ARS' ? r.total_ars : r.total_usd),
+          }))}
+          currencyMode={currencyMode}
+        />
       )}
 
       {/* Avance de Obra (solo proyectos tipo construccion) */}
@@ -489,6 +427,54 @@ function Dashboard() {
         <AvanceObraWidget avanceData={avanceData} />
       )}
 
+    </div>
+  )
+}
+
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#94a3b8']
+
+function PieChartCard({ title, data, currencyMode }) {
+  // Sort descending, take top 5, group rest as "Otros"
+  const sorted = [...data].sort((a, b) => b.value - a.value)
+  const top = sorted.slice(0, 5)
+  const rest = sorted.slice(5)
+  const chartData = rest.length > 0
+    ? [...top, { name: 'Otros', value: rest.reduce((s, d) => s + d.value, 0) }]
+    : top
+  const total = chartData.reduce((s, d) => s + d.value, 0)
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <h3 className="text-lg font-semibold text-gray-900 mb-3">{title}</h3>
+      <div className="w-full h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="45%"
+              outerRadius={80}
+              dataKey="value"
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value) => formatCurrency(value, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+              contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+            />
+            <Legend
+              verticalAlign="bottom"
+              iconSize={10}
+              formatter={(value, entry) => {
+                const percent = total > 0 ? ((entry.payload.value / total) * 100).toFixed(1) : 0
+                return `${value} (${percent}%)`
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

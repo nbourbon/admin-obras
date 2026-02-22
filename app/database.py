@@ -304,7 +304,26 @@ def _run_migrations():
                 )
             ''', 'Created avance_obra table (PostgreSQL)'))
 
-    # --- Category rubros table (many-to-many) ---
+    # --- categories.rubro_id (one-to-many, replaces category_rubros) ---
+    categories_cols = get_cols('categories')
+    if categories_cols and 'rubro_id' not in categories_cols:
+        pending.append(('ALTER TABLE categories ADD COLUMN rubro_id INTEGER',
+                        'Added rubro_id to categories'))
+        # Migrate existing data: assign first rubro from category_rubros
+        pending.append(('''
+            UPDATE categories
+            SET rubro_id = (
+                SELECT rubro_id FROM category_rubros
+                WHERE category_rubros.category_id = categories.id
+                LIMIT 1
+            )
+            WHERE EXISTS (
+                SELECT 1 FROM category_rubros
+                WHERE category_rubros.category_id = categories.id
+            )
+        ''', 'Migrated category_rubros data to categories.rubro_id'))
+
+    # --- Category rubros table (many-to-many, kept for backward compat) ---
     if 'category_rubros' not in table_names:
         pending.append(('''
             CREATE TABLE IF NOT EXISTS category_rubros (
