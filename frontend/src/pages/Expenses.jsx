@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { expensesAPI, providersAPI, categoriesAPI, rubrosAPI, paymentsAPI, dashboardAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, TrendingUp, Check, CheckCircle2, Users } from 'lucide-react'
+import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, Check, CheckCircle2, Clock, Search, AlertCircle } from 'lucide-react'
+import PayExpenseModal from '../components/PayExpenseModal'
 
 // Predefined colors for categories
 const CATEGORY_COLORS = [
@@ -1005,176 +1006,8 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
   )
 }
 
-function PayExpenseModal({ isOpen, onClose, expense, onSuccess, currencyMode }) {
-  const [formData, setFormData] = useState({
-    payment_date: new Date().toISOString().split('T')[0],
-    exchange_rate_override: '',
-  })
-  const [receiptFile, setReceiptFile] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      // Determine currency_paid based on currency_mode
-      let currencyPaid = 'USD'
-      if (currencyMode === 'ARS') {
-        currencyPaid = 'ARS'
-      } else if (currencyMode === 'USD') {
-        currencyPaid = 'USD'
-      } else {
-        // DUAL mode: use the expense's original currency
-        currencyPaid = expense.currency_original || 'USD'
-      }
-
-      const submitData = {
-        amount_paid: expense.my_amount_due,
-        currency_paid: currencyPaid,
-        payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
-      }
-
-      // Include exchange rate override for DUAL mode
-      if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
-        submitData.exchange_rate_override = parseFloat(formData.exchange_rate_override)
-      }
-
-      // Use the user's payment ID
-      if (!expense.my_payment_id) {
-        setError('No se encontró tu pago para este gasto')
-        setLoading(false)
-        return
-      }
-
-      await paymentsAPI.submitPayment(expense.my_payment_id, submitData)
-
-      // Upload receipt if provided
-      if (receiptFile) {
-        try {
-          await paymentsAPI.uploadReceipt(expense.my_payment_id, receiptFile)
-        } catch (uploadErr) {
-          console.error('Error uploading receipt:', uploadErr)
-        }
-      }
-
-      onSuccess()
-      onClose()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al enviar pago')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!isOpen || !expense) return null
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Pagar Gasto</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          <p className="text-sm text-gray-500">Gasto</p>
-          <p className="font-medium">{expense.description}</p>
-          <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
-          <p className="font-semibold text-blue-600">
-            {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
-          </p>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fecha del Pago
-            </label>
-            <input
-              type="date"
-              required
-              value={formData.payment_date}
-              onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {currencyMode === 'DUAL' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipo de Cambio (opcional)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.exchange_rate_override}
-                onChange={(e) => setFormData({ ...formData, exchange_rate_override: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Dejar vacío para usar TC automático"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Comprobante (opcional)
-            </label>
-            {receiptFile ? (
-              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle2 className="text-green-600" size={18} />
-                <span className="text-sm text-green-700 flex-1 truncate">{receiptFile.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setReceiptFile(null)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            ) : (
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setReceiptFile(e.target.files[0])}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            )}
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Enviando...' : 'Pagar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 function Expenses() {
+  const navigate = useNavigate()
   const { isProjectAdmin, currencyMode, currentProject } = useProject()
   const isIndividual = currentProject?.is_individual
   const [expenses, setExpenses] = useState([])
@@ -1414,125 +1247,88 @@ function Expenses() {
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Descripción
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Monto Total
-                  </th>
-                  {!isIndividual && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Mi Parte
-                    </th>
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+          {filteredExpenses.map((expense) => (
+            <div
+              key={expense.id}
+              className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${expense.is_deleted ? 'opacity-50' : ''}`}
+              onClick={() => navigate(`/expenses/${expense.id}`)}
+            >
+              {/* Fecha */}
+              <div className="w-14 flex-shrink-0 text-xs text-gray-500 tabular-nums leading-tight">
+                {formatDate(expense.expense_date)}
+              </div>
+
+              {/* Descripción + subtítulo */}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
+                  {expense.description}
+                  {expense.is_deleted && (
+                    <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
+                      ELIMINADO
+                    </span>
                   )}
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Yo Pagué
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Completo
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredExpenses.map((expense) => (
-                  <tr
-                    key={expense.id}
-                    className={`hover:bg-gray-50 ${expense.is_deleted ? 'opacity-50' : ''}`}
+                </div>
+                {(expense.category?.name || expense.provider?.name) && (
+                  <div className="text-xs text-gray-400 truncate mt-0.5">
+                    {[expense.category?.name, expense.provider?.name].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Monto */}
+              <div className="flex-shrink-0 text-right">
+                <div className="text-sm font-bold text-gray-900 tabular-nums">
+                  {currencyMode === 'ARS'
+                    ? formatCurrency(expense.amount_ars, 'ARS')
+                    : formatCurrency(expense.amount_usd)}
+                </div>
+                {!isIndividual && (
+                  <div className="text-xs text-gray-500 tabular-nums">
+                    {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
+                  </div>
+                )}
+              </div>
+
+              {/* Estado + acciones */}
+              <div
+                className="flex-shrink-0 flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {expense.is_complete ? (
+                  <CheckCircle2 size={20} className="text-green-500" title="Completo" />
+                ) : expense.i_paid ? (
+                  <div className="flex items-center gap-1" title={`Esperando: ${expense.paid_participants}/${expense.total_participants} pagaron`}>
+                    <Check size={16} className="text-green-500" />
+                    <span className="text-xs text-orange-400 font-medium tabular-nums">
+                      {expense.paid_participants}/{expense.total_participants}
+                    </span>
+                  </div>
+                ) : expense.is_pending_approval ? (
+                  <Clock size={18} className="text-yellow-500" title="Pendiente de aprobación" />
+                ) : contributionMode === 'current_account' ? (
+                  <AlertCircle size={18} className="text-amber-400" title="Sin saldo suficiente para pagar" />
+                ) : (
+                  <button
+                    onClick={() => handlePayClick(expense)}
+                    className="px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(expense.expense_date)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-blue-600 flex-shrink-0" />
-                        <span className="truncate">{expense.description}</span>
-                        {expense.is_deleted && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
-                            ELIMINADO
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
-                      {currencyMode === 'ARS'
-                        ? formatCurrency(expense.amount_ars, 'ARS')
-                        : formatCurrency(expense.amount_usd)}
-                    </td>
-                    {!isIndividual && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-semibold">
-                        {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
-                      </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {expense.i_paid ? (
-                        <Check size={20} className="inline text-green-600" />
-                      ) : expense.is_pending_approval ? (
-                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
-                          Pendiente
-                        </span>
-                      ) : contributionMode === 'current_account' ? (
-                        <span className="text-xs text-gray-500 italic">
-                          Desde saldo
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handlePayClick(expense)
-                          }}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Pagar
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {expense.is_complete ? (
-                        <CheckCircle2 size={20} className="inline text-green-600" />
-                      ) : (
-                        <div className="flex items-center justify-center gap-1">
-                          <Users size={16} className="text-gray-400" />
-                          <span className="text-xs text-gray-500">
-                            {expense.paid_participants}/{expense.total_participants}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Link
-                          to={`/expenses/${expense.id}`}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        >
-                          Ver detalle
-                        </Link>
-                        {isProjectAdmin && !expense.is_deleted && (
-                          <button
-                            onClick={() => handleEditExpense(expense)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    Pagar
+                  </button>
+                )}
+                {isProjectAdmin && !expense.is_deleted && (
+                  <button
+                    onClick={() => handleEditExpense(expense)}
+                    className="hidden md:flex p-1 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors ml-1"
+                    title="Editar"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
+                <Search size={13} className="hidden md:block text-gray-200 ml-0.5" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
 import { ArrowLeft, FileText, Upload, CheckCircle, Clock, Download, AlertCircle, XCircle, User, Eye, Trash2 } from 'lucide-react'
 import FilePreviewModal from '../components/FilePreviewModal'
+import PayExpenseModal from '../components/PayExpenseModal'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -45,6 +46,7 @@ function ExpenseDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [contributionMode, setContributionMode] = useState('both')
+  const [showPayModal, setShowPayModal] = useState(false)
 
   useEffect(() => {
     loadExpense()
@@ -450,12 +452,19 @@ function ExpenseDetail() {
                 </div>
 
                 {!myPayment.is_paid && !myPayment.is_pending_approval && (
-                  <Link
-                    to="/my-payments"
-                    className="mt-4 block w-full text-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Ir a Mis Pagos
-                  </Link>
+                  contributionMode === 'current_account' ? (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                      <AlertCircle size={16} className="flex-shrink-0" />
+                      <span>Se pagará automáticamente cuando haya saldo suficiente de aportes</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowPayModal(true)}
+                      className="mt-4 block w-full text-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Pagar
+                    </button>
+                  )
                 )}
               </div>
             )
@@ -753,6 +762,14 @@ function ExpenseDetail() {
           </div>
         </div>
       )}
+
+      <PayExpenseModal
+        isOpen={showPayModal}
+        onClose={() => setShowPayModal(false)}
+        expense={expense}
+        onSuccess={loadExpense}
+        currencyMode={currencyMode}
+      />
 
       <FilePreviewModal
         isOpen={showPreview}

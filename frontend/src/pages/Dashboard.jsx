@@ -228,13 +228,13 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Personal Status Alert - COMPACT single line */}
-      {!isIndividual && myStatus && (currencyMode === 'ARS' ? parseFloat(myStatus.pending_ars) > 0 : parseFloat(myStatus.pending_usd) > 0) && (
+      {/* Personal Status Alerts - Gastos pendientes */}
+      {!isIndividual && myStatus && myStatus.pending_payments_count > 0 && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 px-4 py-2 flex flex-wrap items-center gap-3 text-sm">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <AlertCircle className="text-yellow-600 flex-shrink-0" size={18} />
             <span className="font-medium text-yellow-800">
-              {myStatus.pending_payments_count} {myStatus.pending_payments_count === 1 ? 'pago pendiente' : 'pagos pendientes'}
+              Tenés Gastos Pendientes
             </span>
             <span className="text-yellow-700 font-semibold">
               {currencyMode === 'ARS'
@@ -246,10 +246,25 @@ function Dashboard() {
             </span>
           </div>
           <Link
-            to="/my-payments"
+            to="/expenses"
             className="flex items-center gap-1 text-yellow-700 hover:text-yellow-800 font-medium whitespace-nowrap"
           >
-            Ver pagos <ArrowRight size={14} />
+            Ver Gastos <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
+      {/* Aportes pendientes */}
+      {!isIndividual && myStatus?.has_pending_contribution && (
+        <div className="bg-orange-50 border-l-4 border-orange-400 px-4 py-2 flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <AlertCircle className="text-orange-600 flex-shrink-0" size={18} />
+            <span className="font-medium text-orange-800">Tenés Aportes Pendientes</span>
+          </div>
+          <Link
+            to="/contributions"
+            className="flex items-center gap-1 text-orange-700 hover:text-orange-800 font-medium whitespace-nowrap"
+          >
+            Ver Aportes <ArrowRight size={14} />
           </Link>
         </div>
       )}

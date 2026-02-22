@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Users } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -312,6 +312,7 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
 }
 
 export default function Contributions() {
+  const navigate = useNavigate()
   const { currentProject, isProjectAdmin } = useProject()
   const [contributions, setContributions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -449,161 +450,65 @@ export default function Contributions() {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Descripción
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Monto Total
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Mi Parte
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Yo Pagué
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Completo
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {contributions.map((contribution) => (
-                  <tr key={contribution.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(contribution.created_at)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <Coins size={16} className="text-green-600 flex-shrink-0" />
-                        <span className="truncate">{contribution.description}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
-                      {formatCurrency(contribution.amount, contribution.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-semibold">
-                      {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {contribution.i_paid ? (
-                        <Check size={20} className="inline text-green-600" />
-                      ) : contribution.is_pending_approval ? (
-                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
-                          Pendiente
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handlePayClick(contribution)
-                          }}
-                          className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                          Pagar
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {contribution.is_complete ? (
-                        <CheckCircle2 size={20} className="inline text-green-600" />
-                      ) : (
-                        <div className="flex items-center justify-center gap-1">
-                          <Users size={16} className="text-gray-400" />
-                          <span className="text-xs text-gray-500">
-                            {contribution.paid_participants}/{contribution.total_participants}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <Link
-                        to={`/contributions/${contribution.id}`}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        Ver detalle
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-4">
+          {/* Lista compacta unificada (mobile + desktop) */}
+          <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
             {contributions.map((contribution) => (
               <div
                 key={contribution.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => navigate(`/contributions/${contribution.id}`)}
               >
-                <Link
-                  to={`/contributions/${contribution.id}`}
-                  className="block hover:opacity-75 transition-opacity"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 flex-1">
-                      <Coins size={18} className="text-green-600 flex-shrink-0" />
-                      <span className="text-sm font-medium text-gray-900 truncate">
-                        {contribution.description}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 ml-2">
-                      {contribution.i_paid && <Check size={18} className="text-green-600" />}
-                      {contribution.is_complete && <CheckCircle2 size={18} className="text-green-600" />}
-                    </div>
-                  </div>
+                {/* Fecha */}
+                <div className="w-14 flex-shrink-0 text-xs text-gray-500 tabular-nums leading-tight">
+                  {formatDate(contribution.created_at)}
+                </div>
 
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Monto total:</span>
-                    <span className="font-semibold text-gray-900">
-                      {formatCurrency(contribution.amount, contribution.currency)}
-                    </span>
+                {/* Descripción */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
+                    {contribution.description}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Mi parte:</span>
-                    <span className="font-semibold text-blue-600">
-                      {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
-                    </span>
+                  <div className="text-xs text-gray-400 truncate mt-0.5">
+                    Mi parte: {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className="text-gray-500">{formatDate(contribution.created_at)}</span>
-                    <div className="flex items-center gap-1 text-gray-500">
-                      <Users size={14} />
-                      <span className="text-xs">
+                </div>
+
+                {/* Monto total */}
+                <div className="flex-shrink-0 text-right">
+                  <div className="text-sm font-bold text-gray-900 tabular-nums">
+                    {formatCurrency(contribution.amount, contribution.currency)}
+                  </div>
+                  <div className="text-xs text-gray-400 tabular-nums">
+                    {contribution.paid_participants}/{contribution.total_participants} pagaron
+                  </div>
+                </div>
+
+                {/* Estado + acciones */}
+                <div
+                  className="flex-shrink-0 flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {contribution.is_complete ? (
+                    <CheckCircle2 size={20} className="text-green-500" title="Completo" />
+                  ) : contribution.i_paid ? (
+                    <div className="flex items-center gap-1" title={`Esperando: ${contribution.paid_participants}/${contribution.total_participants} pagaron`}>
+                      <Check size={16} className="text-green-500" />
+                      <span className="text-xs text-orange-400 font-medium tabular-nums">
                         {contribution.paid_participants}/{contribution.total_participants}
                       </span>
                     </div>
-                  </div>
-                </div>
-                </Link>
-
-                {/* Pay button or pending status (outside Link so it doesn't trigger navigation) */}
-                {!contribution.i_paid && (
-                  contribution.is_pending_approval ? (
-                    <div className="w-full mt-3 px-4 py-2 bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm font-medium rounded-lg text-center">
-                      ⏳ Pendiente de aprobación
-                    </div>
+                  ) : contribution.is_pending_approval ? (
+                    <Clock size={18} className="text-yellow-500" title="Pendiente de aprobación" />
                   ) : (
                     <button
                       onClick={() => handlePayClick(contribution)}
-                      className="w-full mt-3 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                      className="px-2.5 py-1 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
                     >
-                      Pagar mi parte
+                      Pagar
                     </button>
-                  )
-                )}
+                  )}
+                  <Search size={13} className="hidden md:block text-gray-200 ml-0.5" />
+                </div>
               </div>
             ))}
           </div>

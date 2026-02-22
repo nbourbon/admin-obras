@@ -9,7 +9,6 @@ import Expenses from './pages/Expenses'
 import ExpenseDetail from './pages/ExpenseDetail'
 import Contributions from './pages/Contributions'
 import ContributionDetail from './pages/ContributionDetail'
-import MyPayments from './pages/MyPayments'
 import PendingApprovals from './pages/PendingApprovals'
 import Users from './pages/Users'
 import Providers from './pages/Providers'
@@ -71,7 +70,6 @@ function App() {
         <Route path="expenses/:id" element={<ExpenseDetail />} />
         <Route path="contributions" element={<Contributions />} />
         <Route path="contributions/:id" element={<ContributionDetail />} />
-        <Route path="my-payments" element={<MyPayments />} />
         <Route path="notes" element={<Notes />} />
         <Route path="notes/:id" element={<NoteDetail />} />
         <Route path="projects" element={<Projects />} />
