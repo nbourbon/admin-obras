@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
 import {
@@ -23,7 +23,22 @@ function Layout() {
   const { user, logout } = useAuth()
   const { projects, currentProject, isProjectAdmin, selectProject, loading: projectsLoading } = useProject()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const getSectionName = () => {
+    if (pathname.startsWith('/dashboard')) return 'Dashboard'
+    if (pathname.startsWith('/expenses')) return 'Gastos'
+    if (pathname.startsWith('/contributions')) return 'Aportes'
+    if (pathname.startsWith('/notes')) return 'Notas'
+    if (pathname.startsWith('/projects')) return 'Proyectos'
+    if (pathname.startsWith('/project-members')) return 'Participantes'
+    if (pathname.startsWith('/pending-approvals')) return 'Por Aprobar'
+    if (pathname.startsWith('/providers')) return 'Proveedores'
+    if (pathname.startsWith('/categories')) return 'Categorías'
+    if (pathname.startsWith('/rubros')) return 'Rubros'
+    return currentProject?.name || 'Tus Proyectos'
+  }
 
   const handleLogout = () => {
     logout()
@@ -172,7 +187,7 @@ function Layout() {
           <button onClick={() => setSidebarOpen(true)} className="p-1">
             <Menu size={28} />
           </button>
-          <h1 className="text-xl font-bold text-blue-600 truncate">{currentProject?.name || 'Tus Proyectos'}</h1>
+          <h1 className="text-xl font-bold text-gray-900 truncate">{getSectionName()}</h1>
         </header>
 
         {/* Page content */}

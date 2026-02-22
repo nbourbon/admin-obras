@@ -168,38 +168,29 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header with compact filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {currencyMode === 'DUAL' && exchangeRate && (
-            <div className="text-sm text-gray-500">
-              Dolar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span>
-            </div>
-          )}
-          {/* Compact Date Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-gray-600" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">Todo</option>
-              <option value="today">Hoy</option>
-              <option value="week">Semana</option>
-              <option value="month">Mes</option>
-              <option value="custom">Personalizado</option>
-            </select>
-          </div>
+      {/* Header — una sola línea compacta */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <Calendar size={18} className="text-gray-600 flex-shrink-0" />
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="all">Todo</option>
+            <option value="today">Hoy</option>
+            <option value="week">Semana</option>
+            <option value="month">Mes</option>
+            <option value="custom">Personalizado</option>
+          </select>
           <button
             onClick={handleDownloadExcel}
             disabled={downloadingExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
           >
-            <Download size={18} />
-            <span className="hidden sm:inline">{downloadingExcel ? 'Descargando...' : 'Descargar Reporte Excel'}</span>
-            <span className="sm:hidden">Excel</span>
+            <Download size={16} />
+            <span className="hidden sm:inline">{downloadingExcel ? 'Descargando...' : 'Excel'}</span>
           </button>
         </div>
       </div>
@@ -312,6 +303,11 @@ function Dashboard() {
           <span className="text-gray-600">Participantes</span>
           <span className="text-blue-700 font-bold">{summary?.participants_count || 0}</span>
         </div>
+        {currencyMode === 'DUAL' && exchangeRate && (
+          <div className="flex items-center justify-end px-4 py-2">
+            <span className="text-xs text-gray-400">Dólar Blue: <span className="font-semibold text-green-600">${exchangeRate.rate}</span></span>
+          </div>
+        )}
       </div>
 
       {/* My Personal Status - compact (hidden for individual projects) */}

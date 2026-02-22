@@ -1114,15 +1114,15 @@ function Expenses() {
 
   return (
     <div className="space-y-4 overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Gastos</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors text-sm ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
-            <Filter size={18} />
-            Filtros
+            <Filter size={16} />
+            <span className="hidden sm:inline">Filtros</span>
             {activeFilterCount > 0 && (
               <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
                 {activeFilterCount}
@@ -1133,11 +1133,11 @@ function Expenses() {
           {isProjectAdmin && (
             <button
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              title="Nuevo Gasto"
             >
-              <Plus size={20} />
-              <span className="hidden sm:inline">Nuevo Gasto</span>
-              <span className="sm:hidden">Nuevo</span>
+              <Plus size={18} />
+              <span className="hidden sm:inline">Nuevo</span>
             </button>
           )}
         </div>

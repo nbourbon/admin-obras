@@ -320,6 +320,14 @@ export default function Contributions() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showPayModal, setShowPayModal] = useState(false)
   const [selectedContribution, setSelectedContribution] = useState(null)
+  const [infoDismissed, setInfoDismissed] = useState(
+    () => localStorage.getItem('contributions_info_dismissed') === 'true'
+  )
+
+  const dismissInfo = () => {
+    setInfoDismissed(true)
+    localStorage.setItem('contributions_info_dismissed', 'true')
+  }
 
   const currencyMode = currentProject?.currency_mode || 'DUAL'
 
@@ -383,44 +391,47 @@ export default function Contributions() {
       />
 
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <TrendingUp className="text-green-600" size={24} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Solicitudes de Aporte</h1>
-              <p className="text-sm text-gray-600">Aportes a la caja común del proyecto</p>
-            </div>
-          </div>
-          {isProjectAdmin && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Plus size={20} />
-              <span className="hidden sm:inline">Nueva Solicitud</span>
-            </button>
-          )}
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Aportes</h1>
+          <p className="text-sm text-gray-600">Aportes a la caja común del proyecto</p>
         </div>
+        {isProjectAdmin && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+            title="Nueva Solicitud"
+          >
+            <Plus size={18} />
+            <span className="hidden sm:inline">Nueva Solicitud</span>
+          </button>
+        )}
       </div>
 
-      {/* Info box */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <div className="flex gap-3">
-          <Coins className="text-blue-600 flex-shrink-0" size={20} />
-          <div className="text-sm text-blue-900">
-            <p className="font-medium mb-1">¿Cómo funcionan las solicitudes de aporte?</p>
-            <ul className="list-disc list-inside space-y-1 text-blue-800">
-              <li>El admin crea una solicitud que se divide entre participantes</li>
-              <li>Cada participante paga su parte y el admin aprueba</li>
-              <li>Al aprobar, el monto se acredita al saldo de cada participante</li>
-              <li>Los gastos futuros se pagan automáticamente desde el saldo</li>
-            </ul>
+      {/* Info box — dismissible */}
+      {!infoDismissed && (
+        <div className="relative bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <button
+            onClick={dismissInfo}
+            className="absolute top-2 right-2 text-blue-400 hover:text-blue-600 p-0.5"
+            title="Cerrar"
+          >
+            <X size={16} />
+          </button>
+          <div className="flex gap-3 pr-4">
+            <Coins className="text-blue-600 flex-shrink-0" size={20} />
+            <div className="text-sm text-blue-900">
+              <p className="font-medium mb-1">¿Cómo funcionan las solicitudes de aporte?</p>
+              <ul className="list-disc list-inside space-y-1 text-blue-800">
+                <li>El admin crea una solicitud que se divide entre participantes</li>
+                <li>Cada participante paga su parte y el admin aprueba</li>
+                <li>Al aprobar, el monto se acredita al saldo de cada participante</li>
+                <li>Los gastos futuros se pagan automáticamente desde el saldo</li>
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Error message */}
       {error && (
