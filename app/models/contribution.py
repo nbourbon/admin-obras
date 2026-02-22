@@ -33,6 +33,9 @@ class Contribution(Base):
     # Status
     status = Column(Enum(ContributionStatus), default=ContributionStatus.PENDING, nullable=False)
 
+    # Flags
+    is_adjustment = Column(Boolean, default=False, nullable=False)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

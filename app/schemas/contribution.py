@@ -15,11 +15,19 @@ class ContributionCreate(ContributionBase):
     pass
 
 
+class BalanceAdjustmentCreate(BaseModel):
+    """Schema for direct balance adjustments (positive or negative). Admin only."""
+    description: str
+    amount: Decimal = Field(decimal_places=2)  # Can be negative
+    currency: Currency = Currency.ARS
+
+
 class ContributionResponse(ContributionBase):
     id: int
     project_id: int
     created_by: int
     status: ContributionStatus
+    is_adjustment: bool = False
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -49,6 +57,7 @@ class ContributionWithMyPayment(ContributionResponse):
     is_complete: bool = False  # Si todos los participantes pagaron
     total_participants: int = 0
     paid_participants: int = 0
+    is_adjustment: bool = False
 
     class Config:
         from_attributes = True

@@ -11,13 +11,14 @@ from app.schemas.contribution import (
     ContributionResponse,
     ContributionWithDetails,
     ContributionWithMyPayment,
+    BalanceAdjustmentCreate,
     ContributionDetailResponse,
     ContributionPaymentDetail,
 )
 from app.schemas.payment import PaymentMarkPaid, PaymentApproval
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
-from app.models.contribution import Contribution, Currency
+from app.models.contribution import Contribution, Currency, ContributionStatus
 from app.models.contribution_payment import ContributionPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -179,6 +180,85 @@ async def create_contribution(
             is_paid=False,
         )
         db.add(payment)
+
+    db.commit()
+    db.refresh(contribution)
+
+    return contribution
+
+
+@router.post("/adjust-balance", response_model=ContributionResponse, status_code=status.HTTP_201_CREATED)
+async def create_balance_adjustment(
+    adjustment_data: BalanceAdjustmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """Create a direct balance adjustment (admin only). Amount can be positive or negative."""
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    if adjustment_data.amount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El monto del ajuste no puede ser cero",
+        )
+
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+    # Create contribution as already APPROVED
+    contribution = Contribution(
+        description=adjustment_data.description,
+        amount=adjustment_data.amount,
+        currency=adjustment_data.currency,
+        project_id=project.id,
+        created_by=current_user.id,
+        status=ContributionStatus.APPROVED,
+        is_adjustment=True,
+    )
+    db.add(contribution)
+    db.flush()
+
+    members = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.is_active == True,
+    ).all()
+
+    now = datetime.utcnow()
+
+    for member in members:
+        percentage = member.participation_percentage / Decimal(100)
+        member_amount = (adjustment_data.amount * percentage).quantize(Decimal("0.01"))
+
+        payment = ContributionPayment(
+            contribution_id=contribution.id,
+            user_id=member.user_id,
+            amount_due=member_amount,
+            amount_paid=member_amount,
+            is_paid=True,
+            is_pending_approval=False,
+            paid_at=now,
+            approved_at=now,
+            approved_by=current_user.id,
+            currency_paid=adjustment_data.currency.value,
+        )
+        if currency_mode == "USD":
+            payment.amount_paid_usd = member_amount
+            payment.amount_paid_ars = Decimal("0")
+        else:
+            payment.amount_paid_ars = member_amount
+            payment.amount_paid_usd = Decimal("0")
+        db.add(payment)
+
+        # Update member balance
+        if currency_mode == "USD":
+            member.balance_usd += member_amount
+        else:
+            member.balance_ars += member_amount
+        member.balance_updated_at = now
 
     db.commit()
     db.refresh(contribution)

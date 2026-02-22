@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search, Scale } from 'lucide-react'
+import AdjustBalanceModal from '../components/AdjustBalanceModal'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('es-AR', {
@@ -318,6 +319,7 @@ export default function Contributions() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showAdjustModal, setShowAdjustModal] = useState(false)
   const [showPayModal, setShowPayModal] = useState(false)
   const [selectedContribution, setSelectedContribution] = useState(null)
   const [infoDismissed, setInfoDismissed] = useState(
@@ -365,6 +367,13 @@ export default function Contributions() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <AdjustBalanceModal
+        isOpen={showAdjustModal}
+        onClose={() => setShowAdjustModal(false)}
+        onCreated={loadContributions}
+        currencyMode={currencyMode}
+      />
+
       <CreateContributionModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -397,14 +406,24 @@ export default function Contributions() {
           <p className="text-sm text-gray-600">Aportes a la caja común del proyecto</p>
         </div>
         {isProjectAdmin && (
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-            title="Nueva Solicitud"
-          >
-            <Plus size={18} />
-            <span className="hidden sm:inline">Nueva Solicitud</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAdjustModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+              title="Ajuste de Saldo"
+            >
+              <Scale size={16} />
+              <span className="hidden sm:inline">Ajuste Saldo</span>
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+              title="Nueva Solicitud"
+            >
+              <Plus size={18} />
+              <span className="hidden sm:inline">Nueva Solicitud</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -476,17 +495,25 @@ export default function Contributions() {
 
                 {/* Descripción */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
-                    {contribution.description}
+                  <div className="flex items-center gap-1.5">
+                    {contribution.is_adjustment && (
+                      <Scale size={13} className="text-indigo-400 flex-shrink-0" />
+                    )}
+                    <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
+                      {contribution.description}
+                    </div>
                   </div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">
-                    Mi parte: {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
+                    {contribution.is_adjustment
+                      ? 'Ajuste de cuenta'
+                      : `Mi parte: ${formatCurrency(contribution.my_amount_due || 0, contribution.currency)}`}
                   </div>
                 </div>
 
                 {/* Monto total */}
                 <div className="flex-shrink-0 text-right">
-                  <div className="text-sm font-bold text-gray-900 tabular-nums">
+                  <div className={`text-sm font-bold tabular-nums ${contribution.is_adjustment && parseFloat(contribution.amount) < 0 ? 'text-red-600' : contribution.is_adjustment ? 'text-green-600' : 'text-gray-900'}`}>
+                    {contribution.is_adjustment && parseFloat(contribution.amount) > 0 ? '+' : ''}
                     {formatCurrency(contribution.amount, contribution.currency)}
                   </div>
                   <div className="text-xs text-gray-400 tabular-nums">
@@ -499,7 +526,9 @@ export default function Contributions() {
                   className="flex-shrink-0 flex items-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {contribution.is_complete ? (
+                  {contribution.is_adjustment ? (
+                    <CheckCircle2 size={20} className="text-indigo-400" title="Ajuste aplicado" />
+                  ) : contribution.is_complete ? (
                     <CheckCircle2 size={20} className="text-green-500" title="Completo" />
                   ) : contribution.i_paid ? (
                     <div className="flex items-center gap-1" title={`Esperando: ${contribution.paid_participants}/${contribution.total_participants} pagaron`}>

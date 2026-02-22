@@ -290,6 +290,9 @@ def _run_migrations():
         if 'currency' not in contributions_cols:
             pending.append(("ALTER TABLE contributions ADD COLUMN currency VARCHAR(10) DEFAULT 'ARS'",
                             'Added currency to contributions'))
+        if 'is_adjustment' not in contributions_cols:
+            pending.append(("ALTER TABLE contributions ADD COLUMN is_adjustment BOOLEAN DEFAULT FALSE",
+                            'Added is_adjustment to contributions'))
 
         # Drop old columns if they exist
         if 'amount_usd' in contributions_cols:

@@ -128,6 +128,7 @@ export const contributionsAPI = {
   list: () => client.get('/contributions'),
   get: (id) => client.get(`/contributions/${id}`),
   create: (data) => client.post('/contributions', data),
+  adjustBalance: (data) => client.post('/contributions/adjust-balance', data),
   submitPayment: (paymentId, data) => client.put(`/contributions/payments/${paymentId}/submit`, data),
   uploadReceipt: (paymentId, file) => {
     const formData = new FormData()
