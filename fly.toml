@@ -24,10 +24,10 @@ primary_region = 'gru'
     soft_limit = 80
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "15s"
+    grace_period = "60s"
+    interval = "30s"
     method = "GET"
-    timeout = "5s"
+    timeout = "15s"
     path = "/health"
 
 [[vm]]
