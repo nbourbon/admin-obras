@@ -502,6 +502,15 @@ async def submit_payment(
         user_is_admin = is_project_admin(db, current_user.id, expense.project_id)
         print(f"[DEBUG submit_payment] Payment {payment_id}, Expense {expense.id}, Project {expense.project_id}, is_individual={is_individual}, user_is_admin={user_is_admin}")
 
+        # Block manual payment submission if project uses contribution_mode = current_account
+        if project and project.project_type == "construccion":
+            type_params = getattr(project, 'type_parameters', None) or {}
+            if type_params.get('contribution_mode') == 'current_account':
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Este proyecto solo acepta pagos desde la cuenta corriente (aportes). No se pueden registrar pagos manuales.",
+                )
+
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid
     payment.payment_date = payment_data.payment_date or datetime.utcnow()
@@ -805,6 +814,15 @@ async def mark_payment_as_paid(
 
     project = db.query(Project).filter(Project.id == expense.project_id).first() if expense and expense.project_id else None
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+    # Block manual mark-paid if project uses contribution_mode = current_account
+    if project and project.project_type == "construccion":
+        type_params = getattr(project, 'type_parameters', None) or {}
+        if type_params.get('contribution_mode') == 'current_account':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Este proyecto solo acepta pagos desde la cuenta corriente (aportes). No se pueden registrar pagos manuales.",
+            )
 
     payment.amount_paid = payment_data.amount_paid
     payment.currency_paid = payment_data.currency_paid

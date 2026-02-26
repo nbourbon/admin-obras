@@ -711,6 +711,15 @@ async def mark_all_payments_as_paid(
     project = db.query(Project).filter(Project.id == expense.project_id).first()
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
+    # Block mark-all-paid if project uses contribution_mode = current_account
+    if project and project.project_type == "construccion":
+        type_params = getattr(project, 'type_parameters', None) or {}
+        if type_params.get('contribution_mode') == 'current_account':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Este proyecto solo acepta pagos desde la cuenta corriente (aportes). No se pueden registrar pagos manuales.",
+            )
+
     # For DUAL mode: determine TC once for all payments
     tc = None
     tc_source = None
