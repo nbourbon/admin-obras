@@ -104,7 +104,7 @@ function Layout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0 transition-transform duration-200 ease-in-out`}
       >
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col overflow-y-auto">
           <div className="p-4 border-b">
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-xl font-bold text-blue-600">Tus Proyectos</h1>
@@ -145,7 +145,7 @@ function Layout() {
             )}
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <nav className="p-4 space-y-1">
             {navItems.map((item) => (
               <NavItem key={item.to} {...item} />
             ))}
