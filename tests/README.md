@@ -14,21 +14,21 @@ Los tests están organizados en tres capas:
 
 ---
 
-## Cómo correr los tests automáticos (cuando estén implementados)
+## Cómo correr los tests automáticos
 
 ```bash
-# Desde la raíz del proyecto
-pip install pytest httpx pytest-asyncio
+# Desde la raíz del proyecto (con el venv activado)
+pip install pytest
 
-# Correr todos
+# Correr todos los e2e
 pytest tests/e2e/ -v
 
 # Correr un escenario específico
-pytest tests/e2e/test_construccion_dual_current_account.py -v
+pytest tests/e2e/test_01_construccion_dual_current_account.py -v
 ```
 
-El backend usa SQLite en modo test (base de datos temporal, se destruye al terminar).
-No toca la base de datos real ni de producción.
+El backend usa SQLite en una BD temporal (`tests/test_e2e.db`) que se destruye al
+terminar la sesión. No toca la base de datos real ni de producción.
 
 ---
 
@@ -55,4 +55,4 @@ Cada archivo en `scenarios/` describe:
 
 | Archivo | Descripción | Estado |
 |---------|-------------|--------|
-| `01_construccion_dual_current_account.md` | Proyecto construcción, moneda DUAL, solo aportes a caja | Definiendo |
+| `01_construccion_dual_current_account.md` | Proyecto construcción, moneda DUAL, solo aportes a caja | ✅ Implementado |
