@@ -1,0 +1,120 @@
+{
+  "_comment": "Datos de ejemplo para el escenario 01. Completar con valores reales.",
+  "project": {
+    "name": "Edificio Test",
+    "project_type": "construccion",
+    "currency_mode": "DUAL",
+    "type_parameters": {
+      "contribution_mode": "current_account"
+    }
+  },
+  "users": [
+    {
+      "role": "admin",
+      "full_name": "Nicolás Admin",
+      "email": "nicolas@test.com",
+      "password": "test1234",
+      "participation_percentage": 85
+    },
+    {
+      "role": "member",
+      "full_name": "María Miembro",
+      "email": "maria@test.com",
+      "password": "test1234",
+      "participation_percentage": 15
+    }
+  ],
+  "exchange_rate_override": null,
+  "steps": [
+    {
+      "step": 1,
+      "action": "aporte_individual",
+      "user": "nicolas@test.com",
+      "amount": null,
+      "currency": "ARS",
+      "description": "Aporte inicial Nicolás",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": 0,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 2,
+      "action": "aporte_individual",
+      "user": "maria@test.com",
+      "amount": null,
+      "currency": "ARS",
+      "description": "Aporte inicial María",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 3,
+      "action": "gasto",
+      "created_by": "nicolas@test.com",
+      "amount_usd": null,
+      "tc_override": null,
+      "payers": [],
+      "description": "Gasto con caja suficiente",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 4,
+      "action": "gasto",
+      "created_by": "nicolas@test.com",
+      "amount_usd": null,
+      "tc_override": null,
+      "payers": [
+        { "user": "nicolas@test.com", "amount_usd": null }
+      ],
+      "description": "Gasto con caja insuficiente — Nicolás paga",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 5,
+      "action": "solicitud_grupal",
+      "created_by": "nicolas@test.com",
+      "amount": null,
+      "currency": "ARS",
+      "description": "Cuota 1 — Q1 2025",
+      "absorb_unilateral_ids": "all",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 6,
+      "action": "pago_solicitud",
+      "user": "nicolas@test.com",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    },
+    {
+      "step": 7,
+      "action": "pago_solicitud",
+      "user": "maria@test.com",
+      "expected_balances": {
+        "nicolas_ars": null,
+        "maria_ars": null,
+        "caja_ars": null
+      }
+    }
+  ]
+}
