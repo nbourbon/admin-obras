@@ -12,6 +12,7 @@ from app.models.note_comment import NoteComment
 from app.models.vote import VoteOption, UserVote
 from app.models.contribution import Contribution, ContributionStatus
 from app.models.contribution_payment import ContributionPayment
+from app.models.contribution_absorption import ContributionAbsorption
 from app.models.avance_obra import AvanceObra
 
 __all__ = [
@@ -34,5 +35,6 @@ __all__ = [
     "Contribution",
     "ContributionStatus",
     "ContributionPayment",
+    "ContributionAbsorption",
     "AvanceObra",
 ]

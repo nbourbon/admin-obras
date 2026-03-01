@@ -12,7 +12,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     full_name = Column(String(255), nullable=False)
     google_id = Column(String(255), unique=True, nullable=True)
-    participation_percentage = Column(Numeric(5, 2), nullable=False, default=0)
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

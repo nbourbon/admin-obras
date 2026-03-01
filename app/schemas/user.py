@@ -1,5 +1,4 @@
 from pydantic import BaseModel, EmailStr
-from decimal import Decimal
 from datetime import datetime
 from typing import Optional
 
@@ -7,7 +6,6 @@ from typing import Optional
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
-    participation_percentage: Decimal = Decimal("0")
     is_admin: bool = False
 
 
@@ -18,7 +16,6 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
-    participation_percentage: Optional[Decimal] = None
     is_admin: Optional[bool] = None
     is_active: Optional[bool] = None
 

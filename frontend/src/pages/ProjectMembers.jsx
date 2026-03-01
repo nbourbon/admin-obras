@@ -27,7 +27,6 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
     setLoading(true)
 
     try {
-      // Add member by email - backend will create user if needed
       await projectsAPI.addMemberByEmail(
         projectId,
         email,
@@ -288,7 +287,7 @@ function ProjectMembers() {
       loadData()
       setIsIndividual(currentProject.is_individual || false)
     }
-  }, [currentProject])
+  }, [currentProject?.id])
 
   useEffect(() => {
     if (showHistory) loadHistory()
@@ -310,6 +309,9 @@ function ProjectMembers() {
       setLoading(false)
     }
     if (showHistory) loadHistory()
+
+    // Refresh project in context so is_individual reflects backend auto-update
+    await refreshProjects()
   }
 
   const loadHistory = async () => {

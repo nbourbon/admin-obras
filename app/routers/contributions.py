@@ -14,7 +14,10 @@ from app.schemas.contribution import (
     BalanceAdjustmentCreate,
     ContributionDetailResponse,
     ContributionPaymentDetail,
+    UnilateralContributionCreate,
+    UnabsorbedContributionResponse,
 )
+from app.models.contribution_absorption import ContributionAbsorption
 from app.schemas.payment import PaymentMarkPaid, PaymentApproval
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
@@ -71,17 +74,75 @@ async def list_contributions(
         paid_count = sum(1 for p in payments if p.is_paid)
         is_complete = paid_count == len(payments) if payments else False
 
+        # Contributor name for unilateral contributions
+        contributor_name = None
+        if contrib.is_unilateral and contrib.contributor_user:
+            contributor_name = contrib.contributor_user.full_name
+
+        my_amount_offset = Decimal("0")
+        if my_payment and hasattr(my_payment, 'amount_offset') and my_payment.amount_offset:
+            my_amount_offset = my_payment.amount_offset
+
         result.append(ContributionWithMyPayment(
             **contrib.__dict__,
             created_by_name=contrib.created_by_user.full_name,
             created_by_email=contrib.created_by_user.email,
+            contributor_name=contributor_name,
             my_payment_id=my_payment_id,
             my_amount_due=my_amount_due,
+            my_amount_offset=my_amount_offset,
             i_paid=i_paid,
             is_pending_approval=is_pending_approval,
             is_complete=is_complete,
             total_participants=len(payments),
             paid_participants=paid_count,
+        ))
+
+    return result
+
+
+@router.get("/unilateral/unabsorbed", response_model=List[UnabsorbedContributionResponse])
+async def list_unabsorbed_unilateral(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """List unilateral contributions with remaining balance (not fully absorbed). Admin only."""
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    contributions = db.query(Contribution).filter(
+        Contribution.project_id == project.id,
+        Contribution.is_unilateral == True,
+        Contribution.status == ContributionStatus.APPROVED,
+    ).order_by(Contribution.created_at.asc()).all()
+
+    from app.models.payment import ParticipantPayment
+
+    result = []
+    for c in contributions:
+        raw_remaining = Decimal(str(c.amount)) - Decimal(str(c.absorbed_amount))
+        if raw_remaining <= 0:
+            continue
+
+        if raw_remaining <= 0:
+            continue
+        net_remaining = raw_remaining
+
+        contributor_name = c.contributor_user.full_name if c.contributor_user else "Desconocido"
+        result.append(UnabsorbedContributionResponse(
+            id=c.id,
+            description=c.description,
+            amount=c.amount,
+            absorbed_amount=c.absorbed_amount,
+            remaining=net_remaining,
+            currency=c.currency,
+            contributor_user_id=c.contributor_user_id,
+            contributor_name=contributor_name,
+            created_at=c.created_at,
         ))
 
     return result
@@ -111,12 +172,16 @@ async def get_contribution(
     payment_details = []
     for payment in payments:
         user = payment.user
+        offset = Decimal(str(payment.amount_offset)) if payment.amount_offset else Decimal("0")
+        remaining = Decimal(str(payment.amount_due)) - offset
         payment_details.append(ContributionPaymentDetail(
             payment_id=payment.id,
             user_id=payment.user_id,
             user_name=user.full_name if user else "Unknown",
             user_email=user.email if user else "",
             amount_due=payment.amount_due,
+            amount_offset=offset,
+            amount_remaining=remaining,
             is_paid=payment.is_paid,
             paid_at=payment.paid_at,
             receipt_file_path=payment.receipt_file_path,
@@ -144,7 +209,7 @@ async def create_contribution(
     current_user: User = Depends(get_project_admin_user),
     project: Optional[Project] = Depends(get_project_from_header),
 ):
-    """Create a new contribution request (project admin only)"""
+    """Create a new contribution request (project admin only). Optionally absorb unilateral contributions."""
     if not project:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -159,7 +224,7 @@ async def create_contribution(
         project_id=project.id,
         created_by=current_user.id,
     )
-    
+
     db.add(contribution)
     db.flush()  # Get the ID
 
@@ -169,6 +234,7 @@ async def create_contribution(
         ProjectMember.is_active == True
     ).all()
 
+    payments_by_user = {}
     for member in members:
         percentage = member.participation_percentage / Decimal(100)
         amount_due = (contribution_data.amount * percentage).quantize(Decimal("0.01"))
@@ -180,7 +246,185 @@ async def create_contribution(
             is_paid=False,
         )
         db.add(payment)
+        db.flush()
+        payments_by_user[member.user_id] = payment
 
+    # Absorb unilateral contributions if specified
+    if contribution_data.absorb_unilateral_ids:
+        now = datetime.utcnow()
+        for unilateral_id in contribution_data.absorb_unilateral_ids:
+            unilateral = db.query(Contribution).filter(
+                Contribution.id == unilateral_id,
+                Contribution.project_id == project.id,
+                Contribution.is_unilateral == True,
+                Contribution.status == ContributionStatus.APPROVED,
+            ).first()
+            if not unilateral:
+                continue
+
+            raw_remaining = Decimal(str(unilateral.amount)) - Decimal(str(unilateral.absorbed_amount))
+            if raw_remaining <= 0:
+                continue
+
+            # Find the payment for the contributor in this solicitud
+            user_payment = payments_by_user.get(unilateral.contributor_user_id)
+            if not user_payment:
+                continue
+
+            remaining = raw_remaining
+            if remaining <= 0:
+                continue
+
+            current_offset = Decimal(str(user_payment.amount_offset or 0))
+            available_to_offset = Decimal(str(user_payment.amount_due)) - current_offset
+            if available_to_offset <= 0:
+                continue
+
+            # Note: unilateral contributions from expenses are stored in the project's
+            # balance currency (ARS for DUAL mode, USD for USD mode). No conversion needed.
+            absorption = min(remaining, available_to_offset)
+
+            # Create absorption record
+            absorption_record = ContributionAbsorption(
+                solicitud_id=contribution.id,
+                unilateral_id=unilateral.id,
+                user_id=unilateral.contributor_user_id,
+                amount_absorbed=absorption,
+                currency=contribution_data.currency.value,
+                created_at=now,
+            )
+            db.add(absorption_record)
+
+            # Update absorbed_amount and payment offset (both in the same currency)
+            unilateral.absorbed_amount = Decimal(str(unilateral.absorbed_amount)) + absorption
+            user_payment.amount_offset = current_offset + absorption
+
+            # If fully covered, auto-mark as paid (WITHOUT crediting balance — already credited with unilateral)
+            if user_payment.amount_offset >= Decimal(str(user_payment.amount_due)):
+                user_payment.is_paid = True
+                user_payment.paid_at = now
+                user_payment.payment_date = now
+                user_payment.submitted_at = now
+                user_payment.approved_at = now
+                user_payment.approved_by = current_user.id
+                user_payment.amount_paid = user_payment.amount_due
+                user_payment.currency_paid = contribution_data.currency.value
+                if contribution_data.currency.value == "USD":
+                    user_payment.amount_paid_usd = user_payment.amount_due
+                    user_payment.amount_paid_ars = Decimal("0")
+                else:
+                    user_payment.amount_paid_ars = user_payment.amount_due
+                    user_payment.amount_paid_usd = Decimal("0")
+
+    db.commit()
+    db.refresh(contribution)
+
+    return contribution
+
+
+@router.post("/unilateral", response_model=ContributionResponse, status_code=status.HTTP_201_CREATED)
+async def create_unilateral_contribution(
+    data: UnilateralContributionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """Create a direct (unilateral) contribution. Any member can do this."""
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    # Validate contribution_mode allows this
+    type_params = getattr(project, 'type_parameters', None) or {}
+    contribution_mode = type_params.get('contribution_mode', 'both')
+    if contribution_mode == 'direct_payment':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este proyecto no usa cuenta corriente. No se pueden crear aportes directos.",
+        )
+
+    # Check user is a member
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True,
+    ).first()
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No sos miembro activo de este proyecto",
+        )
+
+    # Check no pending contribution payments for this user (formal requests)
+    pending_formal = db.query(ContributionPayment).join(Contribution).filter(
+        Contribution.project_id == project.id,
+        Contribution.is_unilateral == False,
+        Contribution.is_adjustment == False,
+        ContributionPayment.user_id == current_user.id,
+        ContributionPayment.is_paid == False,
+    ).first()
+    if pending_formal:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenés aportes pendientes de solicitudes formales. Pagá primero esos aportes.",
+        )
+
+    from app.utils.dependencies import is_project_admin as check_admin
+
+    is_individual = project.is_individual
+    user_is_admin = check_admin(db, current_user.id, project.id)
+    auto_approve = is_individual or user_is_admin
+
+    now = datetime.utcnow()
+
+    contribution = Contribution(
+        description=data.description,
+        amount=data.amount,
+        currency=data.currency,
+        project_id=project.id,
+        created_by=current_user.id,
+        status=ContributionStatus.APPROVED if auto_approve else ContributionStatus.PENDING,
+        is_unilateral=True,
+        contributor_user_id=current_user.id,
+    )
+    db.add(contribution)
+    db.flush()
+
+    # Create single payment for this user
+    cp = ContributionPayment(
+        contribution_id=contribution.id,
+        user_id=current_user.id,
+        amount_due=data.amount,
+        is_paid=False,
+    )
+
+    if auto_approve:
+        cp.amount_paid = data.amount
+        cp.is_paid = True
+        cp.paid_at = now
+        cp.payment_date = now
+        cp.submitted_at = now
+        cp.approved_at = now
+        cp.approved_by = current_user.id
+        cp.currency_paid = data.currency.value
+        if data.currency.value == "USD":
+            cp.amount_paid_usd = data.amount
+            cp.amount_paid_ars = Decimal("0")
+        else:
+            cp.amount_paid_ars = data.amount
+            cp.amount_paid_usd = Decimal("0")
+
+        # Credit balance
+        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+        if currency_mode == "USD":
+            member.balance_usd += data.amount
+        else:
+            member.balance_ars += data.amount
+        member.balance_updated_at = now
+
+    db.add(cp)
     db.commit()
     db.refresh(contribution)
 
@@ -386,7 +630,6 @@ async def submit_contribution_payment(
                 member.balance_ars += payment.amount_paid_ars
 
             member.balance_updated_at = datetime.utcnow()
-            print(f"[DEBUG submit_contribution_payment] Auto-approved: credited {payment.amount_paid_ars} ARS to user {current_user.id}, new balance: {member.balance_ars}")
     else:
         # Multi-participant project: Mark as submitted, pending admin approval
         # Do NOT set is_paid=True or credit balance yet
@@ -396,7 +639,6 @@ async def submit_contribution_payment(
         payment.approved_at = None
         payment.approved_by = None
         payment.rejection_reason = None
-        print(f"[DEBUG submit_contribution_payment] Pending approval: payment {payment.id} for user {current_user.id}")
 
     db.commit()
     db.refresh(payment)
@@ -477,17 +719,13 @@ async def submit_contribution_payment(
                 member.balance_updated_at = datetime.utcnow()
                 auto_paid_count += 1
 
-                print(f"[DEBUG submit_contribution_payment] Auto-paid expense {expense.id} for user {current_user.id}, new balance: {member.balance_ars}")
-
                 # Update expense status
                 db.commit()
                 update_expense_status(db, expense.id)
+                db.commit()
             else:
                 # Balance not sufficient, stop trying (since we process oldest first)
                 break
-
-        if auto_paid_count > 0:
-            print(f"[DEBUG submit_contribution_payment] Auto-paid {auto_paid_count} pending expenses after contribution payment")
 
     return {"message": "Payment submitted successfully", "is_paid": payment.is_paid}
 
@@ -628,7 +866,6 @@ async def approve_contribution_payment(
                 member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
 
             member.balance_updated_at = datetime.utcnow()
-            print(f"[DEBUG approve_contribution_payment] Approved: credited balance to user {payment.user_id}, new balance ARS: {member.balance_ars}, USD: {member.balance_usd}")
     else:
         # Reject the payment
         payment.is_pending_approval = False
@@ -643,7 +880,6 @@ async def approve_contribution_payment(
         payment.rejection_reason = approval.rejection_reason or "Rejected by admin"
         payment.approved_by = current_user.id
         payment.approved_at = datetime.utcnow()
-        print(f"[DEBUG approve_contribution_payment] Rejected: payment {payment.id} for user {payment.user_id}, reason: {payment.rejection_reason}")
 
     db.commit()
     db.refresh(payment)

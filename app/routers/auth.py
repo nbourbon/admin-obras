@@ -34,7 +34,6 @@ async def register_user(
         email=user_data.email,
         password=user_data.password,
         full_name=user_data.full_name,
-        participation_percentage=float(user_data.participation_percentage),
         is_admin=user_data.is_admin,
     )
     return user
@@ -61,7 +60,6 @@ async def register_first_admin(
         email=user_data.email,
         password=user_data.password,
         full_name=user_data.full_name,
-        participation_percentage=float(user_data.participation_percentage),
         is_admin=True,  # Force admin for first user
     )
     return user
@@ -102,7 +100,6 @@ async def self_register(
         email=user_data.email,
         password=user_data.password,
         full_name=user_data.full_name,
-        participation_percentage=0,  # No participation by default
         is_admin=True,  # All self-registered users are admins
     )
     return user
@@ -184,7 +181,6 @@ async def google_login(
             google_id=google_id,
             password_hash=None,
             is_active=True,
-            participation_percentage=0,
             is_admin=True,
         )
         db.add(user)

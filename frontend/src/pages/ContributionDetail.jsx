@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download } from 'lucide-react'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -127,11 +127,22 @@ export default function ContributionDetail() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3 flex-1">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Coins className="text-green-600" size={24} />
+            <div className={`p-2 rounded-lg ${contribution.is_unilateral ? 'bg-emerald-100' : 'bg-green-100'}`}>
+              {contribution.is_unilateral ? (
+                <ArrowUpCircle className="text-emerald-600" size={24} />
+              ) : (
+                <Coins className="text-green-600" size={24} />
+              )}
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">{contribution.description}</h1>
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-2xl font-bold text-gray-900">{contribution.description}</h1>
+                {contribution.is_unilateral && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">
+                    Aporte Directo
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-500">
                 Creado por {contribution.created_by_name} el {formatDate(contribution.created_at)}
               </p>
@@ -202,6 +213,9 @@ export default function ContributionDetail() {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   Monto a Pagar
                 </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Absorbido
+                </th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                   Estado
                 </th>
@@ -232,6 +246,20 @@ export default function ContributionDetail() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
                       {formatCurrency(payment.amount_due, contribution.currency)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                      {payment.amount_offset > 0 ? (
+                        <div>
+                          <span className="text-green-600 font-medium">
+                            -{formatCurrency(payment.amount_offset, contribution.currency)}
+                          </span>
+                          <div className="text-xs text-gray-500">
+                            Resta: {formatCurrency(payment.amount_remaining ?? (payment.amount_due - payment.amount_offset), contribution.currency)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {payment.is_paid ? (
@@ -267,7 +295,7 @@ export default function ContributionDetail() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                     No hay pagos registrados
                   </td>
                 </tr>
@@ -306,6 +334,22 @@ export default function ContributionDetail() {
                       {formatCurrency(payment.amount_due, contribution.currency)}
                     </span>
                   </div>
+                  {payment.amount_offset > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Absorbido:</span>
+                      <span className="text-green-600 font-medium">
+                        -{formatCurrency(payment.amount_offset, contribution.currency)}
+                      </span>
+                    </div>
+                  )}
+                  {payment.amount_offset > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Resta:</span>
+                      <span className="font-semibold text-gray-900">
+                        {formatCurrency(payment.amount_remaining ?? (payment.amount_due - payment.amount_offset), contribution.currency)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Estado:</span>
                     <span className={payment.is_paid ? 'text-green-600' : 'text-yellow-600'}>

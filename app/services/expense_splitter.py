@@ -128,6 +128,208 @@ def auto_pay_from_balance(
     return payment
 
 
+def create_payments_current_account(
+    db: Session,
+    expense: Expense,
+    currency_mode: str = "DUAL",
+    payers: Optional[List[dict]] = None,
+) -> List[ParticipantPayment]:
+    """
+    Create payment records for current_account projects.
+    Expenses always deduct from balance. If balance is insufficient,
+    payers must be specified to create inline unilateral contributions.
+
+    Returns the list of ParticipantPayment records created.
+    """
+    from app.models.contribution import Contribution, ContributionStatus, Currency as ContribCurrency
+    from app.models.contribution_payment import ContributionPayment
+
+    members = get_project_members(db, expense.project_id)
+    if not members:
+        return []
+
+    # Calculate amounts per member
+    def calc_amounts(percentage):
+        if currency_mode == "ARS":
+            return (Decimal("0"), (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01")))
+        elif currency_mode == "USD":
+            return ((Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01")), Decimal("0"))
+        else:
+            return (
+                (Decimal(str(expense.amount_usd)) * percentage).quantize(Decimal("0.01")),
+                (Decimal(str(expense.amount_ars)) * percentage).quantize(Decimal("0.01")),
+            )
+
+    member_amounts = []
+    for member in members:
+        percentage = Decimal(str(member.participation_percentage)) / Decimal("100")
+        amount_due_usd, amount_due_ars = calc_amounts(percentage)
+        member_amounts.append([member, amount_due_usd, amount_due_ars])
+
+    # Rounding correction
+    if member_amounts:
+        diff_usd = Decimal(str(expense.amount_usd)) - sum(a[1] for a in member_amounts)
+        diff_ars = Decimal(str(expense.amount_ars)) - sum(a[2] for a in member_amounts)
+        if diff_usd != 0 or diff_ars != 0:
+            max_idx = max(range(len(member_amounts)), key=lambda i: member_amounts[i][0].participation_percentage)
+            member_amounts[max_idx][1] += diff_usd
+            member_amounts[max_idx][2] += diff_ars
+
+    # Check if total balance is sufficient
+    total_balance = sum(Decimal(str(m.balance_ars)) for m in members)
+    expense_amount = Decimal(str(expense.amount_ars)) if currency_mode != "USD" else Decimal(str(expense.amount_usd))
+
+    if currency_mode == "USD":
+        total_balance = sum(Decimal(str(m.balance_usd)) for m in members)
+
+    balance_sufficient = total_balance >= expense_amount
+
+    # If balance is NOT sufficient, we need payers
+    if not balance_sufficient and not payers:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La caja no tiene saldo suficiente. Debe indicar quién pagó este gasto (campo 'payers').",
+        )
+
+    # If payers provided but balance still insufficient, validate payers cover the gap
+    if not balance_sufficient and payers:
+        from fastapi import HTTPException, status
+        total_payer_credit = Decimal("0")
+        for payer_info in payers:
+            payer_amount = Decimal(str(payer_info["amount"]))
+            if currency_mode == "USD":
+                total_payer_credit += payer_amount
+            elif currency_mode == "ARS":
+                total_payer_credit += payer_amount
+            else:  # DUAL — payer amount is in expense currency, convert to ARS
+                if expense.currency_original.value == "USD" and expense.exchange_rate_used:
+                    total_payer_credit += (payer_amount * Decimal(str(expense.exchange_rate_used))).quantize(Decimal("0.01"))
+                else:
+                    total_payer_credit += payer_amount
+
+        if total_balance + total_payer_credit < expense_amount:
+            shortage = expense_amount - total_balance - total_payer_credit
+            currency_label = "USD" if currency_mode == "USD" else "ARS"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El aporte de los pagadores no cubre el gasto completo. Faltan {shortage:,.2f} {currency_label}.",
+            )
+
+    # If payers provided, create inline unilateral contributions first
+    if payers:
+        now = datetime.utcnow()
+        for payer_info in payers:
+            payer_user_id = payer_info["user_id"]
+            payer_amount = Decimal(str(payer_info["amount"]))
+
+            # Find the member
+            payer_member = next((m for m in members if m.user_id == payer_user_id), None)
+            if not payer_member:
+                continue
+
+            # Determine the amount to store in the contribution and credit to balance.
+            # In DUAL mode, balance is always in ARS. Store the contribution in ARS too
+            # so that absorption against ARS solicitudes works without currency conversion.
+            if currency_mode == "USD":
+                # Pure USD project: store in USD, credit balance_usd
+                contrib_currency = ContribCurrency.USD
+                contrib_amount = payer_amount
+                balance_credit_ars = None
+                balance_credit_usd = payer_amount
+            elif currency_mode == "ARS":
+                # Pure ARS project: store in ARS, credit balance_ars
+                contrib_currency = ContribCurrency.ARS
+                contrib_amount = payer_amount
+                balance_credit_ars = payer_amount
+                balance_credit_usd = None
+            else:
+                # DUAL mode: balance is in ARS only — convert payer amount to ARS
+                contrib_currency = ContribCurrency.ARS
+                if expense.currency_original.value == "USD" and expense.exchange_rate_used:
+                    contrib_amount = (payer_amount * Decimal(str(expense.exchange_rate_used))).quantize(Decimal("0.01"))
+                else:
+                    contrib_amount = payer_amount
+                balance_credit_ars = contrib_amount
+                balance_credit_usd = None
+
+            # Create unilateral contribution
+            contribution = Contribution(
+                description=f"Aporte por gasto: {expense.description}",
+                amount=contrib_amount,
+                currency=contrib_currency,
+                project_id=expense.project_id,
+                created_by=expense.created_by,
+                status=ContributionStatus.APPROVED,
+                is_unilateral=True,
+                contributor_user_id=payer_user_id,
+                expense_id=expense.id,
+            )
+            db.add(contribution)
+            db.flush()
+
+            # Create contribution payment (auto-approved)
+            cp = ContributionPayment(
+                contribution_id=contribution.id,
+                user_id=payer_user_id,
+                amount_due=contrib_amount,
+                amount_paid=contrib_amount,
+                is_paid=True,
+                paid_at=now,
+                payment_date=now,
+                submitted_at=now,
+                approved_at=now,
+                approved_by=expense.created_by,
+                currency_paid=contrib_currency.value,
+            )
+            if contrib_currency == ContribCurrency.USD:
+                cp.amount_paid_usd = contrib_amount
+                cp.amount_paid_ars = Decimal("0")
+            else:
+                cp.amount_paid_ars = contrib_amount
+                cp.amount_paid_usd = Decimal("0")
+            db.add(cp)
+
+            # Credit balance
+            if balance_credit_usd is not None:
+                payer_member.balance_usd += balance_credit_usd
+            if balance_credit_ars is not None:
+                payer_member.balance_ars += balance_credit_ars
+            payer_member.balance_updated_at = now
+
+        db.flush()
+
+    # Now deduct from all members proportionally (create auto-paid payments)
+    payments = []
+    now = datetime.utcnow()
+    for member, amount_due_usd, amount_due_ars in member_amounts:
+        payment = auto_pay_from_balance(
+            db, expense, member, amount_due_usd, amount_due_ars, currency_mode
+        )
+
+        # Deduct from balance
+        if currency_mode == "ARS":
+            member.balance_ars -= amount_due_ars
+        elif currency_mode == "USD":
+            member.balance_usd -= amount_due_usd
+        else:  # DUAL
+            if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
+                member.balance_ars -= amount_due_ars
+            else:
+                amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
+                member.balance_ars -= amount_due_ars_equivalent
+
+        member.balance_updated_at = now
+        db.add(payment)
+        payments.append(payment)
+
+    db.flush()
+    for payment in payments:
+        db.refresh(payment)
+
+    return payments
+
+
 def create_participant_payments(
     db: Session,
     expense: Expense,
@@ -253,7 +455,7 @@ def create_participant_payments(
             db.add(payment)
             payments.append(payment)
 
-    db.commit()
+    db.flush()
 
     # Refresh all payments to get IDs
     for payment in payments:
@@ -290,7 +492,7 @@ def update_expense_status(db: Session, expense_id: int) -> ExpenseStatus:
         new_status = ExpenseStatus.PARTIAL
 
     expense.status = new_status
-    db.commit()
+    db.flush()
 
     return new_status
 

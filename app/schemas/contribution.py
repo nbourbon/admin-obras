@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from app.models.contribution import ContributionStatus, Currency
 
 
@@ -12,7 +12,14 @@ class ContributionBase(BaseModel):
 
 
 class ContributionCreate(ContributionBase):
-    pass
+    absorb_unilateral_ids: Optional[List[int]] = None  # IDs of unilateral contributions to absorb
+
+
+class UnilateralContributionCreate(BaseModel):
+    """Schema for direct (unilateral) contribution by any member."""
+    description: str
+    amount: Decimal = Field(gt=0, decimal_places=2)
+    currency: Currency = Currency.ARS
 
 
 class BalanceAdjustmentCreate(BaseModel):
@@ -30,6 +37,10 @@ class ContributionResponse(ContributionBase):
     created_by: int
     status: ContributionStatus
     is_adjustment: bool = False
+    is_unilateral: bool = False
+    contributor_user_id: Optional[int] = None
+    absorbed_amount: Decimal = Decimal("0")
+    expense_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -52,8 +63,10 @@ class ContributionWithMyPayment(ContributionResponse):
     """Contribution with current user's payment info"""
     created_by_name: Optional[str] = None
     created_by_email: Optional[str] = None
+    contributor_name: Optional[str] = None  # For unilateral: who contributed
     my_payment_id: Optional[int] = None  # ID del pago del usuario actual
     my_amount_due: Decimal = Decimal("0")  # Cuánto debe pagar el usuario actual
+    my_amount_offset: Decimal = Decimal("0")  # Discount from unilateral contributions
     i_paid: bool = False  # Si el usuario actual ya pagó (aprobado)
     is_pending_approval: bool = False  # Si enviado pero pendiente de aprobación
     is_complete: bool = False  # Si todos los participantes pagaron
@@ -72,6 +85,8 @@ class ContributionPaymentDetail(BaseModel):
     user_name: str
     user_email: str
     amount_due: Decimal
+    amount_offset: Decimal = Decimal("0")
+    amount_remaining: Optional[Decimal] = None  # amount_due - amount_offset
     is_paid: bool
     paid_at: Optional[datetime] = None
     receipt_file_path: Optional[str] = None
@@ -117,6 +132,22 @@ class ContributionsByParticipant(BaseModel):
     total_usd: Decimal
     total_ars: Decimal
     contributions_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class UnabsorbedContributionResponse(BaseModel):
+    """Unilateral contribution available for absorption"""
+    id: int
+    description: str
+    amount: Decimal
+    absorbed_amount: Decimal
+    remaining: Decimal  # amount - absorbed_amount
+    currency: Currency
+    contributor_user_id: int
+    contributor_name: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

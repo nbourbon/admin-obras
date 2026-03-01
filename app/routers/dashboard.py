@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, contains_eager
 from sqlalchemy import func, extract
 from io import BytesIO
 from datetime import datetime
@@ -129,7 +129,6 @@ async def get_dashboard_summary(
         participants_count = (
             db.query(User)
             .filter(User.is_active == True)
-            .filter(User.participation_percentage > 0)
             .count()
         )
 
@@ -311,12 +310,13 @@ async def get_my_payment_status(
     summary = get_user_payment_summary(db, current_user.id, project_id)
 
     # Get participation percentage and contribution balance from project member
-    participation_percentage = Decimal(str(current_user.participation_percentage))
+    participation_percentage = Decimal("0")  # Will be overridden if project member exists
     balance_aportes_usd = Decimal("0")
     balance_aportes_ars = Decimal("0")
     has_pending_contribution = False
 
     if project:
+        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
         member = (
             db.query(ProjectMember)
             .filter(ProjectMember.project_id == project.id)
@@ -327,36 +327,61 @@ async def get_my_payment_status(
             participation_percentage = Decimal(str(member.participation_percentage))
             balance_aportes_ars = Decimal(str(member.balance_ars))
 
-            # Calculate USD equivalent based on currency mode
-            currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
-            if currency_mode == "DUAL":
-                # Convert ARS to USD at current rate
-                try:
-                    current_rate = fetch_blue_dollar_rate_sync()
-                    if current_rate > 0:
-                        balance_aportes_usd = (balance_aportes_ars / current_rate).quantize(Decimal("0.01"))
-                except Exception:
-                    balance_aportes_usd = Decimal("0")
-            elif currency_mode == "USD":
+            if currency_mode == "USD":
                 balance_aportes_usd = Decimal(str(member.balance_usd))
                 balance_aportes_ars = Decimal("0")
-            # else ARS mode: balance_aportes_usd stays 0
+            # For ARS and DUAL: keep balance_aportes_ars, convert to USD after pending subtraction
 
-        # Check for pending contribution payments
+        # Check for pending contribution payments and calculate total pending amount
         from app.models.contribution_payment import ContributionPayment
-        from app.models.contribution import Contribution
+        from app.models.contribution import Contribution as ContributionModel
 
-        pending_contrib = (
+        pending_contribs = (
             db.query(ContributionPayment)
-            .join(Contribution)
+            .join(ContributionModel, ContributionPayment.contribution_id == ContributionModel.id)
+            .options(contains_eager(ContributionPayment.contribution))
             .filter(
                 ContributionPayment.user_id == current_user.id,
-                Contribution.project_id == project.id,
+                ContributionModel.project_id == project.id,
+                ContributionModel.is_unilateral == False,
+                ContributionModel.is_adjustment == False,
                 ContributionPayment.is_paid == False,
             )
-            .first()
+            .all()
         )
-        has_pending_contribution = pending_contrib is not None
+        has_pending_contribution = len(pending_contribs) > 0
+
+        # For DUAL mode, fetch rate before loop so we can convert USD contributions to ARS
+        current_rate = Decimal("0")
+        if currency_mode == "DUAL":
+            try:
+                current_rate = Decimal(str(fetch_blue_dollar_rate_sync()))
+            except Exception:
+                current_rate = Decimal("0")
+
+        # Subtract pending solicitud contributions from balance before converting to USD
+        for payment in pending_contribs:
+            net_due = Decimal(str(payment.amount_due or 0)) - Decimal(str(payment.amount_offset or 0))
+            contrib_currency = payment.contribution.currency.value if payment.contribution and payment.contribution.currency else "ARS"
+            if net_due <= 0:
+                continue
+
+            if currency_mode == "USD":
+                balance_aportes_usd -= net_due
+            elif currency_mode == "DUAL":
+                if contrib_currency == "USD" and current_rate > 0:
+                    # USD contribution in DUAL project: convert to ARS before subtracting
+                    balance_aportes_ars -= (net_due * current_rate).quantize(Decimal("0.01"))
+                else:
+                    # ARS contribution: subtract directly from ARS balance
+                    balance_aportes_ars -= net_due
+            else:  # ARS mode
+                balance_aportes_ars -= net_due
+
+        # Convert ARS to USD for DUAL mode — done AFTER pending subtraction so USD is correct
+        if member and currency_mode == "DUAL":
+            if current_rate > 0:
+                balance_aportes_usd = (balance_aportes_ars / current_rate).quantize(Decimal("0.01"))
 
     return UserPaymentStatus(
         user_id=current_user.id,
@@ -386,7 +411,6 @@ async def get_all_users_payment_status(
     users = (
         db.query(User)
         .filter(User.is_active == True)
-        .filter(User.participation_percentage > 0)
         .all()
     )
 
@@ -396,7 +420,7 @@ async def get_all_users_payment_status(
         result.append(UserPaymentStatus(
             user_id=user.id,
             user_name=user.full_name,
-            participation_percentage=Decimal(str(user.participation_percentage)),
+            participation_percentage=Decimal("0"),  # No global participation (project-level only)
             total_due_usd=summary["total_due_usd"],
             total_due_ars=summary["total_due_ars"],
             total_paid_usd=summary["total_paid_usd"],
@@ -525,13 +549,13 @@ async def export_project_excel(
 
     # Headers adapt to currency mode
     if currency_mode == "ARS":
-        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría", "Rubro",
                    "Monto ARS", "Estado", "Pagado", "Pendiente"]
     elif currency_mode == "USD":
-        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría", "Rubro",
                    "Monto USD", "Estado", "Pagado", "Pendiente"]
     else:
-        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría",
+        headers = ["ID", "Fecha", "Descripción", "Proveedor", "Categoría", "Rubro",
                    "Monto USD", "Monto ARS", "Estado", "Pagado", "Pendiente"]
     ws_expenses.append(headers)
 
@@ -544,7 +568,9 @@ async def export_project_excel(
         cell.border = thin_border
 
     # Get expenses (exclude deleted)
-    expenses = db.query(Expense).filter(
+    expenses = db.query(Expense).options(
+        joinedload(Expense.rubro),
+    ).filter(
         Expense.project_id == project.id,
         Expense.is_deleted == False,
     ).order_by(Expense.expense_date.desc()).all()
@@ -568,26 +594,27 @@ async def export_project_excel(
         # Remove timezone from date for Excel compatibility
         expense_date = expense.expense_date.replace(tzinfo=None) if expense.expense_date else None
 
+        rubro_name = expense.rubro.name if expense.rubro else "-"
         if currency_mode == "ARS":
             row = [
                 expense.id, expense_date, expense.description,
                 expense.provider.name if expense.provider else "-",
                 expense.category.name if expense.category else "-",
-                float(expense.amount_ars), status, paid_count, pending_count,
+                rubro_name, float(expense.amount_ars), status, paid_count, pending_count,
             ]
         elif currency_mode == "USD":
             row = [
                 expense.id, expense_date, expense.description,
                 expense.provider.name if expense.provider else "-",
                 expense.category.name if expense.category else "-",
-                float(expense.amount_usd), status, paid_count, pending_count,
+                rubro_name, float(expense.amount_usd), status, paid_count, pending_count,
             ]
         else:
             row = [
                 expense.id, expense_date, expense.description,
                 expense.provider.name if expense.provider else "-",
                 expense.category.name if expense.category else "-",
-                float(expense.amount_usd), float(expense.amount_ars),
+                rubro_name, float(expense.amount_usd), float(expense.amount_ars),
                 status, paid_count, pending_count,
             ]
         ws_expenses.append(row)
@@ -596,16 +623,16 @@ async def export_project_excel(
     for row in ws_expenses.iter_rows(min_row=2, max_row=ws_expenses.max_row):
         row[0].alignment = center_align  # ID
         row[1].number_format = date_format  # Fecha
-        row[5].number_format = currency_format  # Amount
+        row[6].number_format = currency_format  # Amount (col 7, shifted by Rubro)
         if currency_mode == "DUAL":
-            row[6].number_format = currency_format  # ARS
+            row[7].number_format = currency_format  # ARS
+            row[8].alignment = center_align  # Estado
+            row[9].alignment = center_align  # Pagado
+            row[10].alignment = center_align  # Pendiente
+        else:
             row[7].alignment = center_align  # Estado
             row[8].alignment = center_align  # Pagado
             row[9].alignment = center_align  # Pendiente
-        else:
-            row[6].alignment = center_align  # Estado
-            row[7].alignment = center_align  # Pagado
-            row[8].alignment = center_align  # Pendiente
         for cell in row:
             cell.border = thin_border
 
@@ -730,105 +757,236 @@ async def export_project_excel(
     for col in [4, 5, 6]:
         ws_participants.column_dimensions[get_column_letter(col)].width = 18
 
-    # === SHEET 4: APORTES ===
-    ws_contributions = wb.create_sheet("Aportes")
+    from app.models.contribution import Contribution as ContributionModel, ContributionStatus as ContribStatus
+    from app.models.contribution_payment import ContributionPayment as ContribPayment
+    from sqlalchemy.orm import joinedload as jl
 
-    # Get contributions data
-    contributions_data = get_contributions_by_participant(db, project.id)
+    currency_label = "USD" if currency_mode == "USD" else "ARS"
 
-    # Get current exchange rate for DUAL mode
-    current_tc = Decimal("0")
-    if currency_mode == "DUAL":
-        try:
-            current_tc = fetch_blue_dollar_rate_sync()
-        except:
-            current_tc = Decimal("1000")
+    # === SHEET 4: ESTADO POR PARTICIPANTE ===
+    # Chronological account statement per person showing individual contributions
+    # and group solicitud obligations with running balance.
+    ws_estado = wb.create_sheet("Estado por Participante")
 
-    # Headers adapt to currency mode
-    if currency_mode == "ARS":
-        contrib_headers = ["Participante", "Email", "% Participación",
-                          "Total Aportado ARS", "Saldo Actual ARS", "Cantidad de Aportes"]
-    elif currency_mode == "USD":
-        contrib_headers = ["Participante", "Email", "% Participación",
-                          "Total Aportado USD", "Saldo Actual USD", "Cantidad de Aportes"]
-    else:  # DUAL
-        contrib_headers = ["Participante", "Email", "% Participación",
-                          "Total Aportado USD", "Total Aportado ARS",
-                          "Saldo Actual USD", "Saldo Actual ARS", "Cantidad de Aportes"]
+    credit_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")   # green: individual contribution
+    debit_fill  = PatternFill(start_color="FDECEA", end_color="FDECEA", fill_type="solid")   # pink: group solicitud paid
+    debt_fill   = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")   # orange: group solicitud unpaid
+    total_fill  = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")   # gray: totals row
+    member_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")   # blue-gray: member header
+    bold_font   = Font(bold=True)
 
-    ws_contributions.append(contrib_headers)
+    # Load all active project members
+    members_estado = (
+        db.query(ProjectMember)
+        .filter(ProjectMember.project_id == project.id, ProjectMember.is_active == True)
+        .options(jl(ProjectMember.user))
+        .all()
+    )
 
-    # Style header
-    for col_num, header in enumerate(contrib_headers, 1):
-        cell = ws_contributions.cell(row=1, column=col_num)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = center_align
-        cell.border = thin_border
+    # Batch load all approved unilateral contributions, grouped by contributor
+    all_unilateral = (
+        db.query(ContributionModel)
+        .filter(
+            ContributionModel.project_id == project.id,
+            ContributionModel.is_unilateral == True,
+            ContributionModel.is_adjustment == False,
+            ContributionModel.status == ContribStatus.APPROVED,
+        )
+        .order_by(ContributionModel.created_at)
+        .all()
+    )
+    unilateral_by_user = {}
+    for u in all_unilateral:
+        unilateral_by_user.setdefault(u.contributor_user_id, []).append(u)
 
-    # Add contribution data for each participant
-    for contrib in contributions_data:
-        # Get member balance
-        member = db.query(ProjectMember).filter(
-            ProjectMember.project_id == project.id,
-            ProjectMember.user_id == contrib["user_id"],
-        ).first()
+    # Batch load all group contributions and their payments
+    all_group = (
+        db.query(ContributionModel)
+        .filter(
+            ContributionModel.project_id == project.id,
+            ContributionModel.is_unilateral == False,
+            ContributionModel.is_adjustment == False,
+        )
+        .order_by(ContributionModel.created_at)
+        .all()
+    )
+    group_by_id = {c.id: c for c in all_group}
+    all_group_ids = [c.id for c in all_group]
 
-        if currency_mode == "ARS":
-            row = [
-                contrib["user_name"], contrib["user_email"],
-                float(contrib["participation_percentage"]),
-                float(contrib["total_ars"]),
-                float(member.balance_ars) if member else 0,
-                contrib["contributions_count"],
-            ]
-        elif currency_mode == "USD":
-            row = [
-                contrib["user_name"], contrib["user_email"],
-                float(contrib["participation_percentage"]),
-                float(contrib["total_usd"]),
-                float(member.balance_usd) if member else 0,
-                contrib["contributions_count"],
-            ]
-        else:  # DUAL
-            # Calculate balance USD from balance ARS
-            balance_usd = (member.balance_ars / current_tc).quantize(Decimal("0.01")) if member and current_tc > 0 else Decimal("0")
-            row = [
-                contrib["user_name"], contrib["user_email"],
-                float(contrib["participation_percentage"]),
-                float(contrib["total_usd"]),
-                float(contrib["total_ars"]),
-                float(balance_usd),
-                float(member.balance_ars) if member else 0,
-                contrib["contributions_count"],
-            ]
-        ws_contributions.append(row)
+    all_cp = (
+        db.query(ContribPayment)
+        .filter(ContribPayment.contribution_id.in_(all_group_ids))
+        .all()
+    ) if all_group_ids else []
+    cp_by_user = {}
+    for p in all_cp:
+        cp_by_user.setdefault(p.user_id, []).append(p)
 
-    # Format columns
-    for row in ws_contributions.iter_rows(min_row=2, max_row=ws_contributions.max_row):
-        row[2].number_format = '0.00"%"'  # Percentage
-        row[2].alignment = center_align
+    current_row = 1
 
-        if currency_mode == "DUAL":
-            row[3].number_format = currency_format  # Total USD
-            row[4].number_format = currency_format  # Total ARS
-            row[5].number_format = currency_format  # Balance USD
-            row[6].number_format = currency_format  # Balance ARS
-            row[7].alignment = center_align  # Count
-        else:
-            row[3].number_format = currency_format  # Total
-            row[4].number_format = currency_format  # Balance
-            row[5].alignment = center_align  # Count
+    for member in members_estado:
+        user = member.user
+        if not user:
+            continue
 
-        for cell in row:
+        # --- Member header ---
+        member_cell = ws_estado.cell(row=current_row, column=1, value=f"► {user.full_name}")
+        member_cell.font = Font(bold=True, size=12)
+        member_cell.fill = member_fill
+        ws_estado.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
+        current_row += 1
+
+        # --- Column headers ---
+        col_headers = [
+            "Fecha", "Tipo", "Descripción",
+            f"Ingreso ({currency_label})",
+            f"Egreso ({currency_label})",
+            f"Saldo ({currency_label})",
+        ]
+        for col_idx, h in enumerate(col_headers, 1):
+            cell = ws_estado.cell(row=current_row, column=col_idx, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_align
             cell.border = thin_border
+        current_row += 1
 
-    # Auto-adjust column widths
-    ws_contributions.column_dimensions['A'].width = 25
-    ws_contributions.column_dimensions['B'].width = 30
-    ws_contributions.column_dimensions['C'].width = 18
-    for col in range(4, len(contrib_headers) + 1):
-        ws_contributions.column_dimensions[get_column_letter(col)].width = 18
+        # --- Build event list ---
+        events = []
+
+        # Individual contributions for this member
+        for u in unilateral_by_user.get(user.id, []):
+            events.append({
+                'date': u.created_at,
+                'tipo': 'Aporte Individual',
+                'desc': u.description or '—',
+                'ingreso': Decimal(str(u.amount or 0)),
+                'egreso': Decimal('0'),
+                'is_debt': False,
+                'notas': None,
+            })
+
+        # Group solicitud obligations for this member
+        for p in cp_by_user.get(user.id, []):
+            contrib = group_by_id.get(p.contribution_id)
+            if not contrib:
+                continue
+            amount_due   = Decimal(str(p.amount_due or 0))
+            amount_offset = Decimal(str(p.amount_offset or 0))
+            net_due = max(amount_due - amount_offset, Decimal('0'))
+
+            if p.is_paid:
+                # Only the absorbed portion reduces the individual balance;
+                # cash payment is external to the individual contribution account.
+                egreso = amount_offset
+                notas_parts = []
+                if amount_offset > 0:
+                    notas_parts.append(f"Absorb: {float(amount_offset):,.0f}")
+                if net_due > 0:
+                    notas_parts.append(f"Efectivo: {float(net_due):,.0f}")
+                notas = " | ".join(notas_parts) if notas_parts else "Pagado"
+                is_debt = False
+            else:
+                # Full amount_due becomes a pending debt against individual balance
+                egreso = amount_due
+                notas = f"Deuda: {float(net_due):,.0f}"
+                is_debt = True
+
+            events.append({
+                'date': contrib.created_at,
+                'tipo': 'Solicitud Grupal',
+                'desc': contrib.description or '—',
+                'ingreso': Decimal('0'),
+                'egreso': egreso,
+                'is_debt': is_debt,
+                'notas': notas,
+            })
+
+        # Sort chronologically
+        events.sort(key=lambda e: e['date'] or datetime.min)
+
+        # --- Write rows ---
+        running_balance = Decimal('0')
+        total_ingreso   = Decimal('0')
+        total_egreso    = Decimal('0')
+
+        if not events:
+            no_data = ws_estado.cell(row=current_row, column=1, value="Sin movimientos")
+            no_data.font = Font(italic=True, color="888888")
+            ws_estado.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
+            current_row += 1
+        else:
+            for event in events:
+                running_balance += event['ingreso'] - event['egreso']
+                total_ingreso   += event['ingreso']
+                total_egreso    += event['egreso']
+
+                fecha = event['date'].replace(tzinfo=None) if event['date'] else None
+                desc  = event['desc']
+                if event['notas']:
+                    desc = f"{desc}  [{event['notas']}]"
+
+                ingreso_val = float(event['ingreso']) if event['ingreso'] > 0 else None
+                egreso_val  = float(event['egreso'])  if event['egreso']  > 0 else None
+                saldo_val   = float(running_balance)
+
+                row_data = [fecha, event['tipo'], desc, ingreso_val, egreso_val, saldo_val]
+                for col_idx, val in enumerate(row_data, 1):
+                    ws_estado.cell(row=current_row, column=col_idx, value=val).border = thin_border
+
+                ws_estado.cell(row=current_row, column=1).number_format = date_format
+                ws_estado.cell(row=current_row, column=1).alignment = center_align
+                ws_estado.cell(row=current_row, column=2).alignment = center_align
+                for col_idx in [4, 5, 6]:
+                    ws_estado.cell(row=current_row, column=col_idx).number_format = currency_format
+
+                # Row background color
+                if event['tipo'] == 'Aporte Individual':
+                    row_fill = credit_fill
+                elif event['is_debt']:
+                    row_fill = debt_fill
+                else:
+                    row_fill = debit_fill
+                for col_idx in range(1, 7):
+                    ws_estado.cell(row=current_row, column=col_idx).fill = row_fill
+
+                # Saldo cell color: green if positive, red if negative
+                saldo_cell = ws_estado.cell(row=current_row, column=6)
+                if running_balance > 0:
+                    saldo_cell.font = Font(color="1A7A4A", bold=True)
+                elif running_balance < 0:
+                    saldo_cell.font = Font(color="C00000", bold=True)
+
+                current_row += 1
+
+            # Total row
+            for col_idx, val in enumerate(
+                [None, None, "SALDO FINAL",
+                 float(total_ingreso), float(total_egreso), float(running_balance)], 1
+            ):
+                cell = ws_estado.cell(row=current_row, column=col_idx, value=val)
+                cell.font = bold_font
+                cell.fill = total_fill
+                cell.border = thin_border
+                if col_idx in [4, 5, 6]:
+                    cell.number_format = currency_format
+            saldo_final_cell = ws_estado.cell(row=current_row, column=6)
+            if running_balance > 0:
+                saldo_final_cell.font = Font(bold=True, color="1A7A4A")
+            elif running_balance < 0:
+                saldo_final_cell.font = Font(bold=True, color="C00000")
+            current_row += 1
+
+        # Blank separator between participants
+        current_row += 1
+
+    # Column widths
+    ws_estado.column_dimensions['A'].width = 14   # Fecha
+    ws_estado.column_dimensions['B'].width = 20   # Tipo
+    ws_estado.column_dimensions['C'].width = 50   # Descripción
+    ws_estado.column_dimensions['D'].width = 22   # Ingreso
+    ws_estado.column_dimensions['E'].width = 22   # Egreso
+    ws_estado.column_dimensions['F'].width = 22   # Saldo
 
     # Save to BytesIO
     excel_file = BytesIO()

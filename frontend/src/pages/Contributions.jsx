@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { contributionsAPI } from '../api/client'
+import { contributionsAPI, dashboardAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search, Scale } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search, Scale, ArrowUpCircle, Users, User } from 'lucide-react'
 import AdjustBalanceModal from '../components/AdjustBalanceModal'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -169,8 +169,9 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
     setLoading(true)
 
     try {
+      const netAmount = (contribution.my_amount_due || 0) - (contribution.my_amount_offset || 0)
       const submitData = {
-        amount_paid: contribution.my_amount_due,
+        amount_paid: netAmount,
         currency_paid: contribution.currency,
         payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
       }
@@ -222,10 +223,25 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
         <div className="bg-gray-50 rounded-lg p-4 mb-4">
           <p className="text-sm text-gray-500">Aporte</p>
           <p className="font-medium">{contribution.description}</p>
-          <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
-          <p className="font-semibold text-blue-600">
-            {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
-          </p>
+          {contribution.my_amount_offset > 0 ? (
+            <>
+              <p className="text-sm text-gray-500 mt-2">Monto original</p>
+              <p className="text-gray-700">{formatCurrency(contribution.my_amount_due || 0, contribution.currency)}</p>
+              <p className="text-sm text-gray-500 mt-1">Absorbido por aporte directo</p>
+              <p className="text-green-600">− {formatCurrency(contribution.my_amount_offset, contribution.currency)}</p>
+              <p className="text-sm text-gray-500 mt-1">A pagar en efectivo</p>
+              <p className="font-semibold text-blue-600 text-lg">
+                {formatCurrency((contribution.my_amount_due || 0) - contribution.my_amount_offset, contribution.currency)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mt-2">Monto que te corresponde</p>
+              <p className="font-semibold text-blue-600">
+                {formatCurrency(contribution.my_amount_due || 0, contribution.currency)}
+              </p>
+            </>
+          )}
         </div>
 
         {error && (
@@ -312,6 +328,273 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
   )
 }
 
+function CreateUnilateralModal({ isOpen, onClose, onCreated, currencyMode }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [formData, setFormData] = useState({
+    description: '',
+    amount: '',
+  })
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const currency = currencyMode === 'USD' ? 'USD' : 'ARS'
+      await contributionsAPI.createUnilateral({
+        description: formData.description,
+        amount: parseFloat(formData.amount),
+        currency,
+      })
+      onCreated()
+      onClose()
+      setFormData({ description: '', amount: '' })
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear aporte directo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  const currencyLabel = currencyMode === 'USD' ? 'USD' : 'ARS'
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Aporte Directo</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-lg text-xs mb-4">
+          Este aporte se acredita a tu saldo. Se puede descontar de futuras solicitudes de aporte.
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+            <input
+              type="text"
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              placeholder="Ej: Transferencia bancaria"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Monto ({currencyLabel})</label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Aportar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CreateContributionWithAbsorptionModal({ isOpen, onClose, onCreated, currencyMode }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [unabsorbed, setUnabsorbed] = useState([])
+  const [selectedIds, setSelectedIds] = useState([])
+  const [formData, setFormData] = useState({
+    description: '',
+    amount_original: '',
+  })
+
+  useEffect(() => {
+    if (isOpen) {
+      loadUnabsorbed()
+    }
+  }, [isOpen])
+
+  const loadUnabsorbed = async () => {
+    try {
+      const response = await contributionsAPI.getUnabsorbed()
+      setUnabsorbed(response.data || [])
+      // Pre-select all by default
+      setSelectedIds((response.data || []).map(u => u.id))
+    } catch (err) {
+      console.error('Error loading unabsorbed:', err)
+    }
+  }
+
+  const toggleUnabsorbed = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const contributionData = {
+        description: formData.description,
+        amount: parseFloat(formData.amount_original),
+        currency: 'ARS',
+        absorb_unilateral_ids: selectedIds.length > 0 ? selectedIds : null,
+      }
+      await contributionsAPI.create(contributionData)
+      onCreated()
+      onClose()
+      setFormData({ description: '', amount_original: '' })
+      setSelectedIds([])
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al crear solicitud de aporte')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Nueva Solicitud de Aporte</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs mb-4">
+          Los aportes se dividen entre participantes. Al aprobar los pagos, el monto se acredita al saldo de cada uno.
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+            <input
+              type="text"
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej: Aporte para caja común"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Monto (ARS)</label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={formData.amount_original}
+              onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+
+          {/* Unabsorbed unilateral contributions */}
+          {unabsorbed.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Absorber aportes directos
+              </label>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {unabsorbed.map(u => (
+                  <label
+                    key={u.id}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      selectedIds.includes(u.id)
+                        ? 'bg-green-50 border-green-300'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(u.id)}
+                      onChange={() => toggleUnabsorbed(u.id)}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{u.contributor_name}</div>
+                      <div className="text-xs text-gray-500 truncate">{u.description}</div>
+                    </div>
+                    <div className="text-sm font-semibold text-green-600 flex-shrink-0">
+                      {formatCurrency(u.remaining, u.currency)}
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Los aportes seleccionados se descontarán del monto a pagar de cada contribuyente.
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : 'Crear Aporte'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function Contributions() {
   const navigate = useNavigate()
   const { currentProject, isProjectAdmin } = useProject()
@@ -321,7 +604,10 @@ export default function Contributions() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAdjustModal, setShowAdjustModal] = useState(false)
   const [showPayModal, setShowPayModal] = useState(false)
+  const [showUnilateralModal, setShowUnilateralModal] = useState(false)
   const [selectedContribution, setSelectedContribution] = useState(null)
+  const [hasPendingFormal, setHasPendingFormal] = useState(false)
+  const [contributionMode, setContributionMode] = useState('both')
   const [infoDismissed, setInfoDismissed] = useState(
     () => localStorage.getItem('contributions_info_dismissed') === 'true'
   )
@@ -340,14 +626,28 @@ export default function Contributions() {
 
   useEffect(() => {
     loadContributions()
+    loadContributionMode()
   }, [currentProject])
+
+  const loadContributionMode = async () => {
+    try {
+      const response = await dashboardAPI.summary()
+      setContributionMode(response.data.contribution_mode || 'both')
+    } catch (err) {
+      console.error('Error loading contribution mode:', err)
+    }
+  }
 
   const loadContributions = async () => {
     try {
       setLoading(true)
       setError('')
       const response = await contributionsAPI.list()
-      setContributions(response.data || [])
+      const data = response.data || []
+      setContributions(data)
+      // Check if user has pending formal contribution payments
+      const hasPending = data.some(c => !c.is_unilateral && !c.is_adjustment && !c.i_paid && !c.is_pending_approval && c.my_amount_due > 0)
+      setHasPendingFormal(hasPending)
     } catch (err) {
       console.error('Error loading contributions:', err)
       setError(err.response?.data?.detail || 'Error al cargar solicitudes de aporte')
@@ -374,11 +674,21 @@ export default function Contributions() {
         currencyMode={currencyMode}
       />
 
-      <CreateContributionModal
+      <CreateContributionWithAbsorptionModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false)
+          loadContributions()
+        }}
+        currencyMode={currencyMode}
+      />
+
+      <CreateUnilateralModal
+        isOpen={showUnilateralModal}
+        onClose={() => setShowUnilateralModal(false)}
+        onCreated={() => {
+          setShowUnilateralModal(false)
           loadContributions()
         }}
         currencyMode={currencyMode}
@@ -405,26 +715,40 @@ export default function Contributions() {
           <h1 className="text-2xl font-bold text-gray-900 hidden sm:block">Aportes</h1>
           <p className="text-sm text-gray-600">Aportes a la caja común del proyecto</p>
         </div>
-        {isProjectAdmin && (
-          <div className="flex gap-2">
+        <div className="flex gap-2">
+          {/* Aporte Directo - visible for any member if contribution mode supports it */}
+          {contributionMode !== 'direct_payment' && (
             <button
-              onClick={() => setShowAdjustModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-              title="Ajuste de Saldo"
+              onClick={() => setShowUnilateralModal(true)}
+              disabled={hasPendingFormal}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title={hasPendingFormal ? 'Pagá primero tus aportes pendientes' : 'Aporte Directo'}
             >
-              <Scale size={16} />
-              <span className="hidden sm:inline">Ajuste Saldo</span>
+              <ArrowUpCircle size={16} />
+              <span className="hidden sm:inline">Aporte Directo</span>
             </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-              title="Nueva Solicitud"
-            >
-              <Plus size={18} />
-              <span className="hidden sm:inline">Nueva Solicitud</span>
-            </button>
-          </div>
-        )}
+          )}
+          {isProjectAdmin && (
+            <>
+              <button
+                onClick={() => setShowAdjustModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                title="Ajuste de Saldo"
+              >
+                <Scale size={16} />
+                <span className="hidden sm:inline">Ajuste Saldo</span>
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                title="Nueva Solicitud"
+              >
+                <Plus size={18} />
+                <span className="hidden sm:inline">Nueva Solicitud</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Info box — dismissible */}
@@ -496,8 +820,12 @@ export default function Contributions() {
                 {/* Descripción */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    {contribution.is_adjustment && (
-                      <Scale size={13} className="text-indigo-400 flex-shrink-0" />
+                    {contribution.is_adjustment ? (
+                      <Scale size={13} className="text-indigo-400 flex-shrink-0" title="Ajuste de cuenta" />
+                    ) : contribution.is_unilateral ? (
+                      <User size={13} className="text-emerald-500 flex-shrink-0" title="Aporte individual" />
+                    ) : (
+                      <Users size={13} className="text-blue-400 flex-shrink-0" title="Solicitud grupal" />
                     )}
                     <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
                       {contribution.description}
@@ -506,7 +834,11 @@ export default function Contributions() {
                   <div className="text-xs text-gray-400 truncate mt-0.5">
                     {contribution.is_adjustment
                       ? 'Ajuste de cuenta'
-                      : `Mi parte: ${formatCurrency(contribution.my_amount_due || 0, contribution.currency)}`}
+                      : contribution.is_unilateral
+                      ? `Aporte Individual · ${contribution.contributor_name || ''}`
+                      : contribution.my_amount_offset > 0
+                      ? `Aporte Grupal · Mi parte: ${formatCurrency(contribution.my_amount_due || 0, contribution.currency)} · Absorbido: ${formatCurrency(contribution.my_amount_offset, contribution.currency)}`
+                      : `Aporte Grupal · Mi parte: ${formatCurrency(contribution.my_amount_due || 0, contribution.currency)}`}
                   </div>
                 </div>
 

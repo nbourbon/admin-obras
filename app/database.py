@@ -65,6 +65,7 @@ def init_db():
         UserVote,
         Contribution,
         ContributionPayment,
+        ContributionAbsorption,
         AvanceObra,
     )
     Base.metadata.create_all(bind=engine)
@@ -248,6 +249,15 @@ def _run_migrations():
         if password_hash_col and not password_hash_col.get('nullable', True):
             pending.append(('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL',
                             'Made password_hash nullable'))
+        # Remove participation_percentage (now project-level only via ProjectMember)
+        if 'participation_percentage' in users_cols:
+            if database_url.startswith("sqlite"):
+                pending.append(('ALTER TABLE users DROP COLUMN participation_percentage',
+                                'Removed participation_percentage from users (now project-level only)'))
+            else:
+                # PostgreSQL
+                pending.append(('ALTER TABLE users DROP COLUMN IF EXISTS participation_percentage',
+                                'Removed participation_percentage from users (now project-level only)'))
 
     # --- Contribution payments table ---
     contribution_payments_cols = get_cols('contribution_payments')
@@ -328,6 +338,39 @@ def _run_migrations():
         pending.append(('DROP TABLE category_rubros',
                         'Dropped category_rubros (replaced by categories.rubro_id)'))
 
+    # --- Contribution payments: amount_offset ---
+    if contribution_payments_cols:
+        if 'amount_offset' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN amount_offset NUMERIC(15,2) DEFAULT 0 NOT NULL',
+                            'Added amount_offset to contribution_payments'))
+
+    # --- Contribution absorptions table ---
+    if 'contribution_absorptions' not in table_names:
+        if database_url.startswith("sqlite"):
+            pending.append(('''
+                CREATE TABLE IF NOT EXISTS contribution_absorptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    solicitud_id INTEGER NOT NULL REFERENCES contributions(id),
+                    unilateral_id INTEGER NOT NULL REFERENCES contributions(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    amount_absorbed NUMERIC(15,2) NOT NULL,
+                    currency VARCHAR(3) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''', 'Created contribution_absorptions table (SQLite)'))
+        else:
+            pending.append(('''
+                CREATE TABLE IF NOT EXISTS contribution_absorptions (
+                    id SERIAL PRIMARY KEY,
+                    solicitud_id INTEGER NOT NULL REFERENCES contributions(id),
+                    unilateral_id INTEGER NOT NULL REFERENCES contributions(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    amount_absorbed NUMERIC(15,2) NOT NULL,
+                    currency VARCHAR(3) NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            ''', 'Created contribution_absorptions table (PostgreSQL)'))
+
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')
     if contributions_cols:
@@ -349,6 +392,18 @@ def _run_migrations():
         if 'is_adjustment' not in contributions_cols:
             pending.append(("ALTER TABLE contributions ADD COLUMN is_adjustment BOOLEAN DEFAULT FALSE",
                             'Added is_adjustment to contributions'))
+        if 'is_unilateral' not in contributions_cols:
+            pending.append(("ALTER TABLE contributions ADD COLUMN is_unilateral BOOLEAN DEFAULT FALSE",
+                            'Added is_unilateral to contributions'))
+        if 'contributor_user_id' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN contributor_user_id INTEGER',
+                            'Added contributor_user_id to contributions'))
+        if 'absorbed_amount' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN absorbed_amount NUMERIC(15,2) DEFAULT 0 NOT NULL',
+                            'Added absorbed_amount to contributions'))
+        if 'expense_id' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN expense_id INTEGER',
+                            'Added expense_id to contributions'))
 
         # Drop old columns if they exist
         if 'amount_usd' in contributions_cols:

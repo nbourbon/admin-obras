@@ -90,7 +90,6 @@ def create_user(
     email: str,
     password: str,
     full_name: str,
-    participation_percentage: float = 0,
     is_admin: bool = False,
 ) -> User:
     """Create a new user."""
@@ -107,7 +106,6 @@ def create_user(
         email=email,
         password_hash=hashed_password,
         full_name=full_name,
-        participation_percentage=participation_percentage,
         is_admin=is_admin,
     )
     db.add(user)

@@ -282,24 +282,38 @@ function Dashboard() {
             </span>
           </div>
         )}
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-gray-600">Pendiente</span>
-          <span className="text-yellow-700 font-bold">
-            {currencyMode === 'ARS'
-              ? formatCurrency(summary?.total_pending_ars || 0, 'ARS')
-              : formatCurrency(summary?.total_pending_usd || 0)}
-          </span>
-        </div>
-        {/* Hide Saldo Cta Corriente for direct_payment mode */}
-        {summary?.contribution_mode !== 'direct_payment' && (
+        {/* For current_account: show Caja General instead of Pendiente */}
+        {summary?.contribution_mode === 'current_account' ? (
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-gray-600">Saldo Cta Corriente</span>
-            <span className="text-green-700 font-bold">
+            <span className="text-gray-600">Caja General</span>
+            <span className={`font-bold ${(summary?.total_balance_ars || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
               {currencyMode === 'ARS'
                 ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
                 : formatCurrency(summary?.total_balance_usd || 0)}
             </span>
           </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-gray-600">Pendiente</span>
+              <span className="text-yellow-700 font-bold">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(summary?.total_pending_ars || 0, 'ARS')
+                  : formatCurrency(summary?.total_pending_usd || 0)}
+              </span>
+            </div>
+            {/* Hide Saldo Cta Corriente for direct_payment mode */}
+            {summary?.contribution_mode !== 'direct_payment' && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-gray-600">Saldo Cta Corriente</span>
+                <span className="text-green-700 font-bold">
+                  {currencyMode === 'ARS'
+                    ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
+                    : formatCurrency(summary?.total_balance_usd || 0)}
+                </span>
+              </div>
+            )}
+          </>
         )}
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-gray-600">Participantes</span>
@@ -319,39 +333,65 @@ function Dashboard() {
             <h2 className="font-semibold text-gray-900">Mi Estado <span className="text-blue-600">({myStatus.participation_percentage}%)</span></h2>
           </div>
           <div className="divide-y">
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-gray-600">Gastado</span>
-              <span className="font-bold text-gray-900">
-                {currencyMode === 'ARS'
-                  ? formatCurrency(myStatus.total_due_ars, 'ARS')
-                  : formatCurrency(myStatus.total_due_usd)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-gray-600">Pendiente</span>
-              <span className="font-bold text-yellow-600">
-                {currencyMode === 'ARS'
-                  ? formatCurrency(myStatus.pending_ars, 'ARS')
-                  : formatCurrency(myStatus.pending_usd)}
-              </span>
-            </div>
-            {/* Hide Saldo Aportes for direct_payment mode */}
-            {summary?.contribution_mode !== 'direct_payment' && (
-              <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-600">Saldo Aportes</span>
-                  {myStatus.has_pending_contribution && (
-                    <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
-                      Pendiente
-                    </span>
-                  )}
+            {summary?.contribution_mode === 'current_account' ? (
+              <>
+                {/* Current account: saldo is the source of truth */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-gray-600">Mi Saldo</span>
+                  <span className={`font-bold ${
+                    (myStatus.balance_aportes_ars || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {currencyMode === 'ARS'
+                      ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
+                      : formatCurrency(myStatus.balance_aportes_usd || 0)}
+                  </span>
                 </div>
-                <span className="font-bold text-green-600">
-                  {currencyMode === 'ARS'
-                    ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
-                    : formatCurrency(myStatus.balance_aportes_usd || 0)}
-                </span>
-              </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-gray-600">Total Gastado (mi %)</span>
+                  <span className="font-bold text-gray-900">
+                    {currencyMode === 'ARS'
+                      ? formatCurrency(myStatus.total_due_ars, 'ARS')
+                      : formatCurrency(myStatus.total_due_usd)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-gray-600">Gastado</span>
+                  <span className="font-bold text-gray-900">
+                    {currencyMode === 'ARS'
+                      ? formatCurrency(myStatus.total_due_ars, 'ARS')
+                      : formatCurrency(myStatus.total_due_usd)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-gray-600">Pendiente</span>
+                  <span className="font-bold text-yellow-600">
+                    {currencyMode === 'ARS'
+                      ? formatCurrency(myStatus.pending_ars, 'ARS')
+                      : formatCurrency(myStatus.pending_usd)}
+                  </span>
+                </div>
+                {/* Hide Saldo Aportes for direct_payment mode */}
+                {summary?.contribution_mode !== 'direct_payment' && (
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600">Saldo Aportes</span>
+                      {myStatus.has_pending_contribution && (
+                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                          Pendiente
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-bold text-green-600">
+                      {currencyMode === 'ARS'
+                        ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
+                        : formatCurrency(myStatus.balance_aportes_usd || 0)}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

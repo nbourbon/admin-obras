@@ -239,10 +239,6 @@ async def get_pending_approval_payments(
 
     contribution_payments = contribution_query.order_by(ContributionPayment.submitted_at.desc()).all()
 
-    print(f"[DEBUG pending-approval] Found {len(contribution_payments)} contribution payments for project {project.id if project else 'all'}")
-    for cp in contribution_payments:
-        print(f"  - Payment {cp.id}: user={cp.user_id}, is_pending={cp.is_pending_approval}, submitted={cp.submitted_at}")
-
     # Cache projects by id to avoid N+1 queries
     project_cache: dict = {}
 
@@ -308,8 +304,6 @@ async def get_pending_approval_payments(
     for payment in contribution_payments:
         contribution = payment.contribution
         user = payment.user
-
-        print(f"[DEBUG pending-approval] Processing contribution payment {payment.id}, contribution={contribution.id if contribution else 'None'}, user={user.id if user else 'None'}")
 
         # Get currency_mode from project (cached)
         project_id = contribution.project_id
@@ -500,7 +494,6 @@ async def submit_payment(
         project = db.query(Project).filter(Project.id == expense.project_id).first()
         is_individual = project.is_individual if project else False
         user_is_admin = is_project_admin(db, current_user.id, expense.project_id)
-        print(f"[DEBUG submit_payment] Payment {payment_id}, Expense {expense.id}, Project {expense.project_id}, is_individual={is_individual}, user_is_admin={user_is_admin}")
 
         # Block manual payment submission if project uses contribution_mode = current_account
         if project and project.project_type == "construccion":
@@ -566,12 +559,9 @@ async def submit_payment(
         payment.paid_at = datetime.utcnow()
         payment.approved_at = datetime.utcnow()
         payment.approved_by = current_user.id
-        reason = "individual project" if is_individual else "admin self-approval"
-        print(f"[DEBUG submit_payment] Auto-approved payment {payment_id} ({reason})")
     else:
         # Mark as pending approval for non-admin users in multi-participant projects
         payment.is_pending_approval = True
-        print(f"[DEBUG submit_payment] Payment {payment_id} marked as pending approval")
 
     db.commit()
     db.refresh(payment)
@@ -579,6 +569,7 @@ async def submit_payment(
     # Update expense status
     from app.services.expense_splitter import update_expense_status
     update_expense_status(db, payment.expense_id)
+    db.commit()
 
     return payment
 
@@ -658,7 +649,6 @@ async def approve_payment(
                         member.balance_ars += contribution_payment.amount_paid_ars if contribution_payment.amount_paid_ars else contribution_payment.amount_paid
 
                     member.balance_updated_at = datetime.utcnow()
-                    print(f"[DEBUG approve_payment] Contribution approved: credited balance to user {contribution_payment.user_id}, new balance ARS: {member.balance_ars}, USD: {member.balance_usd}")
             else:
                 # Reject the contribution payment
                 contribution_payment.is_pending_approval = False
@@ -673,7 +663,6 @@ async def approve_payment(
                 contribution_payment.rejection_reason = approval.rejection_reason or "Rejected by admin"
                 contribution_payment.approved_by = current_user.id
                 contribution_payment.approved_at = datetime.utcnow()
-                print(f"[DEBUG approve_payment] Contribution rejected: payment {contribution_payment.id} for user {contribution_payment.user_id}")
 
             db.commit()
             db.refresh(contribution_payment)
@@ -758,7 +747,6 @@ async def approve_payment(
                     member.balance_ars += payment.amount_due_ars
 
                 member.balance_updated_at = datetime.utcnow()
-                print(f"[DEBUG approve_payment] Contribution approved: credited {payment.amount_due_ars} ARS to user {payment.user_id}")
     else:
         # Reject the payment
         payment.is_pending_approval = False
@@ -774,6 +762,7 @@ async def approve_payment(
 
     # Update expense status
     update_expense_status(db, payment.expense_id)
+    db.commit()
 
     return payment
 
@@ -880,6 +869,7 @@ async def mark_payment_as_paid(
 
     # Update expense status
     update_expense_status(db, payment.expense_id)
+    db.commit()
 
     return payment
 
@@ -935,6 +925,7 @@ async def unmark_payment_as_paid(
 
     # Update expense status
     update_expense_status(db, payment.expense_id)
+    db.commit()
 
     return payment
 
@@ -1087,5 +1078,6 @@ async def delete_payment(
 
     # Update expense status
     update_expense_status(db, payment.expense_id)
+    db.commit()
 
     return {"message": "Pago eliminado correctamente"}

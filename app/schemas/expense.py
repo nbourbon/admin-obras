@@ -19,8 +19,14 @@ class ExpenseBase(BaseModel):
     is_contribution: Optional[bool] = False  # True if this is a contribution request
 
 
+class ExpensePayer(BaseModel):
+    user_id: int
+    amount: Decimal
+
+
 class ExpenseCreate(ExpenseBase):
     exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
+    payers: Optional[List[ExpensePayer]] = None  # Who paid this expense (current_account mode)
 
 
 class ExpenseUpdate(BaseModel):

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Briefcase, Plus, Edit2, Trash2, X, Shield, DollarSign } from 'lucide-react'
@@ -233,10 +234,12 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
 
 function Projects() {
   const { refreshProjects, selectProject, currentProject } = useProject()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     loadProjects()
@@ -265,22 +268,23 @@ function Projects() {
   }
 
   const handleDelete = async (e, projectId) => {
-    e.stopPropagation() // Prevent project selection when clicking delete
-    if (!confirm('Desactivar este proyecto?')) return
+    e.stopPropagation()
+    setDeleteError('')
+    if (!confirm('¿Desactivar este proyecto?')) return
 
     try {
       await projectsAPI.delete(projectId)
       loadProjects()
       refreshProjects()
     } catch (err) {
-      console.error('Error deleting project:', err)
+      const msg = err.response?.data?.detail || 'Error al desactivar el proyecto'
+      setDeleteError(msg)
     }
   }
 
   const handleSelectProject = (projectId) => {
-    if (currentProject?.id === projectId) return // Already selected
     selectProject(projectId)
-    window.location.reload() // Reload to refresh data with new project
+    navigate('/dashboard')
   }
 
   const handleSuccess = () => {
@@ -308,6 +312,12 @@ function Projects() {
           Nuevo Proyecto
         </button>
       </div>
+
+      {deleteError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {deleteError}
+        </div>
+      )}
 
       {projects.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">

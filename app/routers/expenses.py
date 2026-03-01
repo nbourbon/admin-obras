@@ -17,7 +17,7 @@ from app.models.category import Category
 from app.models.payment import ParticipantPayment
 from app.models.project import Project
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync, convert_currency, log_exchange_rate
-from app.services.expense_splitter import create_participant_payments, update_expense_status
+from app.services.expense_splitter import create_participant_payments, create_payments_current_account, update_expense_status
 from app.services.file_storage import save_invoice, get_file_path, get_file_url
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
@@ -235,15 +235,30 @@ async def create_expense(
         expense_date=expense_data.expense_date or datetime.utcnow(),
     )
     db.add(expense)
-    db.commit()
-    db.refresh(expense)
+    db.flush()  # Get expense.id without committing — full transaction commits below
 
     # Create participant payments for project members
-    payments = create_participant_payments(db, expense, currency_mode)
+    # Check if project uses current_account mode
+    type_params = getattr(project, 'type_parameters', None) or {}
+    contribution_mode = type_params.get('contribution_mode', 'both')
+
+    try:
+        if contribution_mode == 'current_account':
+            payers_data = None
+            if expense_data.payers:
+                payers_data = [{"user_id": p.user_id, "amount": p.amount} for p in expense_data.payers]
+            payments = create_payments_current_account(db, expense, currency_mode, payers_data)
+        else:
+            payments = create_participant_payments(db, expense, currency_mode)
+    except Exception:
+        db.rollback()
+        raise
 
     # Update expense status based on auto-paid payments
     # (some payments may have been auto-paid from balance)
     update_expense_status(db, expense.id)
+    db.commit()
+    db.refresh(expense)
 
     # Build response with payments — batch load users to avoid N+1
     user_ids = [p.user_id for p in payments]
@@ -669,7 +684,6 @@ async def delete_expense(
                         member.balance_ars += payment.amount_paid_ars
 
                 member.balance_updated_at = datetime.utcnow()
-                print(f"[DEBUG delete_expense] Restored balance for user {payment.user_id}: +{payment.amount_paid_ars} ARS, new balance: {member.balance_ars}")
 
         payment.is_deleted = True
         payment.deleted_at = datetime.utcnow()
@@ -806,6 +820,7 @@ async def mark_all_payments_as_paid(
 
     db.commit()
     update_expense_status(db, expense_id)
+    db.commit()
 
     return {"marked_count": marked_count, "message": f"Se marcaron {marked_count} pagos como pagados"}
 

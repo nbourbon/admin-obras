@@ -35,6 +35,12 @@ class Contribution(Base):
 
     # Flags
     is_adjustment = Column(Boolean, default=False, nullable=False)
+    is_unilateral = Column(Boolean, default=False, nullable=False)  # Direct contribution (vs formal request)
+
+    # Unilateral contribution fields
+    contributor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who contributed
+    absorbed_amount = Column(Numeric(15, 2), default=0, nullable=False)  # How much absorbed by formal requests
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # If created from expense screen
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -43,4 +49,6 @@ class Contribution(Base):
     # Relationships
     project = relationship("Project", back_populates="contributions")
     created_by_user = relationship("User", foreign_keys=[created_by])
+    contributor_user = relationship("User", foreign_keys=[contributor_user_id])
+    expense = relationship("Expense", foreign_keys=[expense_id])
     payments = relationship("ContributionPayment", back_populates="contribution", cascade="all, delete-orphan")

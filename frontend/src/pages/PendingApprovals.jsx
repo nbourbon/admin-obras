@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { paymentsAPI } from '../api/client'
+import { paymentsAPI, contributionsAPI } from '../api/client'
 import {
   CheckCircle,
   XCircle,
@@ -95,7 +95,7 @@ function PendingApprovals() {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
-  const [rejectModal, setRejectModal] = useState({ isOpen: false, paymentId: null })
+  const [rejectModal, setRejectModal] = useState({ isOpen: false, paymentId: null, isContribution: false })
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewFileName, setPreviewFileName] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
@@ -117,12 +117,17 @@ function PendingApprovals() {
     }
   }
 
-  const handleApprove = async (paymentId) => {
+  const handleApprove = async (payment) => {
     if (!confirm('Aprobar este pago?')) return
 
+    const isContribution = !payment.expense_id
     try {
-      setActionLoading(paymentId)
-      await paymentsAPI.approve(paymentId, { approved: true })
+      setActionLoading(payment.id)
+      if (isContribution) {
+        await contributionsAPI.approvePayment(payment.id, { approved: true })
+      } else {
+        await paymentsAPI.approve(payment.id, { approved: true })
+      }
       loadPayments()
     } catch (err) {
       console.error('Error approving payment:', err)
@@ -132,13 +137,15 @@ function PendingApprovals() {
     }
   }
 
-  const handleReject = async (paymentId, reason) => {
+  const handleReject = async (paymentId, isContribution, reason) => {
     try {
       setActionLoading(paymentId)
-      await paymentsAPI.approve(paymentId, {
-        approved: false,
-        rejection_reason: reason || 'Rechazado por administrador'
-      })
+      const data = { approved: false, rejection_reason: reason || 'Rechazado por administrador' }
+      if (isContribution) {
+        await contributionsAPI.approvePayment(paymentId, data)
+      } else {
+        await paymentsAPI.approve(paymentId, data)
+      }
       loadPayments()
     } catch (err) {
       console.error('Error rejecting payment:', err)
@@ -238,12 +245,18 @@ function PendingApprovals() {
                     </span>
                   </div>
 
-                  <Link
-                    to={`/expenses/${payment.expense_id}`}
-                    className="text-lg font-medium text-blue-600 hover:text-blue-800"
-                  >
-                    {payment.expense?.description}
-                  </Link>
+                  {payment.expense_id ? (
+                    <Link
+                      to={`/expenses/${payment.expense_id}`}
+                      className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      {payment.expense?.description}
+                    </Link>
+                  ) : (
+                    <span className="text-lg font-medium text-purple-700">
+                      {payment.expense?.description}
+                    </span>
+                  )}
 
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                     <span>{payment.expense?.provider_name}</span>
@@ -289,7 +302,7 @@ function PendingApprovals() {
 
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setRejectModal({ isOpen: true, paymentId: payment.id })}
+                    onClick={() => setRejectModal({ isOpen: true, paymentId: payment.id, isContribution: !payment.expense_id })}
                     disabled={actionLoading === payment.id}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:opacity-50"
                   >
@@ -297,7 +310,7 @@ function PendingApprovals() {
                     Rechazar
                   </button>
                   <button
-                    onClick={() => handleApprove(payment.id)}
+                    onClick={() => handleApprove(payment)}
                     disabled={actionLoading === payment.id}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
@@ -313,8 +326,8 @@ function PendingApprovals() {
 
       <RejectModal
         isOpen={rejectModal.isOpen}
-        onClose={() => setRejectModal({ isOpen: false, paymentId: null })}
-        onReject={(reason) => handleReject(rejectModal.paymentId, reason)}
+        onClose={() => setRejectModal({ isOpen: false, paymentId: null, isContribution: false })}
+        onReject={(reason) => handleReject(rejectModal.paymentId, rejectModal.isContribution, reason)}
       />
 
       <FilePreviewModal

@@ -292,6 +292,14 @@ async def deactivate_project(
             detail="Project not found",
         )
 
+    # Verify the current user is admin of the project being deleted
+    # (not just the project in the X-Project-ID header)
+    if not is_project_admin(db, current_user.id, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenés permisos para eliminar este proyecto",
+        )
+
     project.is_active = False
     db.commit()
     return {"message": "Project deactivated successfully"}

@@ -600,7 +600,21 @@ function MyPayments() {
 
                 <div className="text-right flex-shrink-0">
                   {payment.payment_type === 'contribution' ? (
-                    <p className="text-lg font-bold">{formatCurrency(payment.amount_due, payment.currency)}</p>
+                    <div>
+                      <p className="text-lg font-bold">{formatCurrency(payment.amount_due, payment.currency)}</p>
+                      {payment.amount_offset > 0 && (
+                        <div className="text-xs">
+                          <span className="text-green-600">Absorbido: {formatCurrency(payment.amount_offset, payment.currency)}</span>
+                          <br />
+                          <span className="text-gray-600 font-medium">
+                            {payment.amount_offset >= payment.amount_due
+                              ? 'Cubierto por aportes directos'
+                              : `A pagar: ${formatCurrency(payment.amount_due - payment.amount_offset, payment.currency)}`
+                            }
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : currencyMode === 'ARS' ? (
                     <p className="text-lg font-bold">{formatCurrency(payment.amount_due_ars, 'ARS')}</p>
                   ) : currencyMode === 'USD' ? (

@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { expensesAPI, providersAPI, categoriesAPI, rubrosAPI, paymentsAPI, dashboardAPI } from '../api/client'
+import { expensesAPI, providersAPI, categoriesAPI, rubrosAPI, paymentsAPI, dashboardAPI, projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Plus, FileText, X, Upload, RotateCcw, Eye, EyeOff, Edit2, Filter, ChevronDown, Check, CheckCircle2, Clock, Search, AlertCircle } from 'lucide-react'
 import PayExpenseModal from '../components/PayExpenseModal'
@@ -696,7 +696,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
   )
 }
 
-function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, rubros: initialRubros, currencyMode = 'DUAL' }) {
+function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProviders, categories: initialCategories, rubros: initialRubros, currencyMode = 'DUAL', contributionMode = 'both', projectMembers = [] }) {
   const defaultCurrency = currencyMode === 'ARS' ? 'ARS' : 'USD'
   const [formData, setFormData] = useState({
     description: '',
@@ -717,6 +717,10 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
   const [providers, setProviders] = useState(initialProviders)
   const [categories, setCategories] = useState(initialCategories)
   const [rubros, setRubros] = useState(initialRubros)
+  // Payers for current_account mode
+  const [payers, setPayers] = useState([])
+  const [showPayersSection, setShowPayersSection] = useState(false)
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     setProviders(initialProviders)
@@ -754,9 +758,26 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
     setFormData({ ...formData, rubro_id: newRubro.id.toString() })
   }
 
+  const addPayer = () => {
+    setPayers([...payers, { user_id: '', amount: '' }])
+  }
+
+  const removePayer = (index) => {
+    setPayers(payers.filter((_, i) => i !== index))
+  }
+
+  const updatePayer = (index, field, value) => {
+    const updated = [...payers]
+    updated[index] = { ...updated[index], [field]: value }
+    setPayers(updated)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (submittingRef.current) return // Prevent double submission
+    submittingRef.current = true
     setError('')
+
     setLoading(true)
 
     try {
@@ -774,6 +795,12 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
       // Only send exchange_rate_override if user entered a value (DUAL mode)
       if (currencyMode === 'DUAL' && formData.exchange_rate_override) {
         payload.exchange_rate_override = parseFloat(formData.exchange_rate_override)
+      }
+      // Add payers for current_account mode
+      if (contributionMode === 'current_account' && payers.length > 0) {
+        payload.payers = payers
+          .filter(p => p.user_id && p.amount)
+          .map(p => ({ user_id: parseInt(p.user_id), amount: parseFloat(p.amount) }))
       }
       const response = await expensesAPI.create(payload)
 
@@ -800,10 +827,13 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
         exchange_rate_override: '',
       })
       setInvoiceFile(null)
+      setPayers([])
+      setShowPayersSection(false)
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al crear gasto')
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
@@ -992,6 +1022,86 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
             />
           </div>
 
+          {/* Payers section for current_account mode */}
+          {contributionMode === 'current_account' && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Quien pago este gasto? (opcional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPayersSection(!showPayersSection)
+                    if (!showPayersSection && payers.length === 0) addPayer()
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  {showPayersSection ? 'Ocultar' : 'Agregar pagadores'}
+                </button>
+              </div>
+              {!showPayersSection && (
+                <p className="text-xs text-gray-500">
+                  Si la caja tiene saldo suficiente, se deduce automaticamente. Si no, indica quien pago.
+                </p>
+              )}
+              {showPayersSection && (
+                <div className="space-y-2 mt-2">
+                  {payers.map((payer, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <select
+                        value={payer.user_id}
+                        onChange={(e) => updatePayer(index, 'user_id', e.target.value)}
+                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Seleccionar miembro</option>
+                        {projectMembers.map(m => (
+                          <option key={m.user_id} value={m.user_id}>{m.user_name}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={payer.amount}
+                        onChange={(e) => updatePayer(index, 'amount', e.target.value)}
+                        className="w-28 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Monto"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePayer(index)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addPayer}
+                    className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    <Plus size={14} /> Agregar pagador
+                  </button>
+                  {/* Running total vs expense amount */}
+                  {(() => {
+                    const validPayers = payers.filter(p => p.user_id && p.amount)
+                    if (validPayers.length === 0) return null
+                    const totalPayers = validPayers.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0)
+                    const expenseAmount = parseFloat(formData.amount_original || 0)
+                    const covered = totalPayers >= expenseAmount
+                    return (
+                      <div className={`text-xs px-2 py-1 rounded flex items-center justify-between ${covered ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                        <span>Total pagadores: <strong>{totalPayers.toLocaleString('es-AR', { minimumFractionDigits: 2 })} {formData.currency_original}</strong></span>
+                        <span>{covered ? '✓ Cubre el gasto' : 'El resto se cubre con saldo de caja'}</span>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Factura (opcional)
@@ -1085,11 +1195,16 @@ function Expenses() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedExpense, setSelectedExpense] = useState(null)
   const [contributionMode, setContributionMode] = useState('both')
+  const [projectMembers, setProjectMembers] = useState([])
 
   useEffect(() => {
     loadData()
     loadContributionMode()
   }, [showDeleted])
+
+  useEffect(() => {
+    loadProjectMembers()
+  }, [currentProject?.id])
 
   const loadContributionMode = async () => {
     try {
@@ -1097,6 +1212,19 @@ function Expenses() {
       setContributionMode(response.data.contribution_mode || 'both')
     } catch (err) {
       console.error('Error loading contribution mode:', err)
+    }
+  }
+
+  const loadProjectMembers = async () => {
+    if (!currentProject) return
+    try {
+      const response = await projectsAPI.members(currentProject.id)
+      setProjectMembers((response.data || []).map(m => ({
+        user_id: m.user_id,
+        user_name: m.user_name || `User ${m.user_id}`,
+      })))
+    } catch (err) {
+      console.error('Error loading project members:', err)
     }
   }
 
@@ -1340,6 +1468,11 @@ function Expenses() {
                     ? formatCurrency(expense.amount_ars, 'ARS')
                     : formatCurrency(expense.amount_usd)}
                 </div>
+                {currencyMode === 'DUAL' && expense.amount_ars > 0 && (
+                  <div className="text-xs text-gray-400 tabular-nums">
+                    {formatCurrency(expense.amount_ars, 'ARS')}
+                  </div>
+                )}
                 {!isIndividual && (
                   <div className="text-xs text-gray-500 tabular-nums">
                     {formatCurrency(expense.my_amount_due || 0, currencyMode === 'ARS' ? 'ARS' : 'USD')}
@@ -1397,6 +1530,8 @@ function Expenses() {
         categories={categories}
         rubros={rubros}
         currencyMode={currencyMode}
+        contributionMode={contributionMode}
+        projectMembers={projectMembers}
       />
 
       <EditExpenseModal

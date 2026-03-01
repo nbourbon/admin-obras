@@ -15,6 +15,7 @@ class ContributionPayment(Base):
 
     # Amount due (based on participation %)
     amount_due = Column(Numeric(15, 2), nullable=False)
+    amount_offset = Column(Numeric(15, 2), default=0, nullable=False)  # Discount from unilateral contributions
 
     # Payment info
     amount_paid = Column(Numeric(15, 2), nullable=True, default=0)
