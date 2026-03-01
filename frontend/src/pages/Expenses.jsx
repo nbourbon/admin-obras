@@ -514,7 +514,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
                 required
                 value={formData.amount_original}
                 onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -525,7 +525,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
                 <select
                   value={formData.currency_original}
                   onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="USD">USD</option>
                   <option value="ARS">ARS</option>
@@ -535,7 +535,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
                   type="text"
                   disabled
                   value={currencyMode}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  className="w-full h-10 px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
                 />
               )}
             </div>
@@ -568,7 +568,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <select
                 value={formData.provider_id}
                 onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {providers.map((p) => (
@@ -578,7 +578,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <button
                 type="button"
                 onClick={() => setShowProviderModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo proveedor"
               >
                 <Plus size={20} />
@@ -594,7 +594,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <select
                 value={formData.rubro_id}
                 onChange={handleRubroChange}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {rubros?.map((r) => (
@@ -604,7 +604,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <button
                 type="button"
                 onClick={() => setShowRubroModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo rubro"
               >
                 <Plus size={20} />
@@ -623,7 +623,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <select
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {filteredCategories.map((c) => (
@@ -633,7 +633,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               <button
                 type="button"
                 onClick={() => setShowCategoryModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nueva categoria"
               >
                 <Plus size={20} />
@@ -841,7 +841,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Nuevo Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -881,7 +881,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
                 required
                 value={formData.amount_original}
                 onChange={(e) => setFormData({ ...formData, amount_original: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="0.00"
               />
             </div>
@@ -893,7 +893,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
                 <select
                   value={formData.currency_original}
                   onChange={(e) => setFormData({ ...formData, currency_original: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="USD">USD</option>
                   <option value="ARS">ARS</option>
@@ -903,7 +903,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
                   type="text"
                   disabled
                   value={currencyMode}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  className="w-full h-10 px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600"
                 />
               )}
             </div>
@@ -936,7 +936,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <select
                 value={formData.provider_id}
                 onChange={(e) => setFormData({ ...formData, provider_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {providers.map((p) => (
@@ -946,7 +946,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <button
                 type="button"
                 onClick={() => setShowProviderModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo proveedor"
               >
                 <Plus size={20} />
@@ -962,7 +962,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <select
                 value={formData.rubro_id}
                 onChange={handleRubroChange}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {rubros?.map((r) => (
@@ -972,7 +972,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <button
                 type="button"
                 onClick={() => setShowRubroModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nuevo rubro"
               >
                 <Plus size={20} />
@@ -991,7 +991,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <select
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Sin definir</option>
                 {filteredCategories.map((c) => (
@@ -1001,7 +1001,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               <button
                 type="button"
                 onClick={() => setShowCategoryModal(true)}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-shrink-0 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 title="Crear nueva categoria"
               >
                 <Plus size={20} />
