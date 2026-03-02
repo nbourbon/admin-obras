@@ -380,6 +380,73 @@ No hay nuevas transacciones. El tipo de cambio del dólar blue sube de 1.425 a *
 
 ---
 
+## PASO 8 — Gasto ARS 10.000 con TC manual 1.400
+
+**Acción:**
+Admin crea un gasto de ARS 10.000 sobreescribiendo el TC con **1.400 ARS/USD** (en vez del valor automático del blue).
+Sin pagadores — se descuenta de los saldos existentes en caja.
+
+**Conversión:** 10.000 / 1.400 = **7,14 USD** almacenado (TC queda fijo en el gasto).
+`exchange_rate_source = "manual"`
+
+**Deducción de balance_ars:**
+
+| Usuario | Débito ARS | balance_ars resultante |
+|---------|----------:|----------------------:|
+| U1 (70%) | −7.000 | 569.525 |
+| U2 (30%) | −3.000 | 209.475 |
+
+**Dashboard medido al TC del blue (1.425):**
+
+| Indicador | Valor |
+|-----------|------:|
+| Total gastos | USD 385,56 (+7,14) |
+| Gasto x m² | USD 0,19 |
+| Caja general (779.000 / 1.425) | **USD 546,67** |
+| Saldo U1 (569.525 / 1.425) | **USD +399,67** |
+| Gastado U1 (264,89 + 5,00) | **USD 269,89** |
+| Saldo U2 (209.475 / 1.425) | **USD +147,00** |
+| Gastado U2 (113,53 + 2,14) | **USD 115,67** |
+
+> **Punto clave:** El TC 1.400 solo se usa para convertir este gasto a USD (7,14).
+> El dashboard sigue mostrando saldos reexpresados al TC del blue vigente (1.425).
+
+---
+
+## PASO 9 — Gasto USD 30 con TC manual 1.410
+
+**Acción:**
+Admin crea un gasto de USD 30 sobreescribiendo el TC con **1.410 ARS/USD**.
+Sin pagadores — se descuenta de los saldos existentes en caja.
+
+**Conversión:** 30 × 1.410 = **42.300 ARS** almacenado (TC fijo en el gasto).
+`exchange_rate_source = "manual"`
+
+**Deducción de balance_ars** (usando el TC del gasto, no el del blue):
+
+| Usuario | Cuota USD | Débito ARS (× 1.410) | balance_ars resultante |
+|---------|----------:|---------------------:|----------------------:|
+| U1 (70%) | 21,00 | −29.610 | 539.915 |
+| U2 (30%) | 9,00 | −12.690 | 196.785 |
+
+**Dashboard medido al TC del blue (1.425):**
+
+| Indicador | Valor |
+|-----------|------:|
+| Total gastos | USD 415,56 (+30,00) |
+| Gasto x m² | USD 0,21 |
+| Caja general (736.700 / 1.425) | **USD 516,98** |
+| Saldo U1 (539.915 / 1.425) | **USD +378,89** |
+| Gastado U1 (269,89 + 21,00) | **USD 290,89** |
+| Saldo U2 (196.785 / 1.425) | **USD +138,09** |
+| Gastado U2 (115,67 + 9,00) | **USD 124,67** |
+
+> **Punto clave:** El TC 1.410 determina cuántos ARS se deducen de cada balance.
+> Si el blue sube a 1.450, la caja en USD bajará; si baja, subirá —
+> pero el gasto en USD (30,00) queda fijo para siempre.
+
+---
+
 ## Resumen completo del flujo
 
 | Paso | Acción | Caja (USD) | Saldo U1 (USD) | Gastado U1 | Saldo U2 (USD) | Gastado U2 |
@@ -396,10 +463,13 @@ No hay nuevas transacciones. El tipo de cambio del dólar blue sube de 1.425 a *
 | 5c | U1 paga ARS 490.000 | 416,32 | +394,58 | 194,89 | −125,63 ⚠ | 83,53 |
 | 5d | U2 paga ARS 210.000 | 563,68 | +394,58 | 194,89 | +169,11 | 83,53 |
 | 6 | Gasto 5 USD 100 (U1 $80, U2 $10, caja $10) | 553,68 | +404,58 | 264,89 | +149,11 | 113,53 |
-| **7** | **TC sube a 1.450 (sin transacciones)** | **544,14** | **+397,57** | **264,89 ✓** | **+146,53** | **113,53 ✓** |
+| **7** | **TC sube a 1.450 (sin transacciones)** | **544,14** | **+397,60** | **264,89 ✓** | **+146,53** | **113,53 ✓** |
+| 8 | Gasto ARS 10.000 con TC manual 1400 | 546,67 † | +399,67 | 269,89 | +147,00 | 115,67 |
+| 9 | Gasto USD 30 con TC manual 1410 | 516,98 | +378,89 | 290,89 | +138,09 | 124,67 |
 
 ⚠ El saldo mostrado incluye obligaciones pendientes de solicitudes no pagadas aún.
 ✓ Los valores de "Gastado" no cambian con el TC (almacenados en USD histórico).
+† Paso 8 se mide con TC=1425 (dashboard vuelve al TC actual). La caja en ARS bajó 10.000; vs Paso 6 (553,68) sí disminuye.
 
 ---
 

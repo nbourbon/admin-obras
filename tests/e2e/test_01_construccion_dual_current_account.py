@@ -556,3 +556,104 @@ def test_escenario_01_construccion_dual_current_account(client):
     st2_7 = r7_st2.json()
     assert_close(st2_7["balance_aportes_usd"], +146.53, "p7 U2 saldo con TC=1450")
     assert_close(st2_7["total_paid_usd"],       113.53, "p7 U2 gastado (sin cambio)")
+
+    # -----------------------------------------------------------------------
+    # PASO 8: Gasto ARS 10.000 con TC MANUAL 1400
+    #
+    # Valida que el TC manual se aplica solo a este gasto:
+    #   amount_usd = 10000 / 1400 = 7.14 USD (almacenado con TC=1400)
+    #   exchange_rate_source = "manual"
+    #
+    # Deducción de balance_ars (proporcional):
+    #   U1 − 7.000 ARS → 576.525 − 7.000 = 569.525
+    #   U2 − 3.000 ARS → 212.475 − 3.000 = 209.475
+    #
+    # Dashboard con TC_dashboard=1425:
+    #   total_expenses_usd = 378.42 + 7.14 = 385.56
+    #   caja = 779.000 / 1425 = 546.67
+    #   U1 saldo = 569.525 / 1425 = 399.67
+    #   U2 saldo = 209.475 / 1425 = 147.00
+    # -----------------------------------------------------------------------
+    r = client.post("/expenses", json={
+        "description": "Gasto 6 - materiales con TC manual",
+        "amount_original": "10000.00",
+        "currency_original": "ARS",
+        "exchange_rate_override": "1400",
+    }, headers=h1p)
+    assert r.status_code == 201, f"expense gasto6 (ARS 10000 TC 1400): {r.text}"
+    expense8_id = r.json()["id"]
+
+    # Verificar que el expense guarda el TC manual — leer vía GET para tener todos los campos
+    re8 = client.get(f"/expenses/{expense8_id}", headers=h1p)
+    assert re8.status_code == 200, f"get expense8: {re8.text}"
+    expense8 = re8.json()
+    assert expense8.get("exchange_rate_source") == "manual", (
+        f"p8 exchange_rate_source debe ser 'manual', obtuvo: {expense8.get('exchange_rate_source')}"
+    )
+    assert_close(expense8.get("exchange_rate_used", 0), 1400, "p8 exchange_rate_used")
+    assert_close(expense8.get("amount_usd", 0),           7.14, "p8 amount_usd")
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_usd"],        385.56, "p8 total_gastos")
+    assert_close(s["cost_per_square_meter_usd"],   0.19, "p8 gasto_x_m2")
+    assert_close(s["total_balance_usd"],          546.67, "p8 caja")
+
+    st1 = my_status(client, h1p)
+    assert_close(st1["balance_aportes_usd"],  +399.67, "p8 U1 saldo")
+    assert_close(st1["total_paid_usd"],        269.89, "p8 U1 gastado")
+
+    st2 = my_status(client, h2p)
+    assert_close(st2["balance_aportes_usd"],  +147.00, "p8 U2 saldo")
+    assert_close(st2["total_paid_usd"],        115.67, "p8 U2 gastado")
+
+    # -----------------------------------------------------------------------
+    # PASO 9: Gasto USD 30 con TC MANUAL 1410
+    #
+    # Valida TC manual en la dirección inversa (expense en USD):
+    #   amount_usd = 30.00 (directo)
+    #   amount_ars = 30 × 1410 = 42.300 ARS (almacenado con TC=1410)
+    #   exchange_rate_source = "manual"
+    #
+    # Deducción de balance_ars (usando el TC del gasto, no el de display):
+    #   U1 (70%): 21 USD × 1410 = 29.610 ARS → 569.525 − 29.610 = 539.915
+    #   U2 (30%):  9 USD × 1410 = 12.690 ARS → 209.475 − 12.690 = 196.785
+    #
+    # Dashboard con TC_dashboard=1425:
+    #   total_expenses_usd = 385.56 + 30.00 = 415.56
+    #   gasto_x_m2 = 415.56 / 2000 = 0.21
+    #   caja = 736.700 / 1425 = 516.98
+    #   U1 saldo = 539.915 / 1425 = 378.89
+    #   U2 saldo = 196.785 / 1425 = 138.09
+    # -----------------------------------------------------------------------
+    r = client.post("/expenses", json={
+        "description": "Gasto 7 - USD con TC manual",
+        "amount_original": "30.00",
+        "currency_original": "USD",
+        "exchange_rate_override": "1410",
+    }, headers=h1p)
+    assert r.status_code == 201, f"expense gasto7 (USD 30 TC 1410): {r.text}"
+    expense9_id = r.json()["id"]
+
+    # Verificar TC manual y montos almacenados
+    re9 = client.get(f"/expenses/{expense9_id}", headers=h1p)
+    assert re9.status_code == 200, f"get expense9: {re9.text}"
+    expense9 = re9.json()
+    assert expense9.get("exchange_rate_source") == "manual", (
+        f"p9 exchange_rate_source debe ser 'manual', obtuvo: {expense9.get('exchange_rate_source')}"
+    )
+    assert_close(expense9.get("exchange_rate_used", 0), 1410, "p9 exchange_rate_used")
+    assert_close(expense9.get("amount_usd", 0),          30.00, "p9 amount_usd")
+    assert_close(expense9.get("amount_ars", 0),        42300.00, "p9 amount_ars")
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_usd"],        415.56, "p9 total_gastos")
+    assert_close(s["cost_per_square_meter_usd"],   0.21, "p9 gasto_x_m2")
+    assert_close(s["total_balance_usd"],          516.98, "p9 caja")
+
+    st1 = my_status(client, h1p)
+    assert_close(st1["balance_aportes_usd"],  +378.89, "p9 U1 saldo")
+    assert_close(st1["total_paid_usd"],        290.89, "p9 U1 gastado")
+
+    st2 = my_status(client, h2p)
+    assert_close(st2["balance_aportes_usd"],  +138.09, "p9 U2 saldo")
+    assert_close(st2["total_paid_usd"],        124.67, "p9 U2 gastado")
