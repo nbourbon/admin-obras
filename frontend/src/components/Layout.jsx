@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
+import { notesAPI } from '../api/client'
 import {
   LayoutDashboard,
   Receipt,
@@ -18,7 +19,7 @@ import {
   TrendingUp,
   HardHat,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 function Layout() {
   const { user, logout } = useAuth()
@@ -26,6 +27,29 @@ function Layout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [unreadNotesCount, setUnreadNotesCount] = useState(0)
+
+  useEffect(() => {
+    if (currentProject) {
+      loadUnreadCount()
+    }
+  }, [currentProject])
+
+  // Reload unread count when returning from notes
+  useEffect(() => {
+    if (!pathname.startsWith('/notes/') && pathname !== '/notes') {
+      loadUnreadCount()
+    }
+  }, [pathname])
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await notesAPI.unreadCount()
+      setUnreadNotesCount(response.data.unread_count)
+    } catch (err) {
+      console.error('Error loading unread notes count:', err)
+    }
+  }
 
   const getSectionName = () => {
     if (pathname.startsWith('/dashboard')) return 'Dashboard'
@@ -71,7 +95,7 @@ function Layout() {
       : []),
   ]
 
-  const NavItem = ({ to, icon: Icon, label }) => (
+  const NavItem = ({ to, icon: Icon, label, badge = 0 }) => (
     <NavLink
       to={to}
       onClick={() => setSidebarOpen(false)}
@@ -84,7 +108,12 @@ function Layout() {
       }
     >
       <Icon size={20} />
-      <span>{label}</span>
+      <span className="flex-1">{label}</span>
+      {badge > 0 && (
+        <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-red-500 text-white text-xs font-bold">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </NavLink>
   )
 
@@ -147,7 +176,11 @@ function Layout() {
 
           <nav className="p-4 space-y-1">
             {navItems.map((item) => (
-              <NavItem key={item.to} {...item} />
+              <NavItem
+                key={item.to}
+                {...item}
+                badge={item.to === '/notes' ? unreadNotesCount : 0}
+              />
             ))}
 
             {isProjectAdmin && (

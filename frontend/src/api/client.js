@@ -216,6 +216,7 @@ export const notesAPI = {
   vote: (id, data) => client.post(`/notes/${id}/vote`, data),
   resetVote: (noteId, userId) => client.delete(`/notes/${noteId}/vote/${userId}`),
   closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
+  unreadCount: () => client.get('/notes/unread-count'),
 }
 
 // Avance de Obra API

@@ -223,6 +223,16 @@ def _run_migrations():
             pending.append(('ALTER TABLE notes ADD COLUMN is_voting_closed BOOLEAN DEFAULT FALSE',
                             'Added is_voting_closed to notes'))
 
+    # --- Note participants table ---
+    note_participants_cols = get_cols('note_participants')
+    if note_participants_cols:
+        if 'is_read' not in note_participants_cols:
+            pending.append(('ALTER TABLE note_participants ADD COLUMN is_read BOOLEAN DEFAULT FALSE',
+                            'Added is_read to note_participants'))
+        if 'read_at' not in note_participants_cols:
+            pending.append(('ALTER TABLE note_participants ADD COLUMN read_at TIMESTAMP WITH TIME ZONE',
+                            'Added read_at to note_participants'))
+
         # Convert note_type from PostgreSQL enum to VARCHAR (one-time migration)
         if not database_url.startswith("sqlite"):
             note_type_col = notes_cols.get('note_type')

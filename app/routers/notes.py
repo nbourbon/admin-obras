@@ -246,16 +246,52 @@ async def create_note(
     return build_note_response(note, db)
 
 
+@router.get("/unread-count", response_model=dict)
+async def get_unread_count(
+    x_project_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get count of unread notes for the current user in the project."""
+    project_id = get_project_id(x_project_id)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Project ID required")
+
+    unread_count = (
+        db.query(NoteParticipant)
+        .join(Note)
+        .filter(
+            Note.project_id == project_id,
+            Note.is_active == True,
+            NoteParticipant.user_id == current_user.id,
+            NoteParticipant.is_read == False,
+        )
+        .count()
+    )
+
+    return {"unread_count": unread_count}
+
+
 @router.get("/{note_id}", response_model=NoteDetailResponse)
 async def get_note(
     note_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get note detail with comments and votes."""
+    """Get note detail with comments and votes. Marks note as read for the current user."""
     note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+
+    # Mark note as read for the current user (if they are a participant)
+    participant = db.query(NoteParticipant).filter(
+        NoteParticipant.note_id == note_id,
+        NoteParticipant.user_id == current_user.id,
+    ).first()
+    if participant:
+        participant.is_read = True
+        participant.read_at = datetime.now(timezone.utc)
+        db.commit()
 
     return build_note_detail_response(note, db, current_user.id)
 
