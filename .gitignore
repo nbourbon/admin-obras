@@ -12,6 +12,7 @@ venv/
 env/
 .venv/
 .env
+.env.*  # Ignora .env.backup, .env.local, etc.
 
 # Database
 data/*.db
