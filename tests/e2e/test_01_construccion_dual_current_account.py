@@ -804,12 +804,49 @@ def test_escenario_01_construccion_dual_current_account(client):
 
         distribution[rubro_name][cat_name][prov_name].append(exp)
 
-    # Imprimir reporte
+    # Imprimir reporte y validar totales
     print("\n" + "=" * 80)
     print("REPORTE FINAL: DISTRIBUCIÓN DE GASTOS")
     print("=" * 80)
 
     total_general_usd = Decimal("0")
+    expected_rubros = {
+        "Construcción": Decimal("191.23"),
+        "Finanzas": Decimal("157.14"),
+        "Oficina": Decimal("67.19"),
+    }
+    expected_categories = {
+        "Construcción": {
+            "Ferretería": Decimal("21.05"),
+            "Materiales": Decimal("170.18"),
+        },
+        "Finanzas": {
+            "Legales": Decimal("157.14"),
+        },
+        "Oficina": {
+            "Hojas": Decimal("30.00"),
+            "Salarios": Decimal("37.19"),
+        },
+    }
+    expected_providers = {
+        "Construcción": {
+            "Ferretería": {"Proveedor 1": Decimal("21.05")},
+            "Materiales": {
+                "Proveedor 3": Decimal("70.18"),
+                "Proveedor 4": Decimal("100.00"),
+            },
+        },
+        "Finanzas": {
+            "Legales": {
+                "Proveedor 1": Decimal("150.00"),
+                "Proveedor 2": Decimal("7.14"),
+            }
+        },
+        "Oficina": {
+            "Hojas": {"Proveedor 3": Decimal("30.00")},
+            "Salarios": {"Proveedor 2": Decimal("37.19")},
+        },
+    }
 
     for rubro_name in sorted(distribution.keys()):
         rubro_total = Decimal("0")
@@ -836,13 +873,32 @@ def test_escenario_01_construccion_dual_current_account(client):
                     amount_usd = Decimal(str(exp.get("amount_usd", 0)))
                     print(f"         • {exp.get('description')} — USD {amount_usd:,.2f}")
 
+                # Validar proveedor
+                if rubro_name in expected_providers and cat_name in expected_providers[rubro_name]:
+                    if prov_name in expected_providers[rubro_name][cat_name]:
+                        expected_prov_total = expected_providers[rubro_name][cat_name][prov_name]
+                        assert_close(prov_total, expected_prov_total,
+                                   f"Total {rubro_name} → {cat_name} → {prov_name}")
+
             print(f"   → Subtotal {cat_name}: USD {cat_total:,.2f}")
 
+            # Validar categoría
+            if rubro_name in expected_categories and cat_name in expected_categories[rubro_name]:
+                expected_cat_total = expected_categories[rubro_name][cat_name]
+                assert_close(cat_total, expected_cat_total,
+                           f"Total {rubro_name} → {cat_name}")
+
         print(f"\n→ TOTAL {rubro_name}: USD {rubro_total:,.2f}")
+
+        # Validar rubro
+        if rubro_name in expected_rubros:
+            expected_rubro_total = expected_rubros[rubro_name]
+            assert_close(rubro_total, expected_rubro_total,
+                       f"Total {rubro_name}")
 
     print("\n" + "=" * 80)
     print(f"💰 TOTAL GENERAL: USD {total_general_usd:,.2f}")
     print("=" * 80 + "\n")
 
-    # Validaciones del reporte
+    # Validación final
     assert_close(total_general_usd, 415.56, "Total general de gastos USD")
