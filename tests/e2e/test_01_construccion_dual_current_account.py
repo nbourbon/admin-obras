@@ -132,6 +132,95 @@ def test_escenario_01_construccion_dual_current_account(client):
     assert r.status_code == 200, f"add u2: {r.text}"
 
     # -----------------------------------------------------------------------
+    # Crear rubros (financiero, construcción, oficina)
+    # -----------------------------------------------------------------------
+    r = client.post("/rubros", json={"name": "Finanzas"}, headers=h1p)
+    assert r.status_code == 201, f"create rubro finanzas: {r.text}"
+    rubro_finanzas_id = r.json()["id"]
+
+    r = client.post("/rubros", json={"name": "Construcción"}, headers=h1p)
+    assert r.status_code == 201, f"create rubro construccion: {r.text}"
+    rubro_construccion_id = r.json()["id"]
+
+    r = client.post("/rubros", json={"name": "Oficina"}, headers=h1p)
+    assert r.status_code == 201, f"create rubro oficina: {r.text}"
+    rubro_oficina_id = r.json()["id"]
+
+    # -----------------------------------------------------------------------
+    # Crear categorías vinculadas a rubros
+    # -----------------------------------------------------------------------
+    # Finanzas
+    r = client.post("/categories", json={
+        "name": "Legales",
+        "rubro_id": rubro_finanzas_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category legales: {r.text}"
+    cat_legales_id = r.json()["id"]
+
+    # Construcción
+    r = client.post("/categories", json={
+        "name": "Materiales",
+        "rubro_id": rubro_construccion_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category materiales: {r.text}"
+    cat_materiales_id = r.json()["id"]
+
+    r = client.post("/categories", json={
+        "name": "Mano de Obra",
+        "rubro_id": rubro_construccion_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category mano_obra: {r.text}"
+    cat_mano_obra_id = r.json()["id"]
+
+    r = client.post("/categories", json={
+        "name": "Ferretería",
+        "rubro_id": rubro_construccion_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category ferreteria: {r.text}"
+    cat_ferreteria_id = r.json()["id"]
+
+    # Oficina
+    r = client.post("/categories", json={
+        "name": "Salarios",
+        "rubro_id": rubro_oficina_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category salarios: {r.text}"
+    cat_salarios_id = r.json()["id"]
+
+    r = client.post("/categories", json={
+        "name": "Hojas",
+        "rubro_id": rubro_oficina_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category hojas: {r.text}"
+    cat_hojas_id = r.json()["id"]
+
+    r = client.post("/categories", json={
+        "name": "Lápices",
+        "rubro_id": rubro_oficina_id,
+    }, headers=h1p)
+    assert r.status_code == 201, f"create category lapices: {r.text}"
+    cat_lapices_id = r.json()["id"]
+
+    # -----------------------------------------------------------------------
+    # Crear proveedores
+    # -----------------------------------------------------------------------
+    r = client.post("/providers", json={"name": "Proveedor 1"}, headers=h1p)
+    assert r.status_code == 201, f"create provider1: {r.text}"
+    prov1_id = r.json()["id"]
+
+    r = client.post("/providers", json={"name": "Proveedor 2"}, headers=h1p)
+    assert r.status_code == 201, f"create provider2: {r.text}"
+    prov2_id = r.json()["id"]
+
+    r = client.post("/providers", json={"name": "Proveedor 3"}, headers=h1p)
+    assert r.status_code == 201, f"create provider3: {r.text}"
+    prov3_id = r.json()["id"]
+
+    r = client.post("/providers", json={"name": "Proveedor 4"}, headers=h1p)
+    assert r.status_code == 201, f"create provider4: {r.text}"
+    prov4_id = r.json()["id"]
+
+    # -----------------------------------------------------------------------
     # PASO 0: Estado inicial — todo en cero
     # -----------------------------------------------------------------------
     s = dashboard_summary(client, h1p)
@@ -146,12 +235,16 @@ def test_escenario_01_construccion_dual_current_account(client):
 
     # -----------------------------------------------------------------------
     # PASO 1: Gasto USD 150 — paga Usuario 1
+    # Proveedor: Proveedor 1, Categoría: Legales, Rubro: Finanzas
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 1 - materiales",
         "amount_original": "150.00",
         "currency_original": "USD",
         "exchange_rate_override": "1425",
+        "provider_id": prov1_id,
+        "category_id": cat_legales_id,
+        "rubro_id": rubro_finanzas_id,
         "payers": [{"user_id": u1_id, "amount": "150.00"}],
     }, headers=h1p)
     assert r.status_code == 201, f"expense 1: {r.text}"
@@ -171,12 +264,16 @@ def test_escenario_01_construccion_dual_current_account(client):
 
     # -----------------------------------------------------------------------
     # PASO 2: Gasto ARS 53.000 — paga Usuario 2
+    # Proveedor: Proveedor 2, Categoría: Salarios, Rubro: Oficina
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 2 - mano de obra",
         "amount_original": "53000.00",
         "currency_original": "ARS",
         "exchange_rate_override": "1425",
+        "provider_id": prov2_id,
+        "category_id": cat_salarios_id,
+        "rubro_id": rubro_oficina_id,
         "payers": [{"user_id": u2_id, "amount": "53000.00"}],
     }, headers=h1p)
     assert r.status_code == 201, f"expense 2: {r.text}"
@@ -311,12 +408,16 @@ def test_escenario_01_construccion_dual_current_account(client):
     # PASO 4: Gasto ARS 100.000 — se descuenta de la caja (sin pagadores)
     # Estado previo: U1.balance_ars=163275, U2.balance_ars=69975 → total=233250
     # 233250 >= 100000 ✓ → no requiere pagadores
+    # Proveedor: Proveedor 3, Categoría: Materiales, Rubro: Construcción
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 3 - materiales desde caja",
         "amount_original": "100000.00",
         "currency_original": "ARS",
         "exchange_rate_override": "1425",
+        "provider_id": prov3_id,
+        "category_id": cat_materiales_id,
+        "rubro_id": rubro_construccion_id,
     }, headers=h1p)
     assert r.status_code == 201, f"expense 3: {r.text}"
 
@@ -388,12 +489,16 @@ def test_escenario_01_construccion_dual_current_account(client):
     # 133250 >= 30000 ✓ → no requiere pagadores
     # Deducción: U1 -= 21000 → 72275  |  U2 -= 9000 → 30975
     # caja = 103250 / 1425 = 72.46 USD
+    # Proveedor: Proveedor 1, Categoría: Ferretería, Rubro: Construcción
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 4 - insumos desde caja",
         "amount_original": "30000.00",
         "currency_original": "ARS",
         "exchange_rate_override": "1425",
+        "provider_id": prov1_id,
+        "category_id": cat_ferreteria_id,
+        "rubro_id": rubro_construccion_id,
     }, headers=h1p)
     assert r.status_code == 201, f"expense gasto4 (30K ARS): {r.text}"
 
@@ -488,12 +593,16 @@ def test_escenario_01_construccion_dual_current_account(client):
     # Unilaterales:  U1 +114000 → 676275  |  U2 +14250 → 255225
     # Deducción:     U1 −99750  → 576525  |  U2 −42750 → 212475
     # caja = (576525 + 212475) / 1425 = 789000 / 1425 = 553.68
+    # Proveedor: Proveedor 4, Categoría: Materiales, Rubro: Construcción
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 5 - equipamiento",
         "amount_original": "100.00",
         "currency_original": "USD",
         "exchange_rate_override": "1425",
+        "provider_id": prov4_id,
+        "category_id": cat_materiales_id,
+        "rubro_id": rubro_construccion_id,
         "payers": [
             {"user_id": u1_id, "amount": "80.00"},
             {"user_id": u2_id, "amount": "10.00"},
@@ -573,12 +682,16 @@ def test_escenario_01_construccion_dual_current_account(client):
     #   caja = 779.000 / 1425 = 546.67
     #   U1 saldo = 569.525 / 1425 = 399.67
     #   U2 saldo = 209.475 / 1425 = 147.00
+    # Proveedor: Proveedor 2, Categoría: Finanzas (sic), Rubro: Finanzas
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 6 - materiales con TC manual",
         "amount_original": "10000.00",
         "currency_original": "ARS",
         "exchange_rate_override": "1400",
+        "provider_id": prov2_id,
+        "category_id": cat_legales_id,
+        "rubro_id": rubro_finanzas_id,
     }, headers=h1p)
     assert r.status_code == 201, f"expense gasto6 (ARS 10000 TC 1400): {r.text}"
     expense8_id = r.json()["id"]
@@ -624,12 +737,16 @@ def test_escenario_01_construccion_dual_current_account(client):
     #   caja = 736.700 / 1425 = 516.98
     #   U1 saldo = 539.915 / 1425 = 378.89
     #   U2 saldo = 196.785 / 1425 = 138.09
+    # Proveedor: Proveedor 3, Categoría: Hojas, Rubro: Oficina
     # -----------------------------------------------------------------------
     r = client.post("/expenses", json={
         "description": "Gasto 7 - USD con TC manual",
         "amount_original": "30.00",
         "currency_original": "USD",
         "exchange_rate_override": "1410",
+        "provider_id": prov3_id,
+        "category_id": cat_hojas_id,
+        "rubro_id": rubro_oficina_id,
     }, headers=h1p)
     assert r.status_code == 201, f"expense gasto7 (USD 30 TC 1410): {r.text}"
     expense9_id = r.json()["id"]
@@ -657,3 +774,75 @@ def test_escenario_01_construccion_dual_current_account(client):
     st2 = my_status(client, h2p)
     assert_close(st2["balance_aportes_usd"],  +138.09, "p9 U2 saldo")
     assert_close(st2["total_paid_usd"],        124.67, "p9 U2 gastado")
+
+    # -----------------------------------------------------------------------
+    # REPORTE FINAL: Distribución de gastos por Rubro → Categoría → Proveedor
+    # -----------------------------------------------------------------------
+    r = client.get("/expenses", headers=h1p)
+    assert r.status_code == 200, f"list expenses: {r.text}"
+    all_expenses = r.json()
+
+    # Construir estructura anidada: rubro → categoría → proveedor → [gastos]
+    distribution = {}
+    for exp in all_expenses:
+        # Intentar obtener el rubro desde la categoría si no está disponible directamente
+        rubro_name = "Sin Rubro"
+        if exp.get("rubro") and exp["rubro"].get("name"):
+            rubro_name = exp["rubro"]["name"]
+        elif exp.get("category") and exp["category"].get("rubro") and exp["category"]["rubro"].get("name"):
+            rubro_name = exp["category"]["rubro"]["name"]
+
+        cat_name = exp.get("category", {}).get("name", "Sin Categoría") if exp.get("category") else "Sin Categoría"
+        prov_name = exp.get("provider", {}).get("name", "Sin Proveedor") if exp.get("provider") else "Sin Proveedor"
+
+        if rubro_name not in distribution:
+            distribution[rubro_name] = {}
+        if cat_name not in distribution[rubro_name]:
+            distribution[rubro_name][cat_name] = {}
+        if prov_name not in distribution[rubro_name][cat_name]:
+            distribution[rubro_name][cat_name][prov_name] = []
+
+        distribution[rubro_name][cat_name][prov_name].append(exp)
+
+    # Imprimir reporte
+    print("\n" + "=" * 80)
+    print("REPORTE FINAL: DISTRIBUCIÓN DE GASTOS")
+    print("=" * 80)
+
+    total_general_usd = Decimal("0")
+
+    for rubro_name in sorted(distribution.keys()):
+        rubro_total = Decimal("0")
+        print(f"\n📊 RUBRO: {rubro_name}")
+        print("-" * 80)
+
+        for cat_name in sorted(distribution[rubro_name].keys()):
+            cat_total = Decimal("0")
+            print(f"\n   📁 Categoría: {cat_name}")
+
+            for prov_name in sorted(distribution[rubro_name][cat_name].keys()):
+                prov_total = Decimal("0")
+                expenses = distribution[rubro_name][cat_name][prov_name]
+
+                for exp in expenses:
+                    amount_usd = Decimal(str(exp.get("amount_usd", 0)))
+                    prov_total += amount_usd
+                    cat_total += amount_usd
+                    rubro_total += amount_usd
+                    total_general_usd += amount_usd
+
+                print(f"      🏢 {prov_name}: USD {prov_total:,.2f}")
+                for exp in expenses:
+                    amount_usd = Decimal(str(exp.get("amount_usd", 0)))
+                    print(f"         • {exp.get('description')} — USD {amount_usd:,.2f}")
+
+            print(f"   → Subtotal {cat_name}: USD {cat_total:,.2f}")
+
+        print(f"\n→ TOTAL {rubro_name}: USD {rubro_total:,.2f}")
+
+    print("\n" + "=" * 80)
+    print(f"💰 TOTAL GENERAL: USD {total_general_usd:,.2f}")
+    print("=" * 80 + "\n")
+
+    # Validaciones del reporte
+    assert_close(total_general_usd, 415.56, "Total general de gastos USD")

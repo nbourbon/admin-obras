@@ -45,7 +45,11 @@ async def list_expenses(
     """
     query = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
+        .options(
+            joinedload(Expense.provider),
+            joinedload(Expense.category).joinedload(Category.rubro),
+            joinedload(Expense.rubro)
+        )
     )
 
     if project:
@@ -364,7 +368,11 @@ async def get_expense(
     """
     expense = (
         db.query(Expense)
-        .options(joinedload(Expense.provider), joinedload(Expense.category), joinedload(Expense.rubro))
+        .options(
+            joinedload(Expense.provider),
+            joinedload(Expense.category).joinedload(Category.rubro),
+            joinedload(Expense.rubro)
+        )
         .filter(Expense.id == expense_id)
         .first()
     )
