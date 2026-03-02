@@ -56,3 +56,5 @@ Cada archivo en `scenarios/` describe:
 | Archivo | Descripción | Estado |
 |---------|-------------|--------|
 | `01_construccion_dual_current_account.md` | Proyecto construcción, moneda DUAL, solo aportes a caja | ✅ Implementado |
+| `02_construccion_ars_current_account.md` | Proyecto construcción, moneda ARS, solo aportes a caja | ✅ Implementado |
+| `03_construccion_usd_current_account.md` | Proyecto construcción, moneda USD, solo aportes a caja | ✅ Implementado |
