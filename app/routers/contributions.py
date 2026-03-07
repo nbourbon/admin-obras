@@ -2,7 +2,7 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -771,7 +771,7 @@ async def download_contribution_receipt(
     current_user: User = Depends(get_current_user),
 ):
     """Download receipt for a contribution payment"""
-    from app.services.file_storage import get_file_path
+    from app.services.file_storage import get_file_path, get_file_url
 
     payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
 
@@ -787,12 +787,57 @@ async def download_contribution_receipt(
             detail="No receipt found for this payment",
         )
 
+    # Check if it's a Cloudinary URL — proxy to avoid CORS issues
+    file_url = get_file_url(payment.receipt_file_path)
+    if file_url:
+        import httpx
+        filename = payment.receipt_file_path.split('/')[-1].split('?')[0]
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(file_url, follow_redirects=True, timeout=30)
+            content = resp.content
+            if content[:5] == b'%PDF-':
+                media_type = "application/pdf"
+            elif filename.lower().endswith('.pdf'):
+                media_type = "application/pdf"
+            elif filename.lower().endswith(('.jpg', '.jpeg')):
+                media_type = "image/jpeg"
+            elif filename.lower().endswith('.png'):
+                media_type = "image/png"
+            else:
+                media_type = resp.headers.get("content-type", "application/octet-stream")
+            if media_type == "application/pdf" and not filename.lower().endswith('.pdf'):
+                filename = f"{filename}.pdf"
+            return Response(
+                content=content,
+                media_type=media_type,
+                headers={"Content-Disposition": f"inline; filename=\"{filename}\""},
+            )
+        except Exception:
+            raise HTTPException(status_code=502, detail="Error fetching file from storage")
+
+    # Local file
     file_path = get_file_path(payment.receipt_file_path)
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Receipt file not found",
+        )
+
+    name = file_path.name.lower()
+    if name.endswith('.pdf'):
+        media_type = "application/pdf"
+    elif name.endswith(('.jpg', '.jpeg')):
+        media_type = "image/jpeg"
+    elif name.endswith('.png'):
+        media_type = "image/png"
+    else:
+        media_type = "application/octet-stream"
 
     return FileResponse(
         path=file_path,
-        media_type='application/octet-stream',
-        filename=payment.receipt_file_path.split('/')[-1]
+        filename=file_path.name,
+        media_type=media_type,
     )
 
 

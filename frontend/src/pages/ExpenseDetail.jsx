@@ -273,6 +273,7 @@ function ExpenseDetail() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewFileName, setPreviewFileName] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [markingPaid, setMarkingPaid] = useState(null) // { paymentId, userName, amountDue }
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -335,14 +336,16 @@ function ExpenseDetail() {
 
   const handlePreviewInvoice = async () => {
     try {
-      const fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}`
       const response = await expensesAPI.downloadInvoice(id)
-      let mimeType = 'application/octet-stream'
-      if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
-      else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) mimeType = 'image/jpeg'
-      else if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png'
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
+      // response.data is already a Blob with correct MIME type from backend
+      const url = window.URL.createObjectURL(response.data)
+      let fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}`
+      // Ensure extension matches actual content type for correct preview rendering
+      if (response.data.type === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        fileName = `${fileName}.pdf`
+      }
       setPreviewUrl(url)
+      setPreviewFileName(fileName)
       setShowPreview(true)
     } catch (err) {
       console.error('Error loading invoice:', err)
@@ -351,9 +354,19 @@ function ExpenseDetail() {
 
   const handleDownloadInvoice = async () => {
     try {
-      const fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}.pdf`
       const response = await expensesAPI.downloadInvoice(id)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      // response.data is already a Blob with correct MIME type from backend
+      // Extract filename from Content-Disposition header or fallback
+      let fileName = expense?.invoice_file_path?.split('/').pop() || `invoice-${id}`
+      // Ensure extension matches actual content type
+      const blobType = response.data.type
+      if (blobType === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        fileName = `${fileName}.pdf`
+      } else if (blobType?.startsWith('image/') && !fileName.toLowerCase().match(/\.(jpg|jpeg|png)$/)) {
+        const ext = blobType === 'image/png' ? '.png' : '.jpg'
+        fileName = `${fileName}${ext}`
+      }
+      const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
       link.setAttribute('download', fileName)
@@ -1039,7 +1052,7 @@ function ExpenseDetail() {
           }
         }}
         fileUrl={previewUrl}
-        fileName={expense?.invoice_file_path?.split('/').pop()}
+        fileName={previewFileName}
         onDownload={handleDownloadInvoice}
       />
     </div>

@@ -585,12 +585,26 @@ async def download_invoice(
     if file_url:
         import httpx
         filename = expense.invoice_file_path.split('/')[-1].split('?')[0]
-        media_type = "application/pdf" if filename.lower().endswith('.pdf') else "application/octet-stream"
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(file_url, follow_redirects=True, timeout=30)
+            # Detect MIME from content bytes (PDF starts with %PDF), then filename, then Cloudinary header
+            content = resp.content
+            if content[:5] == b'%PDF-':
+                media_type = "application/pdf"
+            elif filename.lower().endswith('.pdf'):
+                media_type = "application/pdf"
+            elif filename.lower().endswith(('.jpg', '.jpeg')):
+                media_type = "image/jpeg"
+            elif filename.lower().endswith('.png'):
+                media_type = "image/png"
+            else:
+                media_type = resp.headers.get("content-type", "application/octet-stream")
+            # Ensure filename has proper extension for download
+            if media_type == "application/pdf" and not filename.lower().endswith('.pdf'):
+                filename = f"{filename}.pdf"
             return Response(
-                content=resp.content,
+                content=content,
                 media_type=media_type,
                 headers={"Content-Disposition": f"inline; filename=\"{filename}\""},
             )
@@ -605,10 +619,21 @@ async def download_invoice(
             detail="Invoice file not found",
         )
 
+    # Detect MIME type from file extension
+    name = file_path.name.lower()
+    if name.endswith('.pdf'):
+        media_type = "application/pdf"
+    elif name.endswith(('.jpg', '.jpeg')):
+        media_type = "image/jpeg"
+    elif name.endswith('.png'):
+        media_type = "image/png"
+    else:
+        media_type = "application/octet-stream"
+
     return FileResponse(
         path=file_path,
         filename=file_path.name,
-        media_type="application/octet-stream",
+        media_type=media_type,
     )
 
 

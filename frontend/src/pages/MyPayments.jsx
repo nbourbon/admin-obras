@@ -386,13 +386,13 @@ function MyPayments() {
 
   const handlePreviewReceipt = async (payment) => {
     try {
-      const fileName = payment.receipt_file_path?.split('/').pop() || `comprobante-${payment.id}`
       const response = await paymentsAPI.downloadReceipt(payment.id)
-      let mimeType = 'application/octet-stream'
-      if (fileName.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf'
-      else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) mimeType = 'image/jpeg'
-      else if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png'
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
+      // response.data is already a Blob with correct MIME type from backend
+      let fileName = payment.receipt_file_path?.split('/').pop() || `comprobante-${payment.id}`
+      if (response.data.type === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        fileName = `${fileName}.pdf`
+      }
+      const url = window.URL.createObjectURL(response.data)
       setPreviewUrl(url)
       setPreviewFileName(fileName)
       setPreviewPaymentId(payment.id)
@@ -404,9 +404,13 @@ function MyPayments() {
 
   const handleDownloadReceipt = async (paymentId, filePath) => {
     try {
-      const fileName = (filePath || '').split('/').pop() || `comprobante-${paymentId}`
       const response = await paymentsAPI.downloadReceipt(paymentId)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      // response.data is already a Blob with correct MIME type from backend
+      let fileName = (filePath || '').split('/').pop() || `comprobante-${paymentId}`
+      if (response.data.type === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        fileName = `${fileName}.pdf`
+      }
+      const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
       link.setAttribute('download', fileName)

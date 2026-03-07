@@ -158,19 +158,14 @@ function PendingApprovals() {
   const handlePreviewReceipt = async (payment) => {
     try {
       const response = await paymentsAPI.downloadReceipt(payment.id)
-      // Determine MIME type from file extension
-      const fileName = payment.receipt_file_path?.split('/').pop() || ''
-      let mimeType = 'application/octet-stream'
-      if (fileName.toLowerCase().endsWith('.pdf')) {
-        mimeType = 'application/pdf'
-      } else if (fileName.toLowerCase().match(/\.(jpg|jpeg)$/)) {
-        mimeType = 'image/jpeg'
-      } else if (fileName.toLowerCase().endsWith('.png')) {
-        mimeType = 'image/png'
+      // response.data is already a Blob with correct MIME type from backend
+      let fileName = payment.receipt_file_path?.split('/').pop() || `comprobante-${payment.id}`
+      if (response.data.type === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        fileName = `${fileName}.pdf`
       }
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
+      const url = window.URL.createObjectURL(response.data)
       setPreviewUrl(url)
-      setPreviewFileName(fileName || `comprobante-${payment.id}`)
+      setPreviewFileName(fileName)
       setPreviewPaymentId(payment.id)
       setShowPreview(true)
     } catch (err) {
@@ -182,10 +177,15 @@ function PendingApprovals() {
   const handleDownloadReceipt = async (paymentId) => {
     try {
       const response = await paymentsAPI.downloadReceipt(paymentId)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      // response.data is already a Blob with correct MIME type from backend
+      let fileName = `comprobante-${paymentId}`
+      if (response.data.type === 'application/pdf') {
+        fileName = `${fileName}.pdf`
+      }
+      const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `comprobante-${paymentId}`)
+      link.setAttribute('download', fileName)
       document.body.appendChild(link)
       link.click()
       link.remove()

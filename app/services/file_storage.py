@@ -95,7 +95,8 @@ async def save_invoice(file: UploadFile, expense_id: int) -> str:
     validate_file(file)
 
     filename = generate_unique_filename(file.filename or "invoice")
-    public_id = f"expense_{expense_id}_{filename.rsplit('.', 1)[0]}"
+    # Keep extension in public_id so Cloudinary URL preserves it
+    public_id = f"expense_{expense_id}_{filename}"
 
     if cloudinary_configured:
         url = await upload_to_cloudinary(file, "invoices", public_id)
@@ -120,7 +121,8 @@ async def save_receipt(file: UploadFile, payment_id: int) -> str:
     validate_file(file)
 
     filename = generate_unique_filename(file.filename or "receipt")
-    public_id = f"payment_{payment_id}_{filename.rsplit('.', 1)[0]}"
+    # Keep extension in public_id so Cloudinary URL preserves it
+    public_id = f"payment_{payment_id}_{filename}"
 
     if cloudinary_configured:
         url = await upload_to_cloudinary(file, "receipts", public_id)
@@ -145,7 +147,8 @@ async def save_contribution_receipt(file: UploadFile, contribution_id: int) -> s
     validate_file(file)
 
     filename = generate_unique_filename(file.filename or "contribution_receipt")
-    public_id = f"contribution_{contribution_id}_{filename.rsplit('.', 1)[0]}"
+    # Keep extension in public_id so Cloudinary URL preserves it
+    public_id = f"contribution_{contribution_id}_{filename}"
 
     if cloudinary_configured:
         url = await upload_to_cloudinary(file, "receipts", public_id)

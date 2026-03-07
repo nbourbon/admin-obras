@@ -69,10 +69,18 @@ export default function ContributionDetail() {
   const handleDownloadReceipt = async (paymentId) => {
     try {
       const response = await contributionsAPI.downloadReceipt(paymentId)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      // response.data is already a Blob with correct MIME type from backend
+      let fileName = `recibo_aporte_${paymentId}`
+      if (response.data.type === 'application/pdf') {
+        fileName = `${fileName}.pdf`
+      } else if (response.data.type?.startsWith('image/')) {
+        const ext = response.data.type === 'image/png' ? '.png' : '.jpg'
+        fileName = `${fileName}${ext}`
+      }
+      const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `recibo_aporte_${paymentId}.pdf`)
+      link.setAttribute('download', fileName)
       document.body.appendChild(link)
       link.click()
       link.remove()
