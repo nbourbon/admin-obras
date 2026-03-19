@@ -23,6 +23,10 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
     project_type: 'generico',
     square_meters: '',
     contribution_mode: 'both',
+    // Land purchase fields
+    land_purchase_amount: '',
+    land_purchase_currency: 'USD',
+    land_purchase_exchange_rate: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,6 +36,10 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
       // Extract square_meters and contribution_mode from type_parameters JSON
       const squareMeters = project.type_parameters?.square_meters || ''
       const contributionMode = project.type_parameters?.contribution_mode || 'both'
+      // Land purchase fields
+      const landPurchaseAmount = project.type_parameters?.land_purchase_amount || ''
+      const landPurchaseCurrency = project.type_parameters?.land_purchase_currency || 'USD'
+      const landPurchaseExchangeRate = project.type_parameters?.land_purchase_exchange_rate || ''
 
       setFormData({
         name: project.name,
@@ -40,9 +48,23 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
         project_type: project.project_type || 'generico',
         square_meters: squareMeters,
         contribution_mode: contributionMode,
+        // Land purchase fields
+        land_purchase_amount: landPurchaseAmount,
+        land_purchase_currency: landPurchaseCurrency,
+        land_purchase_exchange_rate: landPurchaseExchangeRate,
       })
     } else {
-      setFormData({ name: '', description: '', currency_mode: 'DUAL', project_type: 'generico', square_meters: '', contribution_mode: 'both' })
+      setFormData({ 
+        name: '', 
+        description: '', 
+        currency_mode: 'DUAL', 
+        project_type: 'generico', 
+        square_meters: '', 
+        contribution_mode: 'both',
+        land_purchase_amount: '',
+        land_purchase_currency: 'USD',
+        land_purchase_exchange_rate: '',
+      })
     }
   }, [project])
 
@@ -60,6 +82,14 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
         }
         if (formData.square_meters) {
           typeParameters.square_meters = parseFloat(formData.square_meters)
+        }
+        // Land purchase fields
+        if (formData.land_purchase_amount) {
+          typeParameters.land_purchase_amount = parseFloat(formData.land_purchase_amount)
+          typeParameters.land_purchase_currency = formData.land_purchase_currency
+          if (formData.land_purchase_exchange_rate) {
+            typeParameters.land_purchase_exchange_rate = parseFloat(formData.land_purchase_exchange_rate)
+          }
         }
       }
 
@@ -205,6 +235,54 @@ function ProjectModal({ isOpen, onClose, onSuccess, project = null }) {
                   {formData.contribution_mode === 'both' && 'Los usuarios pueden pagar gastos directamente y hacer aportes a cuenta corriente'}
                   {formData.contribution_mode === 'current_account' && 'Los gastos se pagan desde el saldo de cuenta corriente. Los usuarios solo hacen aportes.'}
                   {formData.contribution_mode === 'direct_payment' && 'Solo pagos directos por gasto. El sistema de aportes se desactiva.'}
+                </p>
+              </div>
+
+              {/* Land Purchase Cost */}
+              <div className="border-t pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gasto Total Compra Terreno
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.land_purchase_amount}
+                    onChange={(e) => setFormData({ ...formData, land_purchase_amount: e.target.value })}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ej: 50000"
+                  />
+                  <select
+                    value={formData.land_purchase_currency}
+                    onChange={(e) => setFormData({ ...formData, land_purchase_currency: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="ARS">ARS</option>
+                  </select>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Monto pagado por la compra del terreno
+                </p>
+              </div>
+
+              {/* Exchange Rate (optional) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Cambio (opcional)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.land_purchase_exchange_rate}
+                  onChange={(e) => setFormData({ ...formData, land_purchase_exchange_rate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: 1200 (solo si la compra fue en el pasado)"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Tipo de cambio al momento de la compra. Si no se especifica, se usará el TC actual.
                 </p>
               </div>
             </>

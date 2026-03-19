@@ -273,14 +273,29 @@ function Dashboard() {
           </span>
         </div>
         {summary?.project_type === 'construccion' && summary?.square_meters > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-blue-50">
-            <span className="text-gray-600">Total x Metro² ({summary?.square_meters} m²)</span>
-            <span className="text-blue-700 font-bold">
-              {currencyMode === 'ARS'
-                ? formatCurrency(summary?.cost_per_square_meter_ars || 0, 'ARS')
-                : formatCurrency(summary?.cost_per_square_meter_usd || 0)}
-            </span>
-          </div>
+          <>
+            {/* Total cost per square meter (renamed from Total x Metro²) */}
+            <div className="flex items-center justify-between px-4 py-3 bg-blue-50">
+              <span className="text-gray-600">Gasto Total x Metro² ({summary?.square_meters} m²)</span>
+              <span className="text-blue-700 font-bold">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(summary?.cost_per_square_meter_ars || 0, 'ARS')
+                  : formatCurrency(summary?.cost_per_square_meter_usd || 0)}
+              </span>
+            </div>
+            
+            {/* Construction cost per square meter (excluding land) */}
+            {(summary?.construction_cost_per_sqm_usd || summary?.construction_cost_per_sqm_ars) && (
+              <div className="flex items-center justify-between px-4 py-3 bg-green-50">
+                <span className="text-gray-600">Gasto de Obra x Metro²</span>
+                <span className="text-green-700 font-bold">
+                  {currencyMode === 'ARS'
+                    ? formatCurrency(summary?.construction_cost_per_sqm_ars || 0, 'ARS')
+                    : formatCurrency(summary?.construction_cost_per_sqm_usd || 0)}
+                </span>
+              </div>
+            )}
+          </>
         )}
         {/* For current_account: show Caja General instead of Pendiente */}
         {summary?.contribution_mode === 'current_account' ? (
