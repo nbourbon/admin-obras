@@ -110,7 +110,7 @@ export const expensesAPI = {
   get: (id) => client.get(`/expenses/${id}`),
   create: (data) => client.post('/expenses', data),
   update: (id, data) => client.put(`/expenses/${id}`, data),
-  delete: (id) => client.delete(`/expenses/${id}`),
+  delete: (id, confirmed = false) => client.delete(`/expenses/${id}?confirmed=${confirmed}`),
   restore: (id) => client.put(`/expenses/${id}/restore`),
   uploadInvoice: (id, file) => {
     const formData = new FormData()
