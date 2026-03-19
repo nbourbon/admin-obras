@@ -286,6 +286,7 @@ function ExpenseDetail() {
   const [allPaidCurrency, setAllPaidCurrency] = useState('USD')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteConfirmData, setDeleteConfirmData] = useState(null)
   const [contributionMode, setContributionMode] = useState('both')
   const [showPayModal, setShowPayModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -422,10 +423,18 @@ function ExpenseDetail() {
     }
   }
 
-  const handleDeleteExpense = async () => {
+  const handleDeleteExpense = async (confirmed = false) => {
     setDeleting(true)
     try {
-      await expensesAPI.delete(id)
+      const response = await expensesAPI.delete(id, confirmed)
+      
+      // If requires confirmation, show the confirmation modal
+      if (response.data.requires_confirmation) {
+        setDeleteConfirmData(response.data)
+        setDeleting(false)
+        return
+      }
+      
       navigate('/expenses')
     } catch (err) {
       console.error('Error deleting expense:', err)
@@ -433,7 +442,10 @@ function ExpenseDetail() {
       alert(errorMsg)
     } finally {
       setDeleting(false)
-      setShowDeleteConfirm(false)
+      if (confirmed) {
+        setShowDeleteConfirm(false)
+        setDeleteConfirmData(null)
+      }
     }
   }
 
@@ -998,24 +1010,73 @@ function ExpenseDetail() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
+      {/* Delete Confirmation Modal - Initial */}
+      {showDeleteConfirm && !deleteConfirmData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Confirmar Eliminacion</h2>
             <p className="text-gray-600 mb-6">
-              ¿Estas seguro que queres eliminar este gasto? Los pagos sin comprobante se eliminaran automaticamente. Solo bloqueara si algun participante subio un comprobante propio.
+              ¿Estas seguro que queres eliminar este gasto? Se verificara si tiene pagos asociados.
             </p>
             <div className="flex gap-3">
               <button
-                onClick={handleDeleteExpense}
+                onClick={() => handleDeleteExpense(false)}
                 disabled={deleting}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? 'Eliminando...' : 'Eliminar'}
+                {deleting ? 'Verificando...' : 'Continuar'}
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal - Paid Payments Warning */}
+      {deleteConfirmData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="text-orange-500" size={28} />
+              <h2 className="text-xl font-bold text-gray-900">Gasto con Pagos Registrados</h2>
+            </div>
+            <p className="text-gray-700 mb-4">
+              {deleteConfirmData.message}
+            </p>
+            <div className="bg-orange-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-600 mb-2">Resumen de pagos afectados:</p>
+              <ul className="text-sm space-y-1">
+                {deleteConfirmData.details.map((payment, idx) => (
+                  <li key={idx} className="flex justify-between">
+                    <span>{payment.user_name}:</span>
+                    <span className="font-medium">
+                      {payment.amount_usd > 0 ? `$${payment.amount_usd.toLocaleString()} USD` : ''}
+                      {payment.amount_usd > 0 && payment.amount_ars > 0 ? ' + ' : ''}
+                      {payment.amount_ars > 0 ? `$${payment.amount_ars.toLocaleString()} ARS` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDeleteExpense(true)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Si, Eliminar Gasto y Pagos'}
+              </button>
+              <button
+                onClick={() => {
+                  setDeleteConfirmData(null)
+                  setShowDeleteConfirm(false)
+                }}
                 disabled={deleting}
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
               >

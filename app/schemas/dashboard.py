@@ -26,6 +26,11 @@ class DashboardSummary(BaseModel):
     cost_per_square_meter_usd: Optional[Decimal] = None
     cost_per_square_meter_ars: Optional[Decimal] = None
     contribution_mode: Optional[str] = None  # both, current_account, direct_payment
+    # Land purchase fields
+    land_purchase_cost_usd: Optional[Decimal] = None  # Gasto compra terreno en USD
+    land_purchase_cost_ars: Optional[Decimal] = None  # Gasto compra terreno en ARS
+    construction_cost_per_sqm_usd: Optional[Decimal] = None  # Gasto de obra / m² USD
+    construction_cost_per_sqm_ars: Optional[Decimal] = None  # Gasto de obra / m² ARS
 
 
 class MonthlyExpense(BaseModel):

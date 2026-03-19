@@ -273,24 +273,47 @@ function Dashboard() {
           </span>
         </div>
         {summary?.project_type === 'construccion' && summary?.square_meters > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-blue-50">
-            <span className="text-gray-600">Total x Metro² ({summary?.square_meters} m²)</span>
-            <span className="text-blue-700 font-bold">
-              {currencyMode === 'ARS'
-                ? formatCurrency(summary?.cost_per_square_meter_ars || 0, 'ARS')
-                : formatCurrency(summary?.cost_per_square_meter_usd || 0)}
-            </span>
-          </div>
+          <>
+            {/* Total cost per square meter (renamed from Total x Metro²) */}
+            <div className="flex items-center justify-between px-4 py-3 bg-blue-50">
+              <span className="text-gray-600">Gasto Total x Metro² ({summary?.square_meters} m²)</span>
+              <span className="text-blue-700 font-bold">
+                {currencyMode === 'ARS'
+                  ? formatCurrency(summary?.cost_per_square_meter_ars || 0, 'ARS')
+                  : formatCurrency(summary?.cost_per_square_meter_usd || 0)}
+              </span>
+            </div>
+            
+            {/* Construction cost per square meter (excluding land) */}
+            {(summary?.construction_cost_per_sqm_usd || summary?.construction_cost_per_sqm_ars) && (
+              <div className="flex items-center justify-between px-4 py-3 bg-green-50">
+                <span className="text-gray-600">Gasto de Obra x Metro² ({summary?.square_meters} m²)</span>
+                <span className="text-green-700 font-bold">
+                  {currencyMode === 'ARS'
+                    ? formatCurrency(summary?.construction_cost_per_sqm_ars || 0, 'ARS')
+                    : formatCurrency(summary?.construction_cost_per_sqm_usd || 0)}
+                </span>
+              </div>
+            )}
+          </>
         )}
         {/* For current_account: show Caja General instead of Pendiente */}
         {summary?.contribution_mode === 'current_account' ? (
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-gray-600">Caja General</span>
-            <span className={`font-bold ${(summary?.total_balance_ars || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-              {currencyMode === 'ARS'
-                ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
-                : formatCurrency(summary?.total_balance_usd || 0)}
-            </span>
+            <div className="text-right">
+              <span className={`block font-bold ${(summary?.total_balance_ars || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {currencyMode === 'ARS'
+                  ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
+                  : formatCurrency(summary?.total_balance_usd || 0)}
+              </span>
+              {/* Show secondary currency for DUAL mode */}
+              {currencyMode === 'DUAL' && (
+                <span className="text-xs text-gray-500">
+                  {formatCurrency(summary?.total_balance_ars || 0, 'ARS')}
+                </span>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -306,11 +329,19 @@ function Dashboard() {
             {summary?.contribution_mode !== 'direct_payment' && (
               <div className="flex items-center justify-between px-4 py-3">
                 <span className="text-gray-600">Saldo Cta Corriente</span>
-                <span className="text-green-700 font-bold">
-                  {currencyMode === 'ARS'
-                    ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
-                    : formatCurrency(summary?.total_balance_usd || 0)}
-                </span>
+                <div className="text-right">
+                  <span className="block text-green-700 font-bold">
+                    {currencyMode === 'ARS'
+                      ? formatCurrency(summary?.total_balance_ars || 0, 'ARS')
+                      : formatCurrency(summary?.total_balance_usd || 0)}
+                  </span>
+                  {/* Show secondary currency for DUAL mode */}
+                  {currencyMode === 'DUAL' && (
+                    <span className="text-xs text-gray-500">
+                      {formatCurrency(summary?.total_balance_ars || 0, 'ARS')}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </>
@@ -338,13 +369,21 @@ function Dashboard() {
                 {/* Current account: saldo is the source of truth */}
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-gray-600">Mi Saldo</span>
-                  <span className={`font-bold ${
-                    (myStatus.balance_aportes_ars || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {currencyMode === 'ARS'
-                      ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
-                      : formatCurrency(myStatus.balance_aportes_usd || 0)}
-                  </span>
+                  <div className="text-right">
+                    <span className={`block font-bold ${
+                      (myStatus.balance_aportes_ars || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {currencyMode === 'ARS'
+                        ? formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')
+                        : formatCurrency(myStatus.balance_aportes_usd || 0)}
+                    </span>
+                    {/* Show secondary currency for DUAL mode */}
+                    {currencyMode === 'DUAL' && (
+                      <span className="text-xs text-gray-500">
+                        {formatCurrency(myStatus.balance_aportes_ars || 0, 'ARS')}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-gray-600">Total Gastado (mi %)</span>

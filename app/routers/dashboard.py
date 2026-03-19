@@ -139,6 +139,10 @@ async def get_dashboard_summary(
     # Extract square_meters and contribution_mode from type_parameters JSON
     square_meters = None
     contribution_mode = None
+    # Land purchase fields
+    land_purchase_amount = None
+    land_purchase_currency = None
+    land_purchase_exchange_rate = None
     if project and project_type and project_type == "construccion":
         type_params = getattr(project, 'type_parameters', None)
         if type_params and isinstance(type_params, dict):
@@ -146,6 +150,14 @@ async def get_dashboard_summary(
             if square_meters:
                 square_meters = Decimal(str(square_meters))
             contribution_mode = type_params.get('contribution_mode', 'both')  # Default to 'both'
+            # Extract land purchase cost fields
+            land_purchase_amount = type_params.get('land_purchase_amount')
+            land_purchase_currency = type_params.get('land_purchase_currency')
+            land_purchase_exchange_rate = type_params.get('land_purchase_exchange_rate')
+            if land_purchase_amount:
+                land_purchase_amount = Decimal(str(land_purchase_amount))
+            if land_purchase_exchange_rate:
+                land_purchase_exchange_rate = Decimal(str(land_purchase_exchange_rate))
 
     # Get current exchange rate (skip for single-currency projects)
     if currency_mode == "DUAL":
@@ -199,12 +211,57 @@ async def get_dashboard_summary(
             total_balance_usd = sum(Decimal(str(m.balance_usd)) for m in members_balances)
             total_balance_ars = sum(Decimal(str(m.balance_ars)) for m in members_balances)
 
+    # Calculate land purchase cost in both currencies based on project currency mode
+    land_purchase_usd = Decimal("0")
+    land_purchase_ars = Decimal("0")
+    if land_purchase_amount and land_purchase_currency:
+        if currency_mode == "DUAL":
+            # In DUAL mode, convert according to input currency using historical or current rate
+            if land_purchase_currency == "USD":
+                land_purchase_usd = land_purchase_amount
+                # Convert to ARS using saved rate or current rate
+                rate = land_purchase_exchange_rate or current_rate
+                if rate > 0:
+                    land_purchase_ars = (land_purchase_amount * rate).quantize(Decimal("0.01"))
+            else:  # ARS
+                land_purchase_ars = land_purchase_amount
+                # Convert to USD using saved rate or current rate
+                rate = land_purchase_exchange_rate or current_rate
+                if rate > 0:
+                    land_purchase_usd = (land_purchase_amount / rate).quantize(Decimal("0.01"))
+        elif currency_mode == "USD":
+            # USD-only project: everything in USD
+            if land_purchase_currency == "USD":
+                land_purchase_usd = land_purchase_amount
+            else:  # ARS, convert to USD
+                rate = land_purchase_exchange_rate or current_rate
+                if rate > 0:
+                    land_purchase_usd = (land_purchase_amount / rate).quantize(Decimal("0.01"))
+        elif currency_mode == "ARS":
+            # ARS-only project: everything in ARS
+            if land_purchase_currency == "ARS":
+                land_purchase_ars = land_purchase_amount
+            else:  # USD, convert to ARS
+                rate = land_purchase_exchange_rate or current_rate
+                if rate > 0:
+                    land_purchase_ars = (land_purchase_amount * rate).quantize(Decimal("0.01"))
+
     # Calculate cost per square meter for construction projects
     cost_per_square_meter_usd = None
     cost_per_square_meter_ars = None
+    construction_cost_per_sqm_usd = None
+    construction_cost_per_sqm_ars = None
     if project_type == "construccion" and square_meters and square_meters > 0:
+        # Total cost per square meter (all expenses including land)
         cost_per_square_meter_usd = (total_expenses_usd / square_meters).quantize(Decimal("0.01"))
         cost_per_square_meter_ars = (total_expenses_ars / square_meters).quantize(Decimal("0.01"))
+        
+        # Construction cost per square meter (excluding land purchase)
+        construction_total_usd = total_expenses_usd - land_purchase_usd
+        construction_total_ars = total_expenses_ars - land_purchase_ars
+        
+        construction_cost_per_sqm_usd = (construction_total_usd / square_meters).quantize(Decimal("0.01"))
+        construction_cost_per_sqm_ars = (construction_total_ars / square_meters).quantize(Decimal("0.01"))
 
     return DashboardSummary(
         total_expenses_usd=total_expenses_usd,
@@ -226,6 +283,11 @@ async def get_dashboard_summary(
         cost_per_square_meter_usd=cost_per_square_meter_usd,
         cost_per_square_meter_ars=cost_per_square_meter_ars,
         contribution_mode=contribution_mode,
+        # Land purchase fields
+        land_purchase_cost_usd=land_purchase_usd if land_purchase_usd > 0 else None,
+        land_purchase_cost_ars=land_purchase_ars if land_purchase_ars > 0 else None,
+        construction_cost_per_sqm_usd=construction_cost_per_sqm_usd,
+        construction_cost_per_sqm_ars=construction_cost_per_sqm_ars,
     )
 
 

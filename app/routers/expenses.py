@@ -85,9 +85,10 @@ async def list_expenses(
     # Enrich expenses with payment tracking info (similar to contributions)
     enriched_expenses = []
     for expense in expenses:
-        # Get all participant payments for this expense
+        # Get all participant payments for this expense (exclude deleted)
         payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.expense_id == expense.id
+            ParticipantPayment.expense_id == expense.id,
+            ParticipantPayment.is_deleted == False,
         ).all()
 
         # Find my payment
@@ -640,13 +641,14 @@ async def download_invoice(
 @router.delete("/{expense_id}")
 async def delete_expense(
     expense_id: int,
+    confirmed: bool = Query(False, description="Confirm deletion even with paid payments"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Soft delete an expense (project admin only).
-    Can only delete if there are no active payments associated.
-    Payments pending approval will be automatically cancelled.
+    Requires confirmation if there are paid payments associated.
+    Payments with uploaded receipts will block deletion.
     """
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
     if not expense:
@@ -676,12 +678,21 @@ async def delete_expense(
     # Everything else (pending, admin-registered, rejected without receipt) is auto-deleted.
     blocking_payments = []
     auto_delete_payments = []
+    paid_payments_info = []
 
     for payment in active_payments:
         if payment.receipt_file_path:
             blocking_payments.append(payment.user.full_name)
         else:
             auto_delete_payments.append(payment)
+            # Track paid payments for confirmation
+            if payment.is_paid:
+                user = db.query(User).filter(User.id == payment.user_id).first()
+                paid_payments_info.append({
+                    "user_name": user.full_name if user else "Unknown",
+                    "amount_usd": float(payment.amount_paid_usd) if payment.amount_paid_usd else 0,
+                    "amount_ars": float(payment.amount_paid_ars) if payment.amount_paid_ars else 0,
+                })
 
     if blocking_payments:
         raise HTTPException(
@@ -689,16 +700,36 @@ async def delete_expense(
             detail=f"No se puede eliminar el gasto. Los siguientes participantes deben eliminar su comprobante de pago primero: {', '.join(blocking_payments)}",
         )
 
+    # If there are paid payments and no confirmation, return warning
+    if paid_payments_info and not confirmed:
+        total_usd = sum(p["amount_usd"] for p in paid_payments_info)
+        total_ars = sum(p["amount_ars"] for p in paid_payments_info)
+        return {
+            "requires_confirmation": True,
+            "warning": "Este gasto tiene pagos registrados que serán eliminados",
+            "message": f"Al eliminar este gasto, se eliminarán {len(paid_payments_info)} pago(s) registrado(s). Los montos pagados no se revertirán a la cuenta corriente (ya fueron procesados como gastos reales).",
+            "paid_payments_count": len(paid_payments_info),
+            "total_paid_usd": total_usd,
+            "total_paid_ars": total_ars,
+            "details": paid_payments_info,
+        }
+
     # Get project and currency mode for balance restoration
     from app.models.project_member import ProjectMember
     project = db.query(Project).filter(Project.id == expense.project_id).first()
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
     # Auto-delete all payments that don't have a participant-uploaded receipt
-    # AND restore balance for auto-paid payments
+    # Note: In direct_payment mode, we do NOT restore balances because payments were made
+    # directly by users (not from their account balance)
     for payment in auto_delete_payments:
-        # If payment was auto-paid from balance, restore the balance
-        if payment.is_paid and not payment.receipt_file_path:
+        # Only restore balance if payment was made FROM balance (current_account mode)
+        # In direct_payment mode, users paid directly, so no balance to restore
+        type_params = getattr(project, 'type_parameters', None) or {}
+        contribution_mode = type_params.get('contribution_mode', 'both')
+        
+        # Only restore balance in current_account mode where payments come from balance
+        if contribution_mode == 'current_account' and payment.is_paid and not payment.receipt_file_path:
             member = db.query(ProjectMember).filter(
                 ProjectMember.project_id == expense.project_id,
                 ProjectMember.user_id == payment.user_id,
@@ -729,7 +760,7 @@ async def delete_expense(
 
     db.commit()
 
-    return {"message": "Gasto eliminado correctamente. Los balances de cuenta corriente han sido restaurados."}
+    return {"message": "Gasto eliminado correctamente"}
 
 
 @router.post("/{expense_id}/mark-all-paid")
