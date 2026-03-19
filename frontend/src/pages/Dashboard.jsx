@@ -287,7 +287,7 @@ function Dashboard() {
             {/* Construction cost per square meter (excluding land) */}
             {(summary?.construction_cost_per_sqm_usd || summary?.construction_cost_per_sqm_ars) && (
               <div className="flex items-center justify-between px-4 py-3 bg-green-50">
-                <span className="text-gray-600">Gasto de Obra x Metro²</span>
+                <span className="text-gray-600">Gasto de Obra x Metro² ({summary?.square_meters} m²)</span>
                 <span className="text-green-700 font-bold">
                   {currencyMode === 'ARS'
                     ? formatCurrency(summary?.construction_cost_per_sqm_ars || 0, 'ARS')
