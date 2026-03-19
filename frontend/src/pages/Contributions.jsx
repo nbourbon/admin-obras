@@ -193,7 +193,7 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
       // Upload receipt if provided
       if (receiptFile) {
         try {
-          await contributionsAPI.uploadReceipt(paymentId, receiptFile)
+          await contributionsAPI.uploadReceipt(contribution.my_payment_id, receiptFile)
         } catch (uploadErr) {
           console.error('Error uploading receipt:', uploadErr)
         }
