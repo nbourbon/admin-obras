@@ -84,14 +84,21 @@ async def list_expenses(
 
     # Enrich expenses with payment tracking info (similar to contributions)
     enriched_expenses = []
+    import logging
+    logger = logging.getLogger(__name__)
     for expense in expenses:
-        # Get all participant payments for this expense
+        # Get all participant payments for this expense (exclude deleted)
         payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.expense_id == expense.id
+            ParticipantPayment.expense_id == expense.id,
+            ParticipantPayment.is_deleted == False,
         ).all()
 
         # Find my payment
         my_payment = next((p for p in payments if p.user_id == current_user.id), None)
+        
+        # Debug logging
+        if expense.id == expenses[-1].id if expenses else None:
+            logger.info(f"DEBUG: Expense {expense.id}, current_user={current_user.id}, payments={[{'id': p.id, 'user_id': p.user_id, 'is_paid': p.is_paid} for p in payments]}, my_payment={my_payment.id if my_payment else None}")
 
         # Calculate stats
         paid_count = sum(1 for p in payments if p.is_paid)
