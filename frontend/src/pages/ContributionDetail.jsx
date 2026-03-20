@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle } from 'lucide-react'
+import { useProject } from '../context/ProjectContext'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3 } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -20,6 +21,12 @@ function formatDate(dateString) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatDateShort(dateString) {
+  if (!dateString) return '-'
+  const d = new Date(dateString)
+  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`
 }
 
 function StatusBadge({ status }) {
@@ -44,9 +51,11 @@ function StatusBadge({ status }) {
 export default function ContributionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isProjectAdmin } = useProject()
   const [contribution, setContribution] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [markingPaid, setMarkingPaid] = useState(null)
 
   useEffect(() => {
     loadContribution()
@@ -91,6 +100,23 @@ export default function ContributionDetail() {
     }
   }
 
+  const handleMarkPaid = async (paymentId) => {
+    if (!confirm('¿Marcar este aporte como pagado?')) return
+    
+    setMarkingPaid(paymentId)
+    try {
+      await contributionsAPI.markPaid(paymentId, {
+        payment_date: new Date().toISOString(),
+      })
+      await loadContribution()
+    } catch (err) {
+      console.error('Error marking payment as paid:', err)
+      alert(err.response?.data?.detail || 'Error al marcar como pagado')
+    } finally {
+      setMarkingPaid(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -101,7 +127,7 @@ export default function ContributionDetail() {
 
   if (error || !contribution) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           {error || 'Aporte no encontrado'}
         </div>
@@ -121,7 +147,7 @@ export default function ContributionDetail() {
   const percentagePaid = totalParticipants > 0 ? Math.round((totalPaid / totalParticipants) * 100) : 0
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Back button */}
       <Link
         to="/contributions"
@@ -211,99 +237,111 @@ export default function ContributionDetail() {
         </div>
 
         {/* Desktop table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="hidden md:block overflow-hidden">
+          <table className="w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-2 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">
                   Participante
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Monto a Pagar
+                <th className="px-2 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">
+                  Monto
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Absorbido
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                  Pagado el
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">
+                  Pagado
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                  Comprobante
+                <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">
+                  Comp.
                 </th>
+                {isProjectAdmin && (
+                  <th className="px-2 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">
+                    Acción
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {contribution.payments && contribution.payments.length > 0 ? (
                 contribution.payments.map((payment) => (
                   <tr key={payment.payment_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                          <User size={20} className="text-gray-600" />
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0 w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
+                          <User size={14} className="text-gray-600" />
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-gray-900 truncate max-w-[120px]">
                             {payment.user_name}
                           </div>
-                          <div className="text-xs text-gray-500">{payment.user_email}</div>
+                          <div className="text-[10px] text-gray-500 truncate max-w-[120px]">{payment.user_email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
-                      {formatCurrency(payment.amount_due, contribution.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      {payment.amount_offset > 0 ? (
-                        <div>
+                    <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
+                      <div className="font-semibold text-gray-900">
+                        {formatCurrency(payment.amount_due, contribution.currency)}
+                      </div>
+                      {payment.amount_offset > 0 && (
+                        <div className="text-[10px]">
                           <span className="text-green-600 font-medium">
                             -{formatCurrency(payment.amount_offset, contribution.currency)}
                           </span>
-                          <div className="text-xs text-gray-500">
-                            Resta: {formatCurrency(payment.amount_remaining ?? (payment.amount_due - payment.amount_offset), contribution.currency)}
-                          </div>
                         </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
                       {payment.is_paid ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                          <Check size={14} />
-                          Pagado
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
+                          <Check size={10} />
+                          OK
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                          <X size={14} />
-                          Pendiente
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-[10px] font-medium">
+                          <X size={10} />
+                          Pend
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
-                      {payment.paid_at ? formatDate(payment.paid_at) : '-'}
+                    <td className="px-2 py-2 whitespace-nowrap text-center text-[10px] text-gray-500">
+                      {payment.paid_at ? formatDateShort(payment.paid_at) : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
                       {payment.receipt_file_path ? (
                         <button
                           onClick={() => handleDownloadReceipt(payment.payment_id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                          className="inline-flex items-center p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
                           title="Descargar comprobante"
                         >
-                          <Download size={16} />
-                          <span className="hidden lg:inline">Ver</span>
+                          <Download size={14} />
                         </button>
                       ) : (
-                        <span className="text-gray-400 text-xs">Sin comprobante</span>
+                        <span className="text-gray-400 text-[10px]">-</span>
                       )}
                     </td>
+                    {isProjectAdmin && (
+                      <td className="px-2 py-2 whitespace-nowrap text-center">
+                        {!payment.is_paid ? (
+                          <button
+                            onClick={() => handleMarkPaid(payment.payment_id)}
+                            disabled={markingPaid === payment.payment_id}
+                            className="inline-flex items-center p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                            title="Marcar como pagado"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-[10px]">-</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={isProjectAdmin ? "6" : "5"} className="px-6 py-12 text-center text-gray-500">
                     No hay pagos registrados
                   </td>
                 </tr>
@@ -378,6 +416,18 @@ export default function ContributionDetail() {
                       >
                         <FileText size={16} />
                         Ver Comprobante
+                      </button>
+                    </div>
+                  )}
+                  {isProjectAdmin && !payment.is_paid && (
+                    <div className="pt-2 border-t border-gray-100 mt-2">
+                      <button
+                        onClick={() => handleMarkPaid(payment.payment_id)}
+                        disabled={markingPaid === payment.payment_id}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                      >
+                        <Edit3 size={16} />
+                        {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar como Pagado'}
                       </button>
                     </div>
                   )}

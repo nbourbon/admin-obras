@@ -54,6 +54,13 @@ class AdminMarkAllPaid(BaseModel):
     currency: Optional[str] = None  # "USD" or "ARS" (for DUAL mode only)
 
 
+class AdminMarkContributionPaid(BaseModel):
+    """Schema for admin to mark a contribution payment as paid directly"""
+    amount_paid: Optional[Decimal] = None  # If None, uses amount_due
+    payment_date: Optional[datetime] = None
+    exchange_rate_override: Optional[Decimal] = None
+
+
 class ExpenseInfo(BaseModel):
     id: int
     description: str

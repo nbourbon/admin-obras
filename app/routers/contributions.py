@@ -18,7 +18,7 @@ from app.schemas.contribution import (
     UnabsorbedContributionResponse,
 )
 from app.models.contribution_absorption import ContributionAbsorption
-from app.schemas.payment import PaymentMarkPaid, PaymentApproval
+from app.schemas.payment import PaymentMarkPaid, PaymentApproval, AdminMarkContributionPaid
 from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
 from app.models.user import User
 from app.models.contribution import Contribution, Currency, ContributionStatus
@@ -930,5 +930,131 @@ async def approve_contribution_payment(
     db.refresh(payment)
 
     return {"message": "Payment processed successfully", "is_paid": payment.is_paid}
+
+
+@router.put("/payments/{payment_id}/mark-paid", status_code=status.HTTP_200_OK)
+async def admin_mark_contribution_paid(
+    payment_id: int,
+    data: AdminMarkContributionPaid,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Mark a contribution payment as paid directly (project admin only).
+    This allows admin to register a payment without the user submitting it first.
+    """
+    from datetime import datetime
+    from app.utils.dependencies import is_project_admin
+    from app.services.exchange_rate import fetch_blue_dollar_rate_sync
+
+    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution payment not found",
+        )
+
+    # Get contribution and verify user is admin of the project
+    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    if not contribution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution not found",
+        )
+
+    if not is_project_admin(db, current_user.id, contribution.project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be an admin of this project",
+        )
+
+    # Check if payment is already paid
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already marked as paid",
+        )
+
+    project = db.query(Project).filter(Project.id == contribution.project_id).first()
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+    # Determine amount to use
+    amount_paid = data.amount_paid if data.amount_paid else payment.amount_due
+
+    # Update payment info
+    payment.amount_paid = amount_paid
+    payment.payment_date = data.payment_date or datetime.utcnow()
+    payment.submitted_at = datetime.utcnow()
+    payment.is_paid = True
+    payment.paid_at = datetime.utcnow()
+    payment.approved_by = current_user.id
+    payment.approved_at = datetime.utcnow()
+    payment.is_pending_approval = False
+
+    # Calculate dual currency equivalents
+    if currency_mode == "DUAL":
+        # In DUAL mode, contributions are ALWAYS in ARS
+        payment.currency_paid = "ARS"
+        payment.amount_paid_ars = amount_paid
+
+        # Get exchange rate to convert to USD
+        if data.exchange_rate_override:
+            exchange_rate = Decimal(str(data.exchange_rate_override))
+            payment.exchange_rate_source = "manual"
+        else:
+            try:
+                exchange_rate = fetch_blue_dollar_rate_sync()
+                payment.exchange_rate_source = "auto"
+            except Exception:
+                exchange_rate = None
+                payment.exchange_rate_source = None
+
+        payment.exchange_rate_at_payment = exchange_rate
+        if exchange_rate and exchange_rate > 0:
+            payment.amount_paid_usd = (amount_paid / exchange_rate).quantize(Decimal("0.01"))
+        else:
+            payment.amount_paid_usd = None
+
+    elif currency_mode == "ARS":
+        payment.currency_paid = "ARS"
+        payment.amount_paid_ars = amount_paid
+        payment.amount_paid_usd = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+
+    else:  # USD mode
+        payment.currency_paid = "USD"
+        payment.amount_paid_usd = amount_paid
+        payment.amount_paid_ars = None
+        payment.exchange_rate_at_payment = None
+        payment.exchange_rate_source = None
+
+    # Credit the balance to the member's account
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == contribution.project_id,
+        ProjectMember.user_id == payment.user_id,
+    ).first()
+
+    if member:
+        # Credit balance according to currency_mode
+        if currency_mode == "ARS":
+            member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+        elif currency_mode == "USD":
+            member.balance_usd += payment.amount_paid_usd if payment.amount_paid_usd else amount_paid
+        else:  # DUAL - balance is stored ONLY in ARS
+            member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+
+        member.balance_updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(payment)
+
+    return {
+        "message": "Payment marked as paid successfully",
+        "is_paid": payment.is_paid,
+        "amount_paid": float(payment.amount_paid),
+        "user_id": payment.user_id,
+    }
 
 
