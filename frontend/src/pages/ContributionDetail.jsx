@@ -231,30 +231,27 @@ export default function ContributionDetail() {
         </div>
 
         {/* Desktop table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="hidden md:block">
+          <table className="w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-[28%]">
                   Participante
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Monto a Pagar
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase w-[18%]">
+                  Monto / Absorbido
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Absorbido
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-[12%]">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-[14%]">
                   Pagado el
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-[14%]">
                   Comprobante
                 </th>
                 {isProjectAdmin && (
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-[16%]">
                     Acciones
                   </th>
                 )}
@@ -264,78 +261,76 @@ export default function ContributionDetail() {
               {contribution.payments && contribution.payments.length > 0 ? (
                 contribution.payments.map((payment) => (
                   <tr key={payment.payment_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                          <User size={20} className="text-gray-600" />
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-shrink-0 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                          <User size={16} className="text-gray-600" />
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">
                             {payment.user_name}
                           </div>
-                          <div className="text-xs text-gray-500">{payment.user_email}</div>
+                          <div className="text-xs text-gray-500 truncate">{payment.user_email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
-                      {formatCurrency(payment.amount_due, contribution.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      {payment.amount_offset > 0 ? (
-                        <div>
+                    <td className="px-3 py-3 whitespace-nowrap text-right text-sm">
+                      <div className="font-semibold text-gray-900">
+                        {formatCurrency(payment.amount_due, contribution.currency)}
+                      </div>
+                      {payment.amount_offset > 0 && (
+                        <div className="text-xs">
                           <span className="text-green-600 font-medium">
                             -{formatCurrency(payment.amount_offset, contribution.currency)}
                           </span>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-gray-500">
                             Resta: {formatCurrency(payment.amount_remaining ?? (payment.amount_due - payment.amount_offset), contribution.currency)}
                           </div>
                         </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-3 py-3 whitespace-nowrap text-center">
                       {payment.is_paid ? (
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                          <Check size={14} />
+                          <Check size={12} />
                           Pagado
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                          <X size={14} />
+                          <X size={12} />
                           Pendiente
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
+                    <td className="px-3 py-3 whitespace-nowrap text-center text-sm text-gray-500">
                       {payment.paid_at ? formatDate(payment.paid_at) : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <td className="px-3 py-3 whitespace-nowrap text-center">
                       {payment.receipt_file_path ? (
                         <button
                           onClick={() => handleDownloadReceipt(payment.payment_id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
                           title="Descargar comprobante"
                         >
-                          <Download size={16} />
-                          <span className="hidden lg:inline">Ver</span>
+                          <Download size={14} />
+                          <span className="hidden xl:inline">Ver</span>
                         </button>
                       ) : (
-                        <span className="text-gray-400 text-xs">Sin comprobante</span>
+                        <span className="text-gray-400 text-xs">-</span>
                       )}
                     </td>
                     {isProjectAdmin && (
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <td className="px-3 py-3 whitespace-nowrap text-center">
                         {!payment.is_paid ? (
                           <button
                             onClick={() => handleMarkPaid(payment.payment_id)}
                             disabled={markingPaid === payment.payment_id}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-sm text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
                             title="Marcar como pagado"
                           >
-                            <CheckSquare size={16} />
-                            <span className="hidden lg:inline">
-                              {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar Pagado'}
+                            <CheckSquare size={14} />
+                            <span className="hidden xl:inline">
+                              {markingPaid === payment.payment_id ? '...' : 'Marcar'}
                             </span>
                           </button>
                         ) : (
@@ -347,7 +342,7 @@ export default function ContributionDetail() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={isProjectAdmin ? "7" : "6"} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={isProjectAdmin ? "6" : "5"} className="px-6 py-12 text-center text-gray-500">
                     No hay pagos registrados
                   </td>
                 </tr>
