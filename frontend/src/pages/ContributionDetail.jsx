@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle } from 'lucide-react'
+import { useProject } from '../context/ProjectContext'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, CheckSquare } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -44,9 +45,11 @@ function StatusBadge({ status }) {
 export default function ContributionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isProjectAdmin } = useProject()
   const [contribution, setContribution] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [markingPaid, setMarkingPaid] = useState(null)
 
   useEffect(() => {
     loadContribution()
@@ -88,6 +91,23 @@ export default function ContributionDetail() {
     } catch (err) {
       console.error('Error downloading receipt:', err)
       alert('Error al descargar el comprobante')
+    }
+  }
+
+  const handleMarkPaid = async (paymentId) => {
+    if (!confirm('¿Marcar este aporte como pagado?')) return
+    
+    setMarkingPaid(paymentId)
+    try {
+      await contributionsAPI.markPaid(paymentId, {
+        payment_date: new Date().toISOString(),
+      })
+      await loadContribution()
+    } catch (err) {
+      console.error('Error marking payment as paid:', err)
+      alert(err.response?.data?.detail || 'Error al marcar como pagado')
+    } finally {
+      setMarkingPaid(null)
     }
   }
 
@@ -233,6 +253,11 @@ export default function ContributionDetail() {
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                   Comprobante
                 </th>
+                {isProjectAdmin && (
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Acciones
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -299,11 +324,30 @@ export default function ContributionDetail() {
                         <span className="text-gray-400 text-xs">Sin comprobante</span>
                       )}
                     </td>
+                    {isProjectAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {!payment.is_paid ? (
+                          <button
+                            onClick={() => handleMarkPaid(payment.payment_id)}
+                            disabled={markingPaid === payment.payment_id}
+                            className="inline-flex items-center gap-1 px-3 py-1 text-sm text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                            title="Marcar como pagado"
+                          >
+                            <CheckSquare size={16} />
+                            <span className="hidden lg:inline">
+                              {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar Pagado'}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={isProjectAdmin ? "7" : "6"} className="px-6 py-12 text-center text-gray-500">
                     No hay pagos registrados
                   </td>
                 </tr>
@@ -378,6 +422,18 @@ export default function ContributionDetail() {
                       >
                         <FileText size={16} />
                         Ver Comprobante
+                      </button>
+                    </div>
+                  )}
+                  {isProjectAdmin && !payment.is_paid && (
+                    <div className="pt-2 border-t border-gray-100 mt-2">
+                      <button
+                        onClick={() => handleMarkPaid(payment.payment_id)}
+                        disabled={markingPaid === payment.payment_id}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                      >
+                        <CheckSquare size={16} />
+                        {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar como Pagado'}
                       </button>
                     </div>
                   )}
