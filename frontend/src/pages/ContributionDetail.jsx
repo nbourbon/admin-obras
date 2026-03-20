@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, CheckSquare } from 'lucide-react'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3 } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -330,7 +330,7 @@ export default function ContributionDetail() {
                             className="inline-flex items-center p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
                             title="Marcar como pagado"
                           >
-                            <CheckSquare size={14} />
+                            <Edit3 size={14} />
                           </button>
                         ) : (
                           <span className="text-gray-400 text-[10px]">-</span>
@@ -426,7 +426,7 @@ export default function ContributionDetail() {
                         disabled={markingPaid === payment.payment_id}
                         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
                       >
-                        <CheckSquare size={16} />
+                        <Edit3 size={16} />
                         {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar como Pagado'}
                       </button>
                     </div>
