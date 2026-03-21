@@ -148,6 +148,33 @@ async def list_unabsorbed_unilateral(
     return result
 
 
+@router.get("/my-pending/count", response_model=dict)
+async def get_my_pending_contributions_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get count of pending contribution payments for the current user.
+    Returns { "count": int }
+    Only counts contributions where the current user has NOT paid yet.
+    """
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    # Count contribution payments for this user that are not paid
+    count = db.query(ContributionPayment).join(Contribution).filter(
+        Contribution.project_id == project.id,
+        ContributionPayment.user_id == current_user.id,
+        ContributionPayment.is_paid == False,
+    ).count()
+
+    return {"count": count}
+
+
 @router.get("/{contribution_id}", response_model=ContributionDetailResponse)
 async def get_contribution(
     contribution_id: int,

@@ -142,6 +142,7 @@ export const contributionsAPI = {
     })
   },
   downloadReceipt: (paymentId) => client.get(`/contributions/payments/${paymentId}/receipt`, { responseType: 'blob' }),
+  getMyPendingCount: () => client.get('/contributions/my-pending/count'),
 }
 
 // Payments API
@@ -154,6 +155,7 @@ export const paymentsAPI = {
   unmarkPaid: (id) => client.put(`/payments/${id}/unmark-paid`),
   delete: (id) => client.delete(`/payments/${id}`),
   pendingApproval: () => client.get('/payments/pending-approval'),
+  pendingApprovalCount: () => client.get('/payments/pending-approval/count'),
   approve: (id, data) => client.put(`/payments/${id}/approve`, data),
   uploadReceipt: (id, file) => {
     const formData = new FormData()

@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
-import { notesAPI } from '../api/client'
+import { notesAPI, paymentsAPI, contributionsAPI } from '../api/client'
 import {
   LayoutDashboard,
   Receipt,
@@ -28,17 +28,30 @@ function Layout() {
   const { pathname } = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [unreadNotesCount, setUnreadNotesCount] = useState(0)
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
+  const [myContributionsCount, setMyContributionsCount] = useState(0)
 
   useEffect(() => {
     if (currentProject) {
       loadUnreadCount()
+      loadPendingApprovalsCount()
+      loadMyContributionsCount()
     }
   }, [currentProject])
 
-  // Reload unread count when returning from notes
+  // Reload counts when returning from respective pages
   useEffect(() => {
+    // Reload notes count when not on notes page
     if (!pathname.startsWith('/notes/') && pathname !== '/notes') {
       loadUnreadCount()
+    }
+    // Reload pending approvals count when not on pending-approvals page
+    if (!pathname.startsWith('/pending-approvals')) {
+      loadPendingApprovalsCount()
+    }
+    // Reload contributions count when not on contributions page
+    if (!pathname.startsWith('/contributions')) {
+      loadMyContributionsCount()
     }
   }, [pathname])
 
@@ -48,6 +61,25 @@ function Layout() {
       setUnreadNotesCount(response.data.unread_count)
     } catch (err) {
       console.error('Error loading unread notes count:', err)
+    }
+  }
+
+  const loadPendingApprovalsCount = async () => {
+    if (!isProjectAdmin) return
+    try {
+      const response = await paymentsAPI.pendingApprovalCount()
+      setPendingApprovalsCount(response.data.count)
+    } catch (err) {
+      console.error('Error loading pending approvals count:', err)
+    }
+  }
+
+  const loadMyContributionsCount = async () => {
+    try {
+      const response = await contributionsAPI.getMyPendingCount()
+      setMyContributionsCount(response.data.count)
+    } catch (err) {
+      console.error('Error loading my contributions count:', err)
     }
   }
 
@@ -179,7 +211,11 @@ function Layout() {
               <NavItem
                 key={item.to}
                 {...item}
-                badge={item.to === '/notes' ? unreadNotesCount : 0}
+                badge={
+                  item.to === '/notes' ? unreadNotesCount :
+                  item.to === '/contributions' ? myContributionsCount :
+                  0
+                }
               />
             ))}
 
@@ -191,7 +227,11 @@ function Layout() {
                   </p>
                 </div>
                 {adminItems.map((item) => (
-                  <NavItem key={item.to} {...item} />
+                  <NavItem 
+                    key={item.to} 
+                    {...item} 
+                    badge={item.to === '/pending-approvals' ? pendingApprovalsCount : 0}
+                  />
                 ))}
               </>
             )}

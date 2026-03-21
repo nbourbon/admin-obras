@@ -367,6 +367,43 @@ async def get_pending_approval_payments(
     return result
 
 
+@router.get("/pending-approval/count", response_model=dict)
+async def get_pending_approval_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Get count of payments pending admin approval for the current project.
+    Returns { "count": int }
+    """
+    from app.models.contribution import Contribution
+    from app.models.contribution_payment import ContributionPayment
+
+    # Count expense payments
+    expense_query = db.query(ParticipantPayment).filter(
+        ParticipantPayment.is_pending_approval == True
+    )
+
+    if project:
+        expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
+
+    expense_count = expense_query.count()
+
+    # Count contribution payments (pending approval OR submitted but not paid)
+    contribution_query = db.query(ContributionPayment).filter(
+        (ContributionPayment.is_pending_approval == True) |
+        ((ContributionPayment.submitted_at != None) & (ContributionPayment.is_paid == False))
+    )
+
+    if project:
+        contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+
+    contribution_count = contribution_query.count()
+
+    return {"count": expense_count + contribution_count}
+
+
 @router.get("/{payment_id}", response_model=PaymentWithExpense)
 async def get_payment(
     payment_id: int,
