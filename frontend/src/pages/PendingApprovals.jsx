@@ -100,6 +100,7 @@ function PendingApprovals() {
   const [previewFileName, setPreviewFileName] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewPaymentId, setPreviewPaymentId] = useState(null)
+  const [previewIsContribution, setPreviewIsContribution] = useState(false)
 
   useEffect(() => {
     loadPayments()
@@ -157,7 +158,10 @@ function PendingApprovals() {
 
   const handlePreviewReceipt = async (payment) => {
     try {
-      const response = await paymentsAPI.downloadReceipt(payment.id)
+      const isContribution = !payment.expense_id
+      const response = isContribution
+        ? await contributionsAPI.downloadReceipt(payment.id)
+        : await paymentsAPI.downloadReceipt(payment.id)
       // response.data is already a Blob with correct MIME type from backend
       let fileName = payment.receipt_file_path?.split('/').pop() || `comprobante-${payment.id}`
       if (response.data.type === 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
@@ -167,6 +171,7 @@ function PendingApprovals() {
       setPreviewUrl(url)
       setPreviewFileName(fileName)
       setPreviewPaymentId(payment.id)
+      setPreviewIsContribution(!payment.expense_id)
       setShowPreview(true)
     } catch (err) {
       console.error('Error loading receipt:', err)
@@ -174,9 +179,11 @@ function PendingApprovals() {
     }
   }
 
-  const handleDownloadReceipt = async (paymentId) => {
+  const handleDownloadReceipt = async (paymentId, isContribution = false) => {
     try {
-      const response = await paymentsAPI.downloadReceipt(paymentId)
+      const response = isContribution
+        ? await contributionsAPI.downloadReceipt(paymentId)
+        : await paymentsAPI.downloadReceipt(paymentId)
       // response.data is already a Blob with correct MIME type from backend
       let fileName = `comprobante-${paymentId}`
       if (response.data.type === 'application/pdf') {
@@ -287,7 +294,7 @@ function PendingApprovals() {
                         Ver Comprobante
                       </button>
                       <button
-                        onClick={() => handleDownloadReceipt(payment.id)}
+                        onClick={() => handleDownloadReceipt(payment.id, !payment.expense_id)}
                         className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                       >
                         <Download size={18} />
@@ -340,10 +347,11 @@ function PendingApprovals() {
           }
           setPreviewFileName(null)
           setPreviewPaymentId(null)
+          setPreviewIsContribution(false)
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
-        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId)}
+        onDownload={() => previewPaymentId && handleDownloadReceipt(previewPaymentId, previewIsContribution)}
       />
     </div>
   )
