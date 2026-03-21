@@ -238,46 +238,49 @@ function PendingApprovals() {
               key={payment.id}
               className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-blue-500"
             >
-              {/* Mobile-first layout */}
-              <div className="flex flex-col gap-3">
-                {/* Header: User + Date */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full w-fit">
-                    <User size={16} className="text-gray-600" />
-                    <span className="font-medium text-gray-700 text-sm">
-                      {payment.user?.full_name || 'Usuario'}
+              {/* Layout: Mobile = vertical, Desktop = horizontal with amount on right */}
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                {/* Left side: User, Date, Description */}
+                <div className="flex-1 flex flex-col gap-3">
+                  {/* Header: User + Date */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                    <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full w-fit">
+                      <User size={16} className="text-gray-600" />
+                      <span className="font-medium text-gray-700 text-sm">
+                        {payment.user?.full_name || 'Usuario'}
+                      </span>
+                    </div>
+                    <span className="text-xs sm:text-sm text-gray-500">
+                      Enviado: {formatDate(payment.submitted_at)}
                     </span>
                   </div>
-                  <span className="text-xs sm:text-sm text-gray-500">
-                    Enviado: {formatDate(payment.submitted_at)}
-                  </span>
+
+                  {/* Description */}
+                  <div>
+                    {payment.expense_id ? (
+                      <Link
+                        to={`/expenses/${payment.expense_id}`}
+                        className="text-base sm:text-lg font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        {payment.expense?.description}
+                      </Link>
+                    ) : (
+                      <span className="text-base sm:text-lg font-medium text-purple-700">
+                        {payment.expense?.description || '[APORTE]'}
+                      </span>
+                    )}
+                    {(payment.expense?.provider_name || payment.expense?.category_name) && (
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs sm:text-sm text-gray-500">
+                        {payment.expense?.provider_name && <span>{payment.expense.provider_name}</span>}
+                        {payment.expense?.category_name && <span>• {payment.expense.category_name}</span>}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Description */}
-                <div>
-                  {payment.expense_id ? (
-                    <Link
-                      to={`/expenses/${payment.expense_id}`}
-                      className="text-base sm:text-lg font-medium text-blue-600 hover:text-blue-800"
-                    >
-                      {payment.expense?.description}
-                    </Link>
-                  ) : (
-                    <span className="text-base sm:text-lg font-medium text-purple-700">
-                      {payment.expense?.description || '[APORTE]'}
-                    </span>
-                  )}
-                  {(payment.expense?.provider_name || payment.expense?.category_name) && (
-                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs sm:text-sm text-gray-500">
-                      {payment.expense?.provider_name && <span>{payment.expense.provider_name}</span>}
-                      {payment.expense?.category_name && <span>• {payment.expense.category_name}</span>}
-                    </div>
-                  )}
-                </div>
-
-                {/* Amount */}
-                <div className="bg-gray-50 rounded-lg p-3 sm:text-right">
-                  <p className="text-xs text-gray-500">Monto informado:</p>
+                {/* Right side: Amount (inline on desktop, below on mobile) */}
+                <div className="bg-gray-50 rounded-lg p-3 lg:bg-transparent lg:p-0 lg:text-right lg:min-w-[200px]">
+                  <p className="text-xs text-gray-500 lg:text-gray-400">Monto informado:</p>
                   <p className="text-lg sm:text-xl font-bold text-blue-600">
                     {formatCurrency(payment.amount_paid, payment.currency_paid)}
                   </p>
