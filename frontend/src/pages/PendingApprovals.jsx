@@ -236,66 +236,73 @@ function PendingApprovals() {
           {payments.map((payment) => (
             <div
               key={payment.id}
-              className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500"
+              className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-blue-500"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full">
-                      <User size={16} className="text-gray-600" />
-                      <span className="font-medium text-gray-700">
-                        {payment.user?.full_name || 'Usuario'}
-                      </span>
-                    </div>
-                    <span className="text-sm text-gray-500">
-                      Enviado: {formatDate(payment.submitted_at)}
+              {/* Mobile-first layout */}
+              <div className="flex flex-col gap-3">
+                {/* Header: User + Date */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full w-fit">
+                    <User size={16} className="text-gray-600" />
+                    <span className="font-medium text-gray-700 text-sm">
+                      {payment.user?.full_name || 'Usuario'}
                     </span>
                   </div>
+                  <span className="text-xs sm:text-sm text-gray-500">
+                    Enviado: {formatDate(payment.submitted_at)}
+                  </span>
+                </div>
 
+                {/* Description */}
+                <div>
                   {payment.expense_id ? (
                     <Link
                       to={`/expenses/${payment.expense_id}`}
-                      className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                      className="text-base sm:text-lg font-medium text-blue-600 hover:text-blue-800"
                     >
                       {payment.expense?.description}
                     </Link>
                   ) : (
-                    <span className="text-lg font-medium text-purple-700">
-                      {payment.expense?.description}
+                    <span className="text-base sm:text-lg font-medium text-purple-700">
+                      {payment.expense?.description || '[APORTE]'}
                     </span>
                   )}
-
-                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <span>{payment.expense?.provider_name}</span>
-                    <span>{payment.expense?.category_name}</span>
-                  </div>
+                  {(payment.expense?.provider_name || payment.expense?.category_name) && (
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs sm:text-sm text-gray-500">
+                      {payment.expense?.provider_name && <span>{payment.expense.provider_name}</span>}
+                      {payment.expense?.category_name && <span>• {payment.expense.category_name}</span>}
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Monto informado:</p>
-                  <p className="text-xl font-bold text-blue-600">
+                {/* Amount */}
+                <div className="bg-gray-50 rounded-lg p-3 sm:text-right">
+                  <p className="text-xs text-gray-500">Monto informado:</p>
+                  <p className="text-lg sm:text-xl font-bold text-blue-600">
                     {formatCurrency(payment.amount_paid, payment.currency_paid)}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1">
                     Correspondia: {formatCurrency(payment.amount_due_usd)} USD
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Action buttons */}
+              <div className="mt-4 pt-4 border-t flex flex-col gap-3">
+                {/* Receipt buttons */}
                 <div className="flex items-center gap-2">
                   {payment.receipt_file_path ? (
                     <>
                       <button
                         onClick={() => handlePreviewReceipt(payment)}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
                       >
                         <Eye size={18} />
                         Ver Comprobante
                       </button>
                       <button
                         onClick={() => handleDownloadReceipt(payment.id, !payment.expense_id)}
-                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                        className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                       >
                         <Download size={18} />
                       </button>
@@ -307,11 +314,12 @@ function PendingApprovals() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Approve/Reject buttons */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setRejectModal({ isOpen: true, paymentId: payment.id, isContribution: !payment.expense_id })}
                     disabled={actionLoading === payment.id}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:opacity-50 text-sm"
                   >
                     <XCircle size={18} />
                     Rechazar
@@ -319,7 +327,7 @@ function PendingApprovals() {
                   <button
                     onClick={() => handleApprove(payment)}
                     disabled={actionLoading === payment.id}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
                   >
                     <CheckCircle size={18} />
                     {actionLoading === payment.id ? 'Procesando...' : 'Aprobar'}
