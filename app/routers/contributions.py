@@ -168,6 +168,10 @@ async def get_contribution(
     payments = db.query(ContributionPayment).filter(
         ContributionPayment.contribution_id == contribution.id
     ).all()
+    
+    # Force refresh to get latest receipt_file_path values
+    for payment in payments:
+        db.refresh(payment)
 
     payment_details = []
     for payment in payments:
@@ -780,6 +784,9 @@ async def download_contribution_receipt(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contribution payment not found",
         )
+    
+    # Force refresh to get latest receipt_file_path
+    db.refresh(payment)
 
     if not payment.receipt_file_path:
         raise HTTPException(
