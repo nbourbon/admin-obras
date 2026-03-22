@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3 } from 'lucide-react'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3, Clock } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -298,6 +298,11 @@ export default function ContributionDetail() {
                           <Check size={10} />
                           OK
                         </span>
+                      ) : payment.is_pending_approval ? (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
+                          <Clock size={10} />
+                          En Rev
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-[10px] font-medium">
                           <X size={10} />
@@ -328,7 +333,7 @@ export default function ContributionDetail() {
                             onClick={() => handleMarkPaid(payment.payment_id)}
                             disabled={markingPaid === payment.payment_id}
                             className="inline-flex items-center p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
-                            title="Marcar como pagado"
+                            title={payment.is_pending_approval ? "Confirmar Contribución" : "Marcar como pagado"}
                           >
                             <Edit3 size={14} />
                           </button>
@@ -398,8 +403,18 @@ export default function ContributionDetail() {
                   )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Estado:</span>
-                    <span className={payment.is_paid ? 'text-green-600' : 'text-yellow-600'}>
-                      {payment.is_paid ? 'Pagado' : 'Pendiente'}
+                    <span className={
+                      payment.is_paid 
+                        ? 'text-green-600' 
+                        : payment.is_pending_approval 
+                          ? 'text-blue-600' 
+                          : 'text-yellow-600'
+                    }>
+                      {payment.is_paid 
+                        ? 'Pagado' 
+                        : payment.is_pending_approval 
+                          ? 'En Revisión' 
+                          : 'Pendiente'}
                     </span>
                   </div>
                   {payment.paid_at && (
@@ -427,7 +442,11 @@ export default function ContributionDetail() {
                         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
                       >
                         <Edit3 size={16} />
-                        {markingPaid === payment.payment_id ? 'Marcando...' : 'Marcar como Pagado'}
+                        {markingPaid === payment.payment_id 
+                          ? 'Marcando...' 
+                          : payment.is_pending_approval 
+                            ? 'Confirmar Contribución' 
+                            : 'Marcar como Pagado'}
                       </button>
                     </div>
                   )}

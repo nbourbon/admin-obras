@@ -88,6 +88,7 @@ class ContributionPaymentDetail(BaseModel):
     amount_offset: Decimal = Decimal("0")
     amount_remaining: Optional[Decimal] = None  # amount_due - amount_offset
     is_paid: bool
+    is_pending_approval: bool = False  # Payment submitted but pending admin approval
     paid_at: Optional[datetime] = None
     receipt_file_path: Optional[str] = None
     amount_paid: Optional[Decimal] = None
