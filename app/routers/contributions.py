@@ -205,6 +205,9 @@ async def get_contribution(
         user = payment.user
         offset = Decimal(str(payment.amount_offset)) if payment.amount_offset else Decimal("0")
         remaining = Decimal(str(payment.amount_due)) - offset
+        # Determine if payment is pending approval (submitted but not yet approved)
+        is_pending_approval = not payment.is_paid and payment.submitted_at is not None
+        
         payment_details.append(ContributionPaymentDetail(
             payment_id=payment.id,
             user_id=payment.user_id,
@@ -214,6 +217,7 @@ async def get_contribution(
             amount_offset=offset,
             amount_remaining=remaining,
             is_paid=payment.is_paid,
+            is_pending_approval=is_pending_approval,
             paid_at=payment.paid_at,
             receipt_file_path=payment.receipt_file_path,
             amount_paid=payment.amount_paid,
