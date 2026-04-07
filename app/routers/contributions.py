@@ -1096,3 +1096,114 @@ async def admin_mark_contribution_paid(
     }
 
 
+@router.delete("/{contribution_id}", status_code=status.HTTP_200_OK)
+async def delete_contribution(
+    contribution_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_admin_user),
+    project: Optional[Project] = Depends(get_project_from_header),
+):
+    """
+    Delete a contribution (admin only).
+    
+    For unilateral (individual) contributions:
+    - Reverses the balance credit if it was approved
+    - Only allowed if the contribution has not been absorbed by other requests
+    
+    For regular contributions:
+    - Only allowed if no payments have been made yet
+    """
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Project-ID header is required",
+        )
+
+    contribution = db.query(Contribution).filter(
+        Contribution.id == contribution_id,
+        Contribution.project_id == project.id,
+    ).first()
+
+    if not contribution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contribution not found",
+        )
+
+    # Check if contribution has been absorbed (only applies to unilateral)
+    if contribution.is_unilateral:
+        absorption_count = db.query(ContributionAbsorption).filter(
+            ContributionAbsorption.unilateral_id == contribution.id,
+        ).count()
+        
+        if absorption_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar este aporte porque ya fue absorbido por una solicitud de aporte grupal. "
+                       "Eliminá primero la solicitud de aporte grupal que lo absorbió.",
+            )
+    
+    # Get currency mode for balance adjustments
+    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
+
+    # Get all payments for this contribution
+    payments = db.query(ContributionPayment).filter(
+        ContributionPayment.contribution_id == contribution.id,
+    ).all()
+
+    # Check if any payments have been made (for regular contributions)
+    if not contribution.is_unilateral and not contribution.is_adjustment:
+        paid_payments = [p for p in payments if p.is_paid]
+        if paid_payments:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar esta solicitud de aporte porque ya hay pagos realizados. "
+                       "Contactá al administrador del sistema.",
+            )
+
+    # For approved unilateral contributions, reverse the balance credit
+    if contribution.is_unilateral and contribution.status == ContributionStatus.APPROVED:
+        # Get the contributor's member record
+        member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == contribution.contributor_user_id,
+        ).first()
+
+        if member:
+            # Reverse the balance credit based on currency mode
+            if currency_mode == "USD":
+                member.balance_usd -= contribution.amount
+            else:
+                member.balance_ars -= contribution.amount
+            member.balance_updated_at = datetime.utcnow()
+
+    # For adjustments, reverse the balance for all members
+    if contribution.is_adjustment and contribution.status == ContributionStatus.APPROVED:
+        members = db.query(ProjectMember).filter(
+            ProjectMember.project_id == project.id,
+            ProjectMember.is_active == True,
+        ).all()
+        
+        for member in members:
+            percentage = member.participation_percentage / Decimal(100)
+            member_amount = (contribution.amount * percentage).quantize(Decimal("0.01"))
+            
+            if currency_mode == "USD":
+                member.balance_usd -= member_amount
+            else:
+                member.balance_ars -= member_amount
+            member.balance_updated_at = datetime.utcnow()
+
+    # Delete all associated payments (cascade should handle this, but being explicit)
+    for payment in payments:
+        db.delete(payment)
+
+    # Delete the contribution
+    db.delete(contribution)
+    db.commit()
+
+    return {
+        "message": "Aporte eliminado correctamente",
+        "contribution_id": contribution_id,
+        "type": "unilateral" if contribution.is_unilateral else ("adjustment" if contribution.is_adjustment else "regular"),
+    }
