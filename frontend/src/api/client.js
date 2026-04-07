@@ -143,6 +143,7 @@ export const contributionsAPI = {
   },
   downloadReceipt: (paymentId) => client.get(`/contributions/payments/${paymentId}/receipt`, { responseType: 'blob' }),
   getMyPendingCount: () => client.get('/contributions/my-pending/count'),
+  delete: (id) => client.delete(`/contributions/${id}`),
 }
 
 // Payments API
