@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { contributionsAPI, dashboardAPI } from '../api/client'
+import { toISODateWithTimezone } from '../utils/date'
 import { useProject } from '../context/ProjectContext'
-import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search, Scale, ArrowUpCircle, Users, User } from 'lucide-react'
+import { Coins, TrendingUp, Plus, X, Check, CheckCircle2, Clock, Search, Scale, ArrowUpCircle, Users, User, Trash2 } from 'lucide-react'
 import AdjustBalanceModal from '../components/AdjustBalanceModal'
 
 function formatCurrency(amount, currency = 'USD') {
@@ -173,7 +174,7 @@ function PayContributionModal({ isOpen, onClose, contribution, onSuccess, curren
       const submitData = {
         amount_paid: netAmount,
         currency_paid: contribution.currency,
-        payment_date: formData.payment_date ? new Date(formData.payment_date).toISOString() : null,
+        payment_date: toISODateWithTimezone(formData.payment_date),
       }
 
       // Include exchange rate override for DUAL mode
@@ -624,6 +625,38 @@ export default function Contributions() {
     setShowPayModal(true)
   }
 
+  const handleDelete = async (contribution, e) => {
+    e.stopPropagation()
+    if (!confirm('¿Eliminar este aporte? Esta acción no se puede deshacer y el saldo se ajustará automáticamente.')) return
+    
+    try {
+      await contributionsAPI.delete(contribution.id)
+      loadContributions()
+    } catch (err) {
+      console.error('Error deleting contribution:', err)
+      alert(err.response?.data?.detail || 'Error al eliminar el aporte')
+    }
+  }
+
+  // Determine if a contribution can be deleted
+  const canDelete = (contribution) => {
+    // Only admins can delete
+    if (!isProjectAdmin) return false
+    
+    // Unilateral (individual) contributions can be deleted if not absorbed
+    if (contribution.is_unilateral) return true
+    
+    // Adjustments can be deleted
+    if (contribution.is_adjustment) return true
+    
+    // Regular contributions can only be deleted if no payments made
+    if (!contribution.is_unilateral && !contribution.is_adjustment) {
+      return contribution.paid_participants === 0
+    }
+    
+    return false
+  }
+
   useEffect(() => {
     loadContributions()
     loadContributionMode()
@@ -877,6 +910,16 @@ export default function Contributions() {
                       className="px-2.5 py-1 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
                     >
                       Pagar
+                    </button>
+                  )}
+                  {/* Delete button for admins */}
+                  {canDelete(contribution) && (
+                    <button
+                      onClick={(e) => handleDelete(contribution, e)}
+                      className="ml-1 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Eliminar aporte"
+                    >
+                      <Trash2 size={14} />
                     </button>
                   )}
                   <Search size={13} className="hidden md:block text-gray-200 ml-0.5" />

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { contributionsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
-import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3, Clock } from 'lucide-react'
+import { Coins, ArrowLeft, User, Check, X, Users, CheckCircle2, FileText, Download, ArrowUpCircle, Edit3, Clock, Trash2 } from 'lucide-react'
 
 function formatCurrency(amount, currency = 'ARS') {
   return new Intl.NumberFormat('es-AR', {
@@ -73,6 +73,37 @@ export default function ContributionDetail() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('¿Eliminar este aporte? Esta acción no se puede deshacer y el saldo se ajustará automáticamente.')) return
+    
+    try {
+      await contributionsAPI.delete(contribution.id)
+      navigate('/contributions')
+    } catch (err) {
+      console.error('Error deleting contribution:', err)
+      alert(err.response?.data?.detail || 'Error al eliminar el aporte')
+    }
+  }
+
+  // Determine if contribution can be deleted
+  const canDelete = () => {
+    if (!contribution) return false
+    if (!isProjectAdmin) return false
+    
+    // Unilateral (individual) contributions can be deleted if not absorbed
+    if (contribution.is_unilateral) return true
+    
+    // Adjustments can be deleted
+    if (contribution.is_adjustment) return true
+    
+    // Regular contributions can only be deleted if no payments made
+    if (!contribution.is_unilateral && !contribution.is_adjustment) {
+      return contribution.paid_participants === 0
+    }
+    
+    return false
   }
 
   const handleDownloadReceipt = async (paymentId) => {
@@ -182,15 +213,27 @@ export default function ContributionDetail() {
               </p>
             </div>
           </div>
-          {contribution.is_complete ? (
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
-              Completado
-            </span>
-          ) : (
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700">
-              Pendiente
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {contribution.is_complete ? (
+              <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+                Completado
+              </span>
+            ) : (
+              <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700">
+                Pendiente
+              </span>
+            )}
+            {/* Delete button for admins */}
+            {canDelete() && (
+              <button
+                onClick={handleDelete}
+                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Eliminar aporte"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Summary stats */}
