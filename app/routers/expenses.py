@@ -398,6 +398,8 @@ async def get_expense(
     total_actual_paid_usd = Decimal("0")
     total_actual_paid_ars = Decimal("0")
 
+    paid_count = 0
+    total_count = len(payments)
     for p in payments:
         payment_summaries.append(PaymentSummary(
             user_id=p.user_id,
@@ -408,6 +410,7 @@ async def get_expense(
             paid_at=p.paid_at,
         ))
         if p.is_paid:
+            paid_count += 1
             total_paid_usd += Decimal(str(p.amount_due_usd))
             if p.amount_paid_usd:
                 total_actual_paid_usd += Decimal(str(p.amount_paid_usd))
@@ -415,6 +418,10 @@ async def get_expense(
                 total_actual_paid_ars += Decimal(str(p.amount_paid_ars))
         else:
             total_pending_usd += Decimal(str(p.amount_due_usd))
+
+    my_payment = next((p for p in payments if p.user_id == current_user.id), None)
+    i_paid = my_payment.is_paid if my_payment else False
+    is_pending_approval = bool(my_payment and not my_payment.is_paid and my_payment.submitted_at is not None)
 
     response_data = {
         "id": expense.id,
@@ -442,6 +449,13 @@ async def get_expense(
         "total_pending_usd": total_pending_usd,
         "total_actual_paid_usd": total_actual_paid_usd if total_actual_paid_usd > 0 else None,
         "total_actual_paid_ars": total_actual_paid_ars if total_actual_paid_ars > 0 else None,
+        "my_amount_due": my_payment.amount_due_usd if my_payment else Decimal("0"),
+        "my_payment_id": my_payment.id if my_payment else None,
+        "i_paid": i_paid,
+        "is_pending_approval": is_pending_approval,
+        "is_complete": paid_count == total_count if total_count > 0 else False,
+        "paid_participants": paid_count,
+        "total_participants": total_count,
     }
 
     return ExpenseWithPayments(**response_data)

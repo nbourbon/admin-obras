@@ -37,7 +37,7 @@ def assert_close(actual, expected, msg=""):
 
 def dashboard_summary(client, headers):
     """GET /dashboard/summary con TC mockeado."""
-    with patch("app.routers.dashboard.fetch_blue_dollar_rate_sync", return_value=TC):
+    with patch("app.routers.dashboard.fetch_blue_dollar_rate", return_value=TC):
         r = client.get("/dashboard/summary", headers=headers)
     assert r.status_code == 200, f"dashboard/summary falló: {r.text}"
     return r.json()
@@ -45,7 +45,7 @@ def dashboard_summary(client, headers):
 
 def my_status(client, headers):
     """GET /dashboard/my-status con TC mockeado."""
-    with patch("app.routers.dashboard.fetch_blue_dollar_rate_sync", return_value=TC):
+    with patch("app.routers.dashboard.fetch_blue_dollar_rate", return_value=TC):
         r = client.get("/dashboard/my-status", headers=headers)
     assert r.status_code == 200, f"dashboard/my-status falló: {r.text}"
     return r.json()
@@ -641,7 +641,7 @@ def test_escenario_01_construccion_dual_current_account(client):
     # -----------------------------------------------------------------------
     TC_7 = Decimal("1450")
 
-    with patch("app.routers.dashboard.fetch_blue_dollar_rate_sync", return_value=TC_7):
+    with patch("app.routers.dashboard.fetch_blue_dollar_rate", return_value=TC_7):
         r7s = client.get("/dashboard/summary", headers=h1p)
     assert r7s.status_code == 200
     s7 = r7s.json()
@@ -652,14 +652,14 @@ def test_escenario_01_construccion_dual_current_account(client):
     # Caja recalculada con TC=1450
     assert_close(s7["total_balance_usd"],          544.14, "p7 caja con TC=1450")
 
-    with patch("app.routers.dashboard.fetch_blue_dollar_rate_sync", return_value=TC_7):
+    with patch("app.routers.dashboard.fetch_blue_dollar_rate", return_value=TC_7):
         r7_st1 = client.get("/dashboard/my-status", headers=h1p)
     assert r7_st1.status_code == 200
     st1_7 = r7_st1.json()
     assert_close(st1_7["balance_aportes_usd"], +397.60, "p7 U1 saldo con TC=1450")
     assert_close(st1_7["total_paid_usd"],       264.89, "p7 U1 gastado (sin cambio)")
 
-    with patch("app.routers.dashboard.fetch_blue_dollar_rate_sync", return_value=TC_7):
+    with patch("app.routers.dashboard.fetch_blue_dollar_rate", return_value=TC_7):
         r7_st2 = client.get("/dashboard/my-status", headers=h2p)
     assert r7_st2.status_code == 200
     st2_7 = r7_st2.json()

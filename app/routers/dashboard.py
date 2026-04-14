@@ -27,7 +27,7 @@ from app.models.payment import ParticipantPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.contribution import Contribution, ContributionStatus
-from app.services.exchange_rate import fetch_blue_dollar_rate_sync
+from app.services.exchange_rate import fetch_blue_dollar_rate
 from app.services.expense_splitter import get_user_payment_summary
 from app.services.contribution_manager import get_all_member_balances, get_contributions_by_participant
 
@@ -162,7 +162,7 @@ async def get_dashboard_summary(
     # Get current exchange rate (skip for single-currency projects)
     if currency_mode == "DUAL":
         try:
-            current_rate = fetch_blue_dollar_rate_sync()
+            current_rate = await fetch_blue_dollar_rate()
         except Exception:
             current_rate = Decimal("0")
     else:
@@ -417,7 +417,7 @@ async def get_my_payment_status(
         current_rate = Decimal("0")
         if currency_mode == "DUAL":
             try:
-                current_rate = Decimal(str(fetch_blue_dollar_rate_sync()))
+                current_rate = Decimal(str(await fetch_blue_dollar_rate()))
             except Exception:
                 current_rate = Decimal("0")
 
