@@ -108,8 +108,9 @@ async def save_invoice(file: UploadFile, expense_id: int) -> str:
         file_path = get_invoices_dir() / f"expense_{expense_id}_{filename}"
         try:
             await file.seek(0)
+            contents = await file.read()
             with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                buffer.write(contents)
         finally:
             await file.close()
         return str(file_path.relative_to(get_upload_dir().parent))
@@ -135,8 +136,9 @@ async def save_receipt(file: UploadFile, payment_id: int) -> str:
         file_path = get_receipts_dir() / f"payment_{payment_id}_{filename}"
         try:
             await file.seek(0)
+            contents = await file.read()
             with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                buffer.write(contents)
         finally:
             await file.close()
         return str(file_path.relative_to(get_upload_dir().parent))
@@ -162,8 +164,9 @@ async def save_contribution_receipt(file: UploadFile, contribution_id: int) -> s
         file_path = get_receipts_dir() / f"contribution_{contribution_id}_{filename}"
         try:
             await file.seek(0)
+            contents = await file.read()
             with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                buffer.write(contents)
         finally:
             await file.close()
         return str(file_path.relative_to(get_upload_dir().parent))
