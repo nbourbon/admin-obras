@@ -75,6 +75,7 @@ def is_url(path: str) -> bool:
 async def upload_to_cloudinary(file: UploadFile, folder: str, public_id: str) -> str:
     """Upload file to Cloudinary and return the URL."""
     try:
+        await file.seek(0)
         contents = await file.read()
         result = cloudinary.uploader.upload(
             contents,
@@ -106,6 +107,7 @@ async def save_invoice(file: UploadFile, expense_id: int) -> str:
         # Local storage fallback
         file_path = get_invoices_dir() / f"expense_{expense_id}_{filename}"
         try:
+            await file.seek(0)
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
         finally:
@@ -132,6 +134,7 @@ async def save_receipt(file: UploadFile, payment_id: int) -> str:
         # Local storage fallback
         file_path = get_receipts_dir() / f"payment_{payment_id}_{filename}"
         try:
+            await file.seek(0)
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
         finally:
@@ -158,6 +161,7 @@ async def save_contribution_receipt(file: UploadFile, contribution_id: int) -> s
         # Local storage fallback
         file_path = get_receipts_dir() / f"contribution_{contribution_id}_{filename}"
         try:
+            await file.seek(0)
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
         finally:
