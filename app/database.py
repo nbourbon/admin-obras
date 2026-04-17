@@ -15,13 +15,16 @@ elif database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 # Pool configuration for production (PostgreSQL)
+# IMPORTANT: Supabase Session Mode has a hard connection limit.
+# Keep pool_size very low to avoid "max clients reached" errors.
 pool_settings = {}
 if not database_url.startswith("sqlite"):
     pool_settings = {
-        "pool_size": 5,          # Keep 5 connections ready
-        "max_overflow": 10,      # Allow up to 15 total connections
+        "pool_size": 2,          # Only 2 persistent connections
+        "max_overflow": 1,       # Allow 1 extra on burst (3 max total)
         "pool_pre_ping": True,   # Test connections before use (important for remote DB)
-        "pool_recycle": 3600,    # Recycle connections after 1 hour
+        "pool_recycle": 300,     # Recycle connections after 5 min (faster than default)
+        "pool_timeout": 30,      # Fail fast if pool is exhausted
     }
 
 engine = create_engine(
