@@ -85,14 +85,21 @@ async def list_expenses(
         .all()
     )
 
+    # Batch-load all participant payments in one query (avoid N+1)
+    expense_ids = [e.id for e in expenses]
+    payments_by_expense: dict = {}
+    if expense_ids:
+        all_payments = db.query(ParticipantPayment).filter(
+            ParticipantPayment.expense_id.in_(expense_ids),
+            ParticipantPayment.is_deleted == False,
+        ).all()
+        for p in all_payments:
+            payments_by_expense.setdefault(p.expense_id, []).append(p)
+
     # Enrich expenses with payment tracking info (similar to contributions)
     enriched_expenses = []
     for expense in expenses:
-        # Get all participant payments for this expense (exclude deleted)
-        payments = db.query(ParticipantPayment).filter(
-            ParticipantPayment.expense_id == expense.id,
-            ParticipantPayment.is_deleted == False,
-        ).all()
+        payments = payments_by_expense.get(expense.id, [])
 
         # Find my payment
         my_payment = next((p for p in payments if p.user_id == current_user.id), None)

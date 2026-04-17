@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 from app.config import get_settings
 
 settings = get_settings()
@@ -14,17 +15,14 @@ elif database_url.startswith("postgresql://"):
     # Use psycopg3 driver explicitly
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
-# Pool configuration for production (PostgreSQL)
-# IMPORTANT: Supabase Session Mode has a hard connection limit.
-# Keep pool_size very low to avoid "max clients reached" errors.
+# Pool configuration
+# PostgreSQL (Supabase): Use NullPool to avoid "max clients reached".
+# Each request opens/closes its own connection. Slightly more latency
+# per request, but completely eliminates connection pool exhaustion.
 pool_settings = {}
 if not database_url.startswith("sqlite"):
     pool_settings = {
-        "pool_size": 2,          # Only 2 persistent connections
-        "max_overflow": 1,       # Allow 1 extra on burst (3 max total)
-        "pool_pre_ping": True,   # Test connections before use (important for remote DB)
-        "pool_recycle": 300,     # Recycle connections after 5 min (faster than default)
-        "pool_timeout": 30,      # Fail fast if pool is exhausted
+        "poolclass": NullPool,
     }
 
 engine = create_engine(
