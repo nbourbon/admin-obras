@@ -1233,7 +1233,10 @@ function Expenses() {
     setShowPaymentModal(true)
   }
 
+  const [loadError, setLoadError] = useState(null)
+
   const loadData = async () => {
+    setLoadError(null)
     try {
       const [expensesRes, providersRes, categoriesRes, rubrosRes] = await Promise.all([
         expensesAPI.list({ include_deleted: showDeleted }),
@@ -1247,6 +1250,8 @@ function Expenses() {
       setRubros(rubrosRes.data)
     } catch (err) {
       console.error('Error loading data:', err)
+      const detail = err.response?.data?.detail || err.message || 'Error desconocido'
+      setLoadError(detail)
     } finally {
       setLoading(false)
     }
@@ -1416,7 +1421,19 @@ function Expenses() {
         </div>
       )}
 
-      {expenses.length === 0 ? (
+      {loadError ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl shadow-sm p-12 text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-4 text-lg font-medium text-red-900">Error al cargar gastos</h3>
+          <p className="mt-2 text-red-700 text-sm">{loadError}</p>
+          <button
+            onClick={() => { setLoading(true); loadData() }}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : expenses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">Sin gastos</h3>

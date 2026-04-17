@@ -43,6 +43,9 @@ async def list_expenses(
     By default, deleted expenses and contribution requests are excluded.
     Use include_contributions=true to include contribution requests.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     query = (
         db.query(Expense)
         .options(
