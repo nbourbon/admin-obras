@@ -384,6 +384,18 @@ def _run_migrations():
 
     # --- Contributions table ---
     contributions_cols = get_cols('contributions')
+    existing_indexes = {}
+
+    def has_index(table, index_name):
+        if table not in table_names:
+            return True
+        if table not in existing_indexes:
+            existing_indexes[table] = {idx['name'] for idx in inspector.get_indexes(table)}
+        return index_name in existing_indexes[table]
+
+    def add_index(table, index_name, sql, description):
+        if table in table_names and not has_index(table, index_name):
+            pending.append((sql, description))
     if contributions_cols:
         # Rename user_id to created_by if needed
         if 'user_id' in contributions_cols and 'created_by' not in contributions_cols:
@@ -453,6 +465,78 @@ def _run_migrations():
         if 'receipt_file_path' in contributions_cols:
             pending.append(('ALTER TABLE contributions DROP COLUMN IF EXISTS receipt_file_path',
                             'Removed receipt_file_path from contributions'))
+
+    # Performance indexes for project-scoped dashboard/list queries.
+    add_index(
+        'expenses',
+        'ix_expenses_project_deleted_date',
+        'CREATE INDEX IF NOT EXISTS ix_expenses_project_deleted_date '
+        'ON expenses (project_id, is_deleted, expense_date DESC)',
+        'Added index for project expense totals and date filters',
+    )
+    add_index(
+        'expenses',
+        'ix_expenses_project_contribution_deleted_date',
+        'CREATE INDEX IF NOT EXISTS ix_expenses_project_contribution_deleted_date '
+        'ON expenses (project_id, is_contribution, is_deleted, expense_date DESC)',
+        'Added index for regular/contribution expense lists',
+    )
+    add_index(
+        'expenses',
+        'ix_expenses_project_provider_deleted',
+        'CREATE INDEX IF NOT EXISTS ix_expenses_project_provider_deleted '
+        'ON expenses (project_id, provider_id, is_deleted)',
+        'Added index for expenses grouped by provider',
+    )
+    add_index(
+        'expenses',
+        'ix_expenses_project_category_deleted',
+        'CREATE INDEX IF NOT EXISTS ix_expenses_project_category_deleted '
+        'ON expenses (project_id, category_id, is_deleted)',
+        'Added index for expenses grouped by category',
+    )
+    add_index(
+        'expenses',
+        'ix_expenses_project_rubro_deleted',
+        'CREATE INDEX IF NOT EXISTS ix_expenses_project_rubro_deleted '
+        'ON expenses (project_id, rubro_id, is_deleted)',
+        'Added index for expenses grouped by rubro',
+    )
+    add_index(
+        'participant_payments',
+        'ix_participant_payments_expense_deleted',
+        'CREATE INDEX IF NOT EXISTS ix_participant_payments_expense_deleted '
+        'ON participant_payments (expense_id, is_deleted)',
+        'Added index for payment lookups by expense',
+    )
+    add_index(
+        'participant_payments',
+        'ix_participant_payments_user_paid_deleted',
+        'CREATE INDEX IF NOT EXISTS ix_participant_payments_user_paid_deleted '
+        'ON participant_payments (user_id, is_paid, is_deleted)',
+        'Added index for user payment summaries',
+    )
+    add_index(
+        'project_members',
+        'ix_project_members_project_active',
+        'CREATE INDEX IF NOT EXISTS ix_project_members_project_active '
+        'ON project_members (project_id, is_active)',
+        'Added index for active project member queries',
+    )
+    add_index(
+        'contributions',
+        'ix_contributions_project_status',
+        'CREATE INDEX IF NOT EXISTS ix_contributions_project_status '
+        'ON contributions (project_id, status)',
+        'Added index for approved contribution summaries',
+    )
+    add_index(
+        'contribution_payments',
+        'ix_contribution_payments_user_paid_contribution',
+        'CREATE INDEX IF NOT EXISTS ix_contribution_payments_user_paid_contribution '
+        'ON contribution_payments (user_id, is_paid, contribution_id)',
+        'Added index for pending contribution checks',
+    )
 
     # Execute all pending migrations
     if not pending:

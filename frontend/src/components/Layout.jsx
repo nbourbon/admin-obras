@@ -31,16 +31,10 @@ function Layout() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
   const [myContributionsCount, setMyContributionsCount] = useState(0)
 
+  // Load counts for the selected project and refresh them when returning from respective pages.
   useEffect(() => {
-    if (currentProject) {
-      loadUnreadCount()
-      loadPendingApprovalsCount()
-      loadMyContributionsCount()
-    }
-  }, [currentProject])
+    if (!currentProject) return
 
-  // Reload counts when returning from respective pages
-  useEffect(() => {
     // Reload notes count when not on notes page
     if (!pathname.startsWith('/notes/') && pathname !== '/notes') {
       loadUnreadCount()
@@ -53,7 +47,7 @@ function Layout() {
     if (!pathname.startsWith('/contributions')) {
       loadMyContributionsCount()
     }
-  }, [pathname])
+  }, [pathname, currentProject?.id])
 
   const loadUnreadCount = async () => {
     try {

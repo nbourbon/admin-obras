@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,15 +44,20 @@ class ConnectionCloseMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Log incoming request with timestamp for diagnostics
         timestamp = datetime.utcnow().isoformat()
+        start = time.perf_counter()
         logger.info(f"[{timestamp}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}")
 
         response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
 
         # Force connection close to prevent zombie connections when Fly.io suspends
         response.headers["Connection"] = "close"
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
 
-        logger.info(f"[{timestamp}] {request.method} {request.url.path} - Response: {response.status_code}")
+        logger.info(
+            f"[{timestamp}] {request.method} {request.url.path} - "
+            f"Response: {response.status_code} - Duration: {duration_ms:.1f}ms"
+        )
         return response
 
 

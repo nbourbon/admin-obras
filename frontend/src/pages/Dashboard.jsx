@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { dashboardAPI, exchangeRateAPI, avanceObraAPI } from '../api/client'
+import { dashboardAPI, avanceObraAPI } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useProject } from '../context/ProjectContext'
 import { AlertCircle, ArrowRight, Download, Calendar } from 'lucide-react'
@@ -81,11 +81,10 @@ function Dashboard() {
       setLoading(true)
       const params = getDateParams()
 
-      const [summaryRes, myStatusRes, evolutionRes, rateRes, categoryRes, rubroRes, balancesRes, avanceRes] = await Promise.all([
+      const [summaryRes, myStatusRes, evolutionRes, categoryRes, rubroRes, balancesRes, avanceRes] = await Promise.all([
         dashboardAPI.summary(params),
         dashboardAPI.myStatus(),
         dashboardAPI.evolution(params),
-        exchangeRateAPI.current().catch(() => null),
         dashboardAPI.expensesByCategory(params),
         dashboardAPI.expensesByRubro(params),
         dashboardAPI.balances().catch(() => ({ data: [] })),
@@ -99,7 +98,9 @@ function Dashboard() {
       setByRubro(rubroRes.data)
       setBalances(balancesRes.data || [])
       setAvanceData(avanceRes.data || [])
-      if (rateRes) setExchangeRate(rateRes.data)
+      if (summaryRes.data?.current_exchange_rate) {
+        setExchangeRate({ rate: summaryRes.data.current_exchange_rate })
+      }
     } catch (err) {
       setError('Error al cargar datos del dashboard')
       console.error(err)

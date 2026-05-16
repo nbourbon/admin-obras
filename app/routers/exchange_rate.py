@@ -10,7 +10,7 @@ from app.utils.dependencies import get_current_user
 from app.models.user import User
 from app.models.payment import ExchangeRateLog
 from app.services.exchange_rate import (
-    fetch_blue_dollar_rate_sync,
+    fetch_blue_dollar_rate,
     get_exchange_rate_history,
     log_exchange_rate,
 )
@@ -43,7 +43,7 @@ async def get_current_exchange_rate(
     Get the current blue dollar exchange rate.
     """
     try:
-        rate = fetch_blue_dollar_rate_sync()
+        rate = await fetch_blue_dollar_rate()
         # Log the fetched rate
         log_exchange_rate(db, rate, "bluelytics")
 
