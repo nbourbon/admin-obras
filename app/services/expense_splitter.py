@@ -8,6 +8,7 @@ from app.models.expense import Expense, ExpenseStatus
 from app.models.payment import ParticipantPayment
 from app.models.project_member import ProjectMember
 from app.models.project import Project
+from app.services.balance_audit import record_member_balance_delta
 
 
 def get_active_participants(db: Session) -> List[User]:
@@ -293,8 +294,30 @@ def create_payments_current_account(
             # Credit balance
             if balance_credit_usd is not None:
                 payer_member.balance_usd += balance_credit_usd
+                record_member_balance_delta(
+                    db,
+                    member=payer_member,
+                    currency="USD",
+                    amount=balance_credit_usd,
+                    movement_type="direct_contribution",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=contribution.description,
+                    created_by=expense.created_by,
+                )
             if balance_credit_ars is not None:
                 payer_member.balance_ars += balance_credit_ars
+                record_member_balance_delta(
+                    db,
+                    member=payer_member,
+                    currency="ARS",
+                    amount=balance_credit_ars,
+                    movement_type="direct_contribution",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=contribution.description,
+                    created_by=expense.created_by,
+                )
             payer_member.balance_updated_at = now
 
         db.flush()
@@ -306,21 +329,66 @@ def create_payments_current_account(
         payment = auto_pay_from_balance(
             db, expense, member, amount_due_usd, amount_due_ars, currency_mode
         )
+        db.add(payment)
+        db.flush()
 
         # Deduct from balance
         if currency_mode == "ARS":
             member.balance_ars -= amount_due_ars
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="ARS",
+                amount=-amount_due_ars,
+                movement_type="expense_payment",
+                source_type="participant_payment",
+                source_id=payment.id,
+                description=expense.description,
+                created_by=expense.created_by,
+            )
         elif currency_mode == "USD":
             member.balance_usd -= amount_due_usd
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="USD",
+                amount=-amount_due_usd,
+                movement_type="expense_payment",
+                source_type="participant_payment",
+                source_id=payment.id,
+                description=expense.description,
+                created_by=expense.created_by,
+            )
         else:  # DUAL
             if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
                 member.balance_ars -= amount_due_ars
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=-amount_due_ars,
+                    movement_type="expense_payment",
+                    source_type="participant_payment",
+                    source_id=payment.id,
+                    description=expense.description,
+                    created_by=expense.created_by,
+                )
             else:
                 amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
                 member.balance_ars -= amount_due_ars_equivalent
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=-amount_due_ars_equivalent,
+                    movement_type="expense_payment",
+                    source_type="participant_payment",
+                    source_id=payment.id,
+                    description=expense.description,
+                    created_by=expense.created_by,
+                )
 
         member.balance_updated_at = now
-        db.add(payment)
         payments.append(payment)
 
     db.flush()
@@ -394,19 +462,65 @@ def create_participant_payments(
                 payment = auto_pay_from_balance(
                     db, expense, member, amount_due_usd, amount_due_ars, currency_mode
                 )
+                db.add(payment)
+                db.flush()
 
                 # Deduct from balance according to currency_mode
                 if currency_mode == "ARS":
                     member.balance_ars -= amount_due_ars
+                    record_member_balance_delta(
+                        db,
+                        member=member,
+                        currency="ARS",
+                        amount=-amount_due_ars,
+                        movement_type="expense_payment",
+                        source_type="participant_payment",
+                        source_id=payment.id,
+                        description=expense.description,
+                        created_by=expense.created_by,
+                    )
                 elif currency_mode == "USD":
                     member.balance_usd -= amount_due_usd
+                    record_member_balance_delta(
+                        db,
+                        member=member,
+                        currency="USD",
+                        amount=-amount_due_usd,
+                        movement_type="expense_payment",
+                        source_type="participant_payment",
+                        source_id=payment.id,
+                        description=expense.description,
+                        created_by=expense.created_by,
+                    )
                 else:  # DUAL
                     # In DUAL mode, balance is stored ONLY in ARS
                     if hasattr(expense, 'currency_original') and expense.currency_original.value == "ARS":
                         member.balance_ars -= amount_due_ars
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=-amount_due_ars,
+                            movement_type="expense_payment",
+                            source_type="participant_payment",
+                            source_id=payment.id,
+                            description=expense.description,
+                            created_by=expense.created_by,
+                        )
                     else:  # Expense was in USD
                         amount_due_ars_equivalent = amount_due_usd * expense.exchange_rate_used
                         member.balance_ars -= amount_due_ars_equivalent
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=-amount_due_ars_equivalent,
+                            movement_type="expense_payment",
+                            source_type="participant_payment",
+                            source_id=payment.id,
+                            description=expense.description,
+                            created_by=expense.created_by,
+                        )
 
                 member.balance_updated_at = datetime.utcnow()
             else:
@@ -419,7 +533,8 @@ def create_participant_payments(
                     is_paid=False,
                 )
 
-            db.add(payment)
+            if not has_sufficient_balance:
+                db.add(payment)
             payments.append(payment)
     else:
         # Legacy: use global participants

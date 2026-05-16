@@ -19,6 +19,7 @@ from app.models.project import Project
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync, convert_currency, log_exchange_rate
 from app.services.expense_splitter import create_participant_payments, create_payments_current_account, update_expense_status
 from app.services.file_storage import save_invoice, get_file_path, get_file_url
+from app.services.balance_audit import record_member_balance_delta
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -738,12 +739,45 @@ async def delete_expense(
                 if currency_mode == "ARS":
                     if payment.amount_paid_ars:
                         member.balance_ars += payment.amount_paid_ars
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=payment.amount_paid_ars,
+                            movement_type="reversal",
+                            source_type="participant_payment",
+                            source_id=payment.id,
+                            description=f"Reversión por eliminación: {expense.description}",
+                            created_by=current_user.id,
+                        )
                 elif currency_mode == "USD":
                     if payment.amount_paid_usd:
                         member.balance_usd += payment.amount_paid_usd
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="USD",
+                            amount=payment.amount_paid_usd,
+                            movement_type="reversal",
+                            source_type="participant_payment",
+                            source_id=payment.id,
+                            description=f"Reversión por eliminación: {expense.description}",
+                            created_by=current_user.id,
+                        )
                 else:  # DUAL
                     if payment.amount_paid_ars:
                         member.balance_ars += payment.amount_paid_ars
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=payment.amount_paid_ars,
+                            movement_type="reversal",
+                            source_type="participant_payment",
+                            source_id=payment.id,
+                            description=f"Reversión por eliminación: {expense.description}",
+                            created_by=current_user.id,
+                        )
 
                 member.balance_updated_at = datetime.utcnow()
 

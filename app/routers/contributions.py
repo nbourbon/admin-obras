@@ -25,6 +25,7 @@ from app.models.contribution import Contribution, Currency, ContributionStatus
 from app.models.contribution_payment import ContributionPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.services.balance_audit import record_member_balance_delta
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -455,8 +456,30 @@ async def create_unilateral_contribution(
         currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
         if currency_mode == "USD":
             member.balance_usd += data.amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="USD",
+                amount=data.amount,
+                movement_type="direct_contribution",
+                source_type="contribution",
+                source_id=contribution.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         else:
             member.balance_ars += data.amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="ARS",
+                amount=data.amount,
+                movement_type="direct_contribution",
+                source_type="contribution",
+                source_id=contribution.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         member.balance_updated_at = now
 
     db.add(cp)
@@ -535,8 +558,30 @@ async def create_balance_adjustment(
         # Update member balance
         if currency_mode == "USD":
             member.balance_usd += member_amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="USD",
+                amount=member_amount,
+                movement_type="manual_adjustment",
+                source_type="contribution",
+                source_id=contribution.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         else:
             member.balance_ars += member_amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="ARS",
+                amount=member_amount,
+                movement_type="manual_adjustment",
+                source_type="contribution",
+                source_id=contribution.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         member.balance_updated_at = now
 
     db.commit()
@@ -659,10 +704,43 @@ async def submit_contribution_payment(
             # Credit balance according to currency_mode
             if currency_mode == "ARS":
                 member.balance_ars += payment.amount_paid_ars
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=payment.amount_paid_ars,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
             elif currency_mode == "USD":
                 member.balance_usd += payment.amount_paid_usd
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="USD",
+                    amount=payment.amount_paid_usd,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
             else:  # DUAL - balance is stored ONLY in ARS
                 member.balance_ars += payment.amount_paid_ars
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=payment.amount_paid_ars,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
 
             member.balance_updated_at = datetime.utcnow()
     else:
@@ -742,14 +820,58 @@ async def submit_contribution_payment(
                 # Deduct from balance
                 if currency_mode == "ARS":
                     member.balance_ars -= pending_payment.amount_due_ars
+                    record_member_balance_delta(
+                        db,
+                        member=member,
+                        currency="ARS",
+                        amount=-pending_payment.amount_due_ars,
+                        movement_type="expense_payment",
+                        source_type="participant_payment",
+                        source_id=pending_payment.id,
+                        description=expense.description,
+                        created_by=current_user.id,
+                    )
                 elif currency_mode == "USD":
                     member.balance_usd -= pending_payment.amount_due_usd
+                    record_member_balance_delta(
+                        db,
+                        member=member,
+                        currency="USD",
+                        amount=-pending_payment.amount_due_usd,
+                        movement_type="expense_payment",
+                        source_type="participant_payment",
+                        source_id=pending_payment.id,
+                        description=expense.description,
+                        created_by=current_user.id,
+                    )
                 else:  # DUAL
                     if expense.currency_original.value == "ARS":
                         member.balance_ars -= pending_payment.amount_due_ars
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=-pending_payment.amount_due_ars,
+                            movement_type="expense_payment",
+                            source_type="participant_payment",
+                            source_id=pending_payment.id,
+                            description=expense.description,
+                            created_by=current_user.id,
+                        )
                     else:
                         amount_due_ars_equivalent = pending_payment.amount_due_usd * expense.exchange_rate_used
                         member.balance_ars -= amount_due_ars_equivalent
+                        record_member_balance_delta(
+                            db,
+                            member=member,
+                            currency="ARS",
+                            amount=-amount_due_ars_equivalent,
+                            movement_type="expense_payment",
+                            source_type="participant_payment",
+                            source_id=pending_payment.id,
+                            description=expense.description,
+                            created_by=current_user.id,
+                        )
 
                 member.balance_updated_at = datetime.utcnow()
                 auto_paid_count += 1
@@ -918,11 +1040,47 @@ async def approve_contribution_payment(
 
             # Credit balance according to currency_mode
             if currency_mode == "ARS":
-                member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+                amount = payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+                member.balance_ars += amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=amount,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
             elif currency_mode == "USD":
-                member.balance_usd += payment.amount_paid_usd if payment.amount_paid_usd else payment.amount_paid
+                amount = payment.amount_paid_usd if payment.amount_paid_usd else payment.amount_paid
+                member.balance_usd += amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="USD",
+                    amount=amount,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
             else:  # DUAL - balance is stored ONLY in ARS
-                member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+                amount = payment.amount_paid_ars if payment.amount_paid_ars else payment.amount_paid
+                member.balance_ars += amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=amount,
+                    movement_type="contribution_payment",
+                    source_type="contribution_payment",
+                    source_id=payment.id,
+                    description=contribution.description,
+                    created_by=current_user.id,
+                )
 
             member.balance_updated_at = datetime.utcnow()
     else:
@@ -1053,11 +1211,47 @@ async def admin_mark_contribution_paid(
     if member:
         # Credit balance according to currency_mode
         if currency_mode == "ARS":
-            member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+            amount = payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+            member.balance_ars += amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="ARS",
+                amount=amount,
+                movement_type="contribution_payment",
+                source_type="contribution_payment",
+                source_id=payment.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         elif currency_mode == "USD":
-            member.balance_usd += payment.amount_paid_usd if payment.amount_paid_usd else amount_paid
+            amount = payment.amount_paid_usd if payment.amount_paid_usd else amount_paid
+            member.balance_usd += amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="USD",
+                amount=amount,
+                movement_type="contribution_payment",
+                source_type="contribution_payment",
+                source_id=payment.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
         else:  # DUAL - balance is stored ONLY in ARS
-            member.balance_ars += payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+            amount = payment.amount_paid_ars if payment.amount_paid_ars else amount_paid
+            member.balance_ars += amount
+            record_member_balance_delta(
+                db,
+                member=member,
+                currency="ARS",
+                amount=amount,
+                movement_type="contribution_payment",
+                source_type="contribution_payment",
+                source_id=payment.id,
+                description=contribution.description,
+                created_by=current_user.id,
+            )
 
         member.balance_updated_at = datetime.utcnow()
 
@@ -1149,8 +1343,30 @@ async def delete_contribution(
             # Reverse the balance credit based on currency mode
             if currency_mode == "USD":
                 member.balance_usd -= contribution.amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="USD",
+                    amount=-contribution.amount,
+                    movement_type="reversal",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=f"Reversión: {contribution.description}",
+                    created_by=current_user.id,
+                )
             else:
                 member.balance_ars -= contribution.amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=-contribution.amount,
+                    movement_type="reversal",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=f"Reversión: {contribution.description}",
+                    created_by=current_user.id,
+                )
             member.balance_updated_at = datetime.utcnow()
 
     # For adjustments, reverse the balance for all members
@@ -1166,8 +1382,30 @@ async def delete_contribution(
             
             if currency_mode == "USD":
                 member.balance_usd -= member_amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="USD",
+                    amount=-member_amount,
+                    movement_type="reversal",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=f"Reversión: {contribution.description}",
+                    created_by=current_user.id,
+                )
             else:
                 member.balance_ars -= member_amount
+                record_member_balance_delta(
+                    db,
+                    member=member,
+                    currency="ARS",
+                    amount=-member_amount,
+                    movement_type="reversal",
+                    source_type="contribution",
+                    source_id=contribution.id,
+                    description=f"Reversión: {contribution.description}",
+                    created_by=current_user.id,
+                )
             member.balance_updated_at = datetime.utcnow()
 
     # Delete all associated payments (cascade should handle this, but being explicit)

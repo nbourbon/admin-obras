@@ -68,6 +68,7 @@ def init_db():
         ContributionPayment,
         ContributionAbsorption,
         AvanceObra,
+        BalanceMovement,
     )
     Base.metadata.create_all(bind=engine)
 
@@ -536,6 +537,27 @@ def _run_migrations():
         'CREATE INDEX IF NOT EXISTS ix_contribution_payments_user_paid_contribution '
         'ON contribution_payments (user_id, is_paid, contribution_id)',
         'Added index for pending contribution checks',
+    )
+    add_index(
+        'balance_movements',
+        'ix_balance_movements_project_created',
+        'CREATE INDEX IF NOT EXISTS ix_balance_movements_project_created '
+        'ON balance_movements (project_id, created_at)',
+        'Added index for balance movement project history',
+    )
+    add_index(
+        'balance_movements',
+        'ix_balance_movements_user_created',
+        'CREATE INDEX IF NOT EXISTS ix_balance_movements_user_created '
+        'ON balance_movements (user_id, created_at)',
+        'Added index for balance movement member history',
+    )
+    add_index(
+        'balance_movements',
+        'ix_balance_movements_source',
+        'CREATE INDEX IF NOT EXISTS ix_balance_movements_source '
+        'ON balance_movements (source_type, source_id)',
+        'Added index for balance movement source lookups',
     )
 
     # Execute all pending migrations

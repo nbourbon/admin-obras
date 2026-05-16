@@ -42,6 +42,126 @@ def my_status(client, headers):
     return r.json()
 
 
+def setup_two_member_ars_current_account_project(client, email_suffix):
+    """Create a construction project in ARS current-account mode with 70/30 members."""
+    r = client.post("/auth/register-first-admin", json={
+        "email": f"u1-{email_suffix}@example.com",
+        "password": "Test1234!",
+        "full_name": "Usuario 1",
+    })
+    assert r.status_code == 201, f"register-first-admin: {r.text}"
+    u1_id = r.json()["id"]
+
+    r = client.post("/auth/login", data={
+        "username": f"u1-{email_suffix}@example.com",
+        "password": "Test1234!",
+    })
+    assert r.status_code == 200, f"login u1: {r.text}"
+    h1 = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    r = client.post("/auth/register", json={
+        "email": f"u2-{email_suffix}@example.com",
+        "password": "Test1234!",
+        "full_name": "Usuario 2",
+    }, headers=h1)
+    assert r.status_code == 201, f"register u2: {r.text}"
+    u2_id = r.json()["id"]
+
+    r = client.post("/projects", json={
+        "name": f"Construccion ARS Cta Cte {email_suffix}",
+        "currency_mode": "ARS",
+        "project_type": "construccion",
+        "type_parameters": {
+            "square_meters": 1300,
+            "contribution_mode": "current_account",
+        },
+    }, headers=h1)
+    assert r.status_code == 200, f"create project: {r.text}"
+    project_id = r.json()["id"]
+    h1p = {**h1, "X-Project-ID": str(project_id)}
+
+    r = client.put(f"/projects/{project_id}/members/{u1_id}", json={
+        "participation_percentage": 70,
+    }, headers=h1p)
+    assert r.status_code == 200, f"update u1 percentage: {r.text}"
+
+    r = client.post(f"/projects/{project_id}/members", json={
+        "user_id": u2_id,
+        "participation_percentage": 30,
+    }, headers=h1p)
+    assert r.status_code == 200, f"add member: {r.text}"
+
+    return project_id, u1_id, u2_id, h1p
+
+
+def setup_two_member_dual_current_account_project(client, email_suffix):
+    """Create a construction project in DUAL current-account mode with 70/30 members."""
+    r = client.post("/auth/register-first-admin", json={
+        "email": f"u1-dual-{email_suffix}@example.com",
+        "password": "Test1234!",
+        "full_name": "Usuario 1",
+    })
+    assert r.status_code == 201, f"register-first-admin dual: {r.text}"
+    u1_id = r.json()["id"]
+
+    r = client.post("/auth/login", data={
+        "username": f"u1-dual-{email_suffix}@example.com",
+        "password": "Test1234!",
+    })
+    assert r.status_code == 200, f"login u1 dual: {r.text}"
+    h1 = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    r = client.post("/auth/register", json={
+        "email": f"u2-dual-{email_suffix}@example.com",
+        "password": "Test1234!",
+        "full_name": "Usuario 2",
+    }, headers=h1)
+    assert r.status_code == 201, f"register u2 dual: {r.text}"
+    u2_id = r.json()["id"]
+
+    r = client.post("/projects", json={
+        "name": f"Construccion DUAL Cta Cte {email_suffix}",
+        "currency_mode": "DUAL",
+        "project_type": "construccion",
+        "type_parameters": {
+            "square_meters": 1300,
+            "contribution_mode": "current_account",
+        },
+    }, headers=h1)
+    assert r.status_code == 200, f"create dual project: {r.text}"
+    project_id = r.json()["id"]
+    h1p = {**h1, "X-Project-ID": str(project_id)}
+
+    r = client.put(f"/projects/{project_id}/members/{u1_id}", json={
+        "participation_percentage": 70,
+    }, headers=h1p)
+    assert r.status_code == 200, f"update u1 dual percentage: {r.text}"
+
+    r = client.post(f"/projects/{project_id}/members", json={
+        "user_id": u2_id,
+        "participation_percentage": 30,
+    }, headers=h1p)
+    assert r.status_code == 200, f"add dual member: {r.text}"
+
+    return project_id, u1_id, u2_id, h1p
+
+
+def balance_movements_for_project(project_id):
+    from app.database import SessionLocal
+    from app.models.balance_movement import BalanceMovement
+
+    db = SessionLocal()
+    try:
+        return (
+            db.query(BalanceMovement)
+            .filter(BalanceMovement.project_id == project_id)
+            .order_by(BalanceMovement.id)
+            .all()
+        )
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # Test principal
 # ---------------------------------------------------------------------------
@@ -449,3 +569,164 @@ def test_escenario_02_construccion_ars_current_account(client):
     st2 = my_status(client, h2p)
     assert_close(st2["balance_aportes_ars"],   +212475, "p6 U2 saldo")
     assert_close(st2["total_paid_ars"],         161775, "p6 U2 gastado")
+
+
+def test_current_account_rejects_expense_when_cash_pool_is_short(client):
+    """
+    Construcción + Aportes a Cta Cte:
+    si la caja general tiene menos saldo que el gasto y no se indica pagador,
+    el gasto debe rechazarse y no debe crear pagos ni saldos negativos.
+    """
+    project_id, _, _, h1p = setup_two_member_ars_current_account_project(
+        client,
+        "reject-short-cash",
+    )
+
+    # Cargar caja con el monto que reproduce el caso real: $859.091.
+    r = client.post("/contributions/adjust-balance", json={
+        "description": "Caja inicial para prueba de insuficiencia",
+        "amount": "859091.00",
+        "currency": "ARS",
+    }, headers=h1p)
+    assert r.status_code == 201, f"adjust balance: {r.text}"
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_balance_ars"], 859091, "caja inicial")
+
+    # El gasto excede la caja por $20.709. Sin pagador debe fallar.
+    r = client.post("/expenses", json={
+        "description": "Certificado documentacion municipal",
+        "amount_original": "879800.00",
+        "currency_original": "ARS",
+    }, headers=h1p)
+    assert r.status_code == 400, f"expense debe rechazar caja insuficiente: {r.text}"
+    assert "caja no tiene saldo suficiente" in r.text.lower()
+
+    # No se debe haber creado el gasto ni modificado la caja.
+    r = client.get("/expenses", headers=h1p)
+    assert r.status_code == 200, f"list expenses: {r.text}"
+    assert r.json() == []
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_ars"], 0, "sin gasto creado")
+    assert_close(s["total_balance_ars"], 859091, "caja intacta")
+
+    movements = balance_movements_for_project(project_id)
+    assert len(movements) == 2
+    assert {m.movement_type for m in movements} == {"manual_adjustment"}
+    assert sum(Decimal(str(m.amount)) for m in movements) == Decimal("859091.00")
+
+
+def test_current_account_allows_short_cash_expense_when_payer_covers_gap(client):
+    """
+    El mismo caso debe permitirse si se informa un pagador por la diferencia.
+    Caja $859.091 + pagador $20.709 cubren gasto $879.800.
+    """
+    project_id, u1_id, _, h1p = setup_two_member_ars_current_account_project(
+        client,
+        "payer-covers-gap",
+    )
+
+    r = client.post("/contributions/adjust-balance", json={
+        "description": "Caja inicial para prueba con pagador",
+        "amount": "859091.00",
+        "currency": "ARS",
+    }, headers=h1p)
+    assert r.status_code == 201, f"adjust balance: {r.text}"
+
+    r = client.post("/expenses", json={
+        "description": "Certificado documentacion municipal con pagador",
+        "amount_original": "879800.00",
+        "currency_original": "ARS",
+        "payers": [{"user_id": u1_id, "amount": "20709.00"}],
+    }, headers=h1p)
+    assert r.status_code == 201, f"expense con pagador debe pasar: {r.text}"
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_ars"], 879800, "gasto creado")
+    assert_close(s["total_balance_ars"], 0, "caja cubierta exacta")
+
+    movements = balance_movements_for_project(project_id)
+    assert len(movements) == 5
+    assert [m.movement_type for m in movements].count("manual_adjustment") == 2
+    assert [m.movement_type for m in movements].count("direct_contribution") == 1
+    assert [m.movement_type for m in movements].count("expense_payment") == 2
+    assert sum(Decimal(str(m.amount)) for m in movements) == Decimal("0.00")
+
+
+def test_dual_current_account_rejects_ars_expense_when_cash_pool_is_short(client):
+    """
+    Reproduce el modo de Cervantes: Construcción DUAL + Aportes a Cta Cte.
+    Para gastos en ARS, la caja se valida en ARS aunque el dashboard muestre USD.
+    """
+    project_id, _, _, h1p = setup_two_member_dual_current_account_project(
+        client,
+        "reject-short-cash",
+    )
+
+    r = client.post("/contributions/adjust-balance", json={
+        "description": "Caja inicial DUAL para prueba de insuficiencia",
+        "amount": "859091.00",
+        "currency": "ARS",
+    }, headers=h1p)
+    assert r.status_code == 201, f"adjust balance dual: {r.text}"
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_balance_ars"], 859091, "caja inicial DUAL")
+
+    r = client.post("/expenses", json={
+        "description": "Certificado documentacion municipal DUAL",
+        "amount_original": "879800.00",
+        "currency_original": "ARS",
+        "exchange_rate_override": "1415.00",
+    }, headers=h1p)
+    assert r.status_code == 400, f"expense DUAL debe rechazar caja insuficiente: {r.text}"
+    assert "caja no tiene saldo suficiente" in r.text.lower()
+
+    r = client.get("/expenses", headers=h1p)
+    assert r.status_code == 200, f"list expenses dual: {r.text}"
+    assert r.json() == []
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_ars"], 0, "sin gasto creado DUAL")
+    assert_close(s["total_balance_ars"], 859091, "caja DUAL intacta")
+
+    movements = balance_movements_for_project(project_id)
+    assert len(movements) == 2
+    assert {m.movement_type for m in movements} == {"manual_adjustment"}
+    assert sum(Decimal(str(m.amount)) for m in movements) == Decimal("859091.00")
+
+
+def test_dual_current_account_allows_ars_expense_when_payer_covers_gap(client):
+    """DUAL current-account permite el gasto si un pagador cubre el faltante."""
+    project_id, u1_id, _, h1p = setup_two_member_dual_current_account_project(
+        client,
+        "payer-covers-gap",
+    )
+
+    r = client.post("/contributions/adjust-balance", json={
+        "description": "Caja inicial DUAL para prueba con pagador",
+        "amount": "859091.00",
+        "currency": "ARS",
+    }, headers=h1p)
+    assert r.status_code == 201, f"adjust balance dual: {r.text}"
+
+    r = client.post("/expenses", json={
+        "description": "Certificado documentacion municipal DUAL con pagador",
+        "amount_original": "879800.00",
+        "currency_original": "ARS",
+        "exchange_rate_override": "1415.00",
+        "payers": [{"user_id": u1_id, "amount": "20709.00"}],
+    }, headers=h1p)
+    assert r.status_code == 201, f"expense DUAL con pagador debe pasar: {r.text}"
+
+    s = dashboard_summary(client, h1p)
+    assert_close(s["total_expenses_ars"], 879800, "gasto DUAL creado")
+    assert_close(s["total_balance_ars"], 0, "caja DUAL cubierta exacta")
+
+    movements = balance_movements_for_project(project_id)
+    assert len(movements) == 5
+    assert [m.movement_type for m in movements].count("manual_adjustment") == 2
+    assert [m.movement_type for m in movements].count("direct_contribution") == 1
+    assert [m.movement_type for m in movements].count("expense_payment") == 2
+    assert sum(Decimal(str(m.amount)) for m in movements) == Decimal("0.00")
