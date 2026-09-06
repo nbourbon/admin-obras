@@ -21,17 +21,19 @@ def get_active_participants(db: Session) -> List[User]:
     )
 
 
-def get_project_members(db: Session, project_id: int) -> List[ProjectMember]:
+def get_project_members(db: Session, project_id: int, *, lock_for_update: bool = False) -> List[ProjectMember]:
     """Get all active project members with participation > 0."""
-    return (
+    query = (
         db.query(ProjectMember)
         .join(User)
         .filter(ProjectMember.project_id == project_id)
         .filter(ProjectMember.is_active == True)
         .filter(User.is_active == True)
         .filter(ProjectMember.participation_percentage > 0)
-        .all()
     )
+    if lock_for_update:
+        query = query.with_for_update()
+    return query.all()
 
 
 def validate_participation_percentages(db: Session, project_id: Optional[int] = None) -> tuple[bool, Decimal]:
@@ -145,9 +147,21 @@ def create_payments_current_account(
     from app.models.contribution import Contribution, ContributionStatus, Currency as ContribCurrency
     from app.models.contribution_payment import ContributionPayment
 
-    members = get_project_members(db, expense.project_id)
+    # Serialize balance checks and deductions for this project's member accounts.
+    members = get_project_members(db, expense.project_id, lock_for_update=True)
     if not members:
         return []
+
+    if payers:
+        from fastapi import HTTPException, status
+        member_ids = {member.user_id for member in members}
+        payer_ids = [payer["user_id"] for payer in payers]
+        if len(payer_ids) != len(set(payer_ids)):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cada pagador puede indicarse una sola vez")
+        if any(payer_id not in member_ids for payer_id in payer_ids):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Todos los pagadores deben ser miembros activos del proyecto")
+        if any(Decimal(str(payer["amount"])) <= 0 for payer in payers):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Los aportes de los pagadores deben ser mayores que cero")
 
     # Calculate amounts per member
     def calc_amounts(percentage):
@@ -224,10 +238,8 @@ def create_payments_current_account(
             payer_user_id = payer_info["user_id"]
             payer_amount = Decimal(str(payer_info["amount"]))
 
-            # Find the member
-            payer_member = next((m for m in members if m.user_id == payer_user_id), None)
-            if not payer_member:
-                continue
+            # Payers were validated before their amounts were counted.
+            payer_member = next(m for m in members if m.user_id == payer_user_id)
 
             # Determine the amount to store in the contribution and credit to balance.
             # In DUAL mode, balance is always in ARS. Store the contribution in ARS too

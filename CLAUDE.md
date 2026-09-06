@@ -126,8 +126,13 @@ The app uses a custom migration system in `database.py` (`_run_migrations()`) th
 ## Key Conventions
 - **Project-based permissions**: Admin status is per-project (`ProjectMember.is_admin`), not global
 - Project admin endpoints use `get_project_admin_user` dependency
+- Project-owned resources must use `get_required_project` and include `project.id` in every list, detail, mutation, and file query
 - Helper function `is_project_admin(db, user_id, project_id)` for checking admin status
 - All monetary values stored as `Decimal(15,2)`
+- Positive payment/expense amounts are validated at the schema boundary; contribution payments must equal the remaining amount due
+- Balance-changing transactions lock the affected `ProjectMember` and payment rows on PostgreSQL before checking or updating balances
+- Rich text from notes is sanitized in the backend both when stored and when returned, including legacy rows
+- The frontend retries only GET/HEAD requests and follows pagination for expense and contribution lists
 - Exchange rate fetched from bluelytics, cached for 60 min (only in DUAL mode; skipped for single-currency projects)
 - Files stored with UUID names in `uploads/invoices/` and `uploads/receipts/`
 - Soft deletes via `is_active` flag (preserve history)

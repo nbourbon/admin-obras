@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
@@ -15,7 +15,7 @@ from app.schemas.payment import (
     PaymentApproval,
     MyPaymentItem,
 )
-from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_required_project, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense
 from app.models.payment import ParticipantPayment
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 async def get_my_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
     pending_only: bool = False,
 ):
     """
@@ -47,9 +47,7 @@ async def get_my_payments(
         .options(joinedload(ParticipantPayment.expense))
     )
 
-    # Filter by project if specified
-    if project:
-        query = query.join(Expense).filter(Expense.project_id == project.id)
+    query = query.join(Expense).filter(Expense.project_id == project.id)
 
     if pending_only:
         query = query.filter(ParticipantPayment.is_paid == False)
@@ -113,7 +111,7 @@ async def get_my_payments(
 async def get_all_my_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
     pending_only: bool = False,
 ):
     """
@@ -133,8 +131,7 @@ async def get_all_my_payments(
         .options(joinedload(ParticipantPayment.expense))
     )
 
-    if project:
-        expense_payments_query = expense_payments_query.join(Expense).filter(Expense.project_id == project.id)
+    expense_payments_query = expense_payments_query.join(Expense).filter(Expense.project_id == project.id)
 
     if pending_only:
         expense_payments_query = expense_payments_query.filter(ParticipantPayment.is_paid == False)
@@ -198,7 +195,7 @@ async def get_all_my_payments(
 async def get_pending_approval_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Get all payments pending admin approval for the current project (project admin only).
@@ -217,8 +214,7 @@ async def get_pending_approval_payments(
         )
     )
 
-    if project:
-        expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
+    expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
 
     expense_payments = expense_query.order_by(ParticipantPayment.submitted_at.desc()).all()
 
@@ -235,8 +231,7 @@ async def get_pending_approval_payments(
         )
     )
 
-    if project:
-        contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+    contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
 
     contribution_payments = contribution_query.order_by(ContributionPayment.submitted_at.desc()).all()
 
@@ -372,7 +367,7 @@ async def get_pending_approval_payments(
 async def get_pending_approval_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Get count of payments pending admin approval for the current project.
@@ -386,8 +381,7 @@ async def get_pending_approval_count(
         ParticipantPayment.is_pending_approval == True
     )
 
-    if project:
-        expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
+    expense_query = expense_query.join(Expense).filter(Expense.project_id == project.id)
 
     expense_count = expense_query.count()
 
@@ -397,8 +391,7 @@ async def get_pending_approval_count(
         ((ContributionPayment.submitted_at != None) & (ContributionPayment.is_paid == False))
     )
 
-    if project:
-        contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+    contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
 
     contribution_count = contribution_query.count()
 
@@ -410,6 +403,7 @@ async def get_payment(
     payment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Get a specific payment.
@@ -421,7 +415,11 @@ async def get_payment(
             joinedload(ParticipantPayment.expense),
             joinedload(ParticipantPayment.user)
         )
-        .filter(ParticipantPayment.id == payment_id)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
         .first()
     )
 
@@ -497,13 +495,23 @@ async def submit_payment(
     payment_data: PaymentMarkPaid,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Submit a payment for approval.
     Users can only submit their own payments.
     Payment will be marked as pending approval until admin approves.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -529,7 +537,6 @@ async def submit_payment(
     user_is_admin = False
     expense = db.query(Expense).filter(Expense.id == payment.expense_id).first()
     if expense and expense.project_id:
-        project = db.query(Project).filter(Project.id == expense.project_id).first()
         is_individual = project.is_individual if project else False
         user_is_admin = is_project_admin(db, current_user.id, expense.project_id)
 
@@ -618,6 +625,7 @@ async def approve_payment(
     approval: PaymentApproval,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    selected_project: Project = Depends(get_required_project),
 ):
     """
     Approve or reject a payment (project admin only).
@@ -629,11 +637,29 @@ async def approve_payment(
     from app.models.project import Project
 
     # Try to find payment in ParticipantPayment first
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == selected_project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     # If not found, try ContributionPayment
     if not payment:
-        contribution_payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+        contribution_payment = (
+            db.query(ContributionPayment)
+            .join(Contribution)
+            .filter(
+                ContributionPayment.id == payment_id,
+                Contribution.project_id == selected_project.id,
+            )
+            .with_for_update()
+            .first()
+        )
 
         if contribution_payment:
             # Handle contribution payment approval
@@ -672,7 +698,7 @@ async def approve_payment(
                 member = db.query(ProjectMember).filter(
                     ProjectMember.project_id == contribution.project_id,
                     ProjectMember.user_id == contribution_payment.user_id,
-                ).first()
+                ).with_for_update().first()
 
                 if member:
                     project = db.query(Project).filter(Project.id == contribution.project_id).first()
@@ -806,7 +832,7 @@ async def approve_payment(
             member = db.query(ProjectMember).filter(
                 ProjectMember.project_id == expense.project_id,
                 ProjectMember.user_id == payment.user_id,
-            ).first()
+            ).with_for_update().first()
 
             if member and project:
                 currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
@@ -880,13 +906,23 @@ async def mark_payment_as_paid(
     payment_data: PaymentMarkPaid,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Mark a payment as paid (project admin only).
     Admin can directly mark any participant's payment as paid, bypassing the approval flow.
     Includes payment_date and exchange_rate support for historical backfilling.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -900,7 +936,7 @@ async def mark_payment_as_paid(
 
     # Redirect to submit_payment for non-admins
     if not is_admin:
-        return await submit_payment(payment_id, payment_data, db, current_user)
+        return await submit_payment(payment_id, payment_data, db, current_user, project)
 
     if payment.is_paid:
         raise HTTPException(
@@ -908,7 +944,6 @@ async def mark_payment_as_paid(
             detail="Payment is already paid",
         )
 
-    project = db.query(Project).filter(Project.id == expense.project_id).first() if expense and expense.project_id else None
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
     # Block manual mark-paid if project uses contribution_mode = current_account
@@ -986,12 +1021,22 @@ async def unmark_payment_as_paid(
     payment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Unmark a payment as paid (useful for corrections).
     Project admin only for approved payments.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -1043,12 +1088,22 @@ async def upload_receipt(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Upload a receipt file for a payment.
     Users can only upload receipts for their own payments unless they are admin.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -1077,13 +1132,22 @@ async def download_receipt(
     payment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Download the receipt file for a payment.
     For Cloudinary files, redirects to the URL.
     For local files, returns the file directly.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -1142,6 +1206,7 @@ async def delete_payment(
     payment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Soft delete a payment.
@@ -1149,7 +1214,16 @@ async def delete_payment(
     Admins can delete any payment.
     Paid payments cannot be deleted.
     """
-    payment = db.query(ParticipantPayment).filter(ParticipantPayment.id == payment_id).first()
+    payment = (
+        db.query(ParticipantPayment)
+        .join(Expense)
+        .filter(
+            ParticipantPayment.id == payment_id,
+            Expense.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(

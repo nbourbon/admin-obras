@@ -17,8 +17,10 @@ A full-stack application for managing construction expenses among multiple parti
 - **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution per project
 - **Category colors**: Assign colors to categories for visual identification
 - **Project-based access**: Each project has its own admins; creating an account never grants global administration
+- **Strict project isolation**: Expenses, contributions, payments, notes, files, comments, and votes require the selected project and cannot be accessed through an ID from another project
 - **Secure account access**: Email verification, project invitations, and single-use password reset links sent with Resend
-- **Meeting notes**: Record meeting minutes with rich text editor
+- **Meeting notes**: Record meeting minutes with a rich text editor; stored and legacy HTML is sanitized before display
+- **Accounting guards**: Monetary operations reject non-positive amounts, contribution payments must cover the full remaining amount, and PostgreSQL row locks serialize balance changes
 - **Weighted voting**: Create voting notes where each vote is weighted by the participant's ownership percentage
 
 ## Tech Stack
@@ -191,6 +193,7 @@ construccion-edificio/
 ## API Endpoints
 
 Most endpoints require an `X-Project-ID` header to scope data to the current project.
+Expense and contribution lists are fetched page by page by the frontend, so projects with more than 100 records remain complete.
 
 ### Authentication
 - `POST /auth/self-register` - Start registration and send email verification

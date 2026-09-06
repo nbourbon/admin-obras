@@ -11,6 +11,23 @@ const client = axios.create({
   },
 })
 
+const getAllPages = async (url, params = {}) => {
+  const pageSize = 100
+  const items = []
+  let skip = 0
+  let lastResponse
+
+  do {
+    lastResponse = await client.get(url, { params: { ...params, skip, limit: pageSize } })
+    const page = Array.isArray(lastResponse.data) ? lastResponse.data : []
+    items.push(...page)
+    skip += page.length
+    if (page.length < pageSize) break
+  } while (true)
+
+  return { ...lastResponse, data: items }
+}
+
 // Add auth token and project ID to requests
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
@@ -99,7 +116,7 @@ export const rubrosAPI = {
 
 // Expenses API
 export const expensesAPI = {
-  list: (filters = {}) => client.get('/expenses', { params: filters }),
+  list: (filters = {}) => getAllPages('/expenses', filters),
   get: (id) => client.get(`/expenses/${id}`),
   create: (data) => client.post('/expenses', data),
   update: (id, data) => client.put(`/expenses/${id}`, data),
@@ -118,7 +135,7 @@ export const expensesAPI = {
 
 // Contributions API
 export const contributionsAPI = {
-  list: () => client.get('/contributions'),
+  list: () => getAllPages('/contributions'),
   get: (id) => client.get(`/contributions/${id}`),
   create: (data) => client.post('/contributions', data),
   createUnilateral: (data) => client.post('/contributions/unilateral', data),

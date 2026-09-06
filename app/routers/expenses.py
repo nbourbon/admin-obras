@@ -9,7 +9,7 @@ from sqlalchemy import update as sa_update
 from app.database import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseWithPayments, PaymentSummary
 from app.schemas.payment import AdminMarkAllPaid
-from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header, is_project_admin
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_required_project, is_project_admin
 from app.models.user import User
 from app.models.expense import Expense, Currency, CurrencyMode
 from app.models.provider import Provider
@@ -28,16 +28,17 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 async def list_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
     category_id: Optional[int] = Query(None, description="Filter by category"),
+    rubro_id: Optional[int] = Query(None, description="Filter by rubro"),
     status_filter: Optional[str] = Query(None, description="Filter by status"),
     from_date: Optional[datetime] = Query(None, description="Filter from date"),
     to_date: Optional[datetime] = Query(None, description="Filter to date"),
     include_deleted: bool = Query(False, description="Include deleted expenses (admin only)"),
     include_contributions: bool = Query(False, description="Include contribution requests"),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """
     List all expenses for the current project with optional filters.
@@ -56,8 +57,10 @@ async def list_expenses(
         )
     )
 
-    if project:
-        query = query.filter(Expense.project_id == project.id)
+    query = query.filter(Expense.project_id == project.id)
+
+    if include_deleted and not is_project_admin(db, current_user.id, project.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only project admins can view deleted expenses")
 
     # Filter deleted expenses unless admin specifically requests them
     if not include_deleted:
@@ -71,6 +74,8 @@ async def list_expenses(
         query = query.filter(Expense.provider_id == provider_id)
     if category_id:
         query = query.filter(Expense.category_id == category_id)
+    if rubro_id:
+        query = query.filter(Expense.rubro_id == rubro_id)
     if status_filter:
         query = query.filter(Expense.status == status_filter)
     if from_date:
@@ -136,7 +141,7 @@ async def create_expense(
     expense_data: ExpenseCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Create a new expense (project admin only).
@@ -332,12 +337,12 @@ async def create_expense(
 async def list_contribution_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
     status_filter: Optional[str] = Query(None, description="Filter by status"),
     from_date: Optional[datetime] = Query(None, description="Filter from date"),
     to_date: Optional[datetime] = Query(None, description="Filter to date"),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """
     List all contribution requests for the current project.
@@ -350,8 +355,7 @@ async def list_contribution_requests(
         .filter(Expense.is_deleted == False)
     )
 
-    if project:
-        query = query.filter(Expense.project_id == project.id)
+    query = query.filter(Expense.project_id == project.id)
 
     if status_filter:
         query = query.filter(Expense.status == status_filter)
@@ -374,6 +378,7 @@ async def get_expense(
     expense_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Get expense details with payment status.
@@ -385,7 +390,7 @@ async def get_expense(
             joinedload(Expense.category).joinedload(Category.rubro),
             joinedload(Expense.rubro)
         )
-        .filter(Expense.id == expense_id)
+        .filter(Expense.id == expense_id, Expense.project_id == project.id)
         .first()
     )
 
@@ -478,12 +483,13 @@ async def update_expense(
     expense_data: ExpenseUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Update an expense (project admin only).
     Note: Updating amount will NOT recalculate participant payments.
     """
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    expense = db.query(Expense).filter(Expense.id == expense_id, Expense.project_id == project.id).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -557,11 +563,12 @@ async def upload_invoice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Upload an invoice file for an expense (project admin only).
     """
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    expense = db.query(Expense).filter(Expense.id == expense_id, Expense.project_id == project.id).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -587,13 +594,14 @@ async def download_invoice(
     expense_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Download the invoice file for an expense.
     For Cloudinary files, redirects to the URL.
     For local files, returns the file directly.
     """
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    expense = db.query(Expense).filter(Expense.id == expense_id, Expense.project_id == project.id).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -643,13 +651,17 @@ async def delete_expense(
     confirmed: bool = Query(False, description="Confirm deletion even with paid payments"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    selected_project: Project = Depends(get_required_project),
 ):
     """
     Soft delete an expense (project admin only).
     Requires confirmation if there are paid payments associated.
     Payments with uploaded receipts will block deletion.
     """
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.project_id == selected_project.id,
+    ).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -801,6 +813,7 @@ async def mark_all_payments_as_paid(
     data: AdminMarkAllPaid,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    selected_project: Project = Depends(get_required_project),
 ):
     """
     Mark all pending payments for an expense as paid (project admin only).
@@ -809,6 +822,7 @@ async def mark_all_payments_as_paid(
     """
     expense = db.query(Expense).filter(
         Expense.id == expense_id,
+        Expense.project_id == selected_project.id,
         Expense.is_deleted == False,
     ).first()
 
@@ -926,11 +940,15 @@ async def restore_expense(
     expense_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """
     Restore a deleted expense (project admin only).
     """
-    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id,
+        Expense.project_id == project.id,
+    ).first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

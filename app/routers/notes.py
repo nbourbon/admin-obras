@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -22,8 +22,9 @@ from app.schemas.note import (
     VoteOptionWithVoters,
     VoterInfo,
 )
-from app.utils.dependencies import get_current_user, is_project_admin
+from app.utils.dependencies import get_current_user, get_required_project, is_project_admin
 from app.services.note_email import schedule_note_emails
+from app.services.html_sanitizer import sanitize_plain_text, sanitize_rich_text
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -41,15 +42,6 @@ def is_voting_effectively_closed(note: Note) -> bool:
     return False
 
 
-def get_project_id(x_project_id: Optional[str] = Header(None)) -> Optional[int]:
-    if x_project_id:
-        try:
-            return int(x_project_id)
-        except ValueError:
-            return None
-    return None
-
-
 def build_note_response(note: Note, db: Session) -> NoteResponse:
     """Build a NoteResponse from a Note model."""
     creator = db.query(User).filter(User.id == note.created_by).first()
@@ -58,10 +50,10 @@ def build_note_response(note: Note, db: Session) -> NoteResponse:
         id=note.id,
         project_id=note.project_id,
         title=note.title,
-        content=note.content,
+        content=sanitize_rich_text(note.content),
         note_type=note.note_type,
         meeting_date=note.meeting_date,
-        voting_description=note.voting_description,
+        voting_description=sanitize_rich_text(note.voting_description),
         voting_closes_at=note.voting_closes_at,
         is_voting_closed=note.is_voting_closed or False,
         is_voting_open=not is_voting_effectively_closed(note),
@@ -100,7 +92,7 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
                 note_id=c.note_id,
                 user_id=c.user_id,
                 user_name=user.full_name if user else "Unknown",
-                content=c.content,
+                content=sanitize_plain_text(c.content) or "",
                 created_at=c.created_at,
             ))
 
@@ -148,10 +140,10 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
         id=note.id,
         project_id=note.project_id,
         title=note.title,
-        content=note.content,
+        content=sanitize_rich_text(note.content),
         note_type=note.note_type,
         meeting_date=note.meeting_date,
-        voting_description=note.voting_description,
+        voting_description=sanitize_rich_text(note.voting_description),
         voting_closes_at=note.voting_closes_at,
         is_voting_closed=note.is_voting_closed or False,
         is_voting_open=not is_voting_effectively_closed(note),
@@ -172,18 +164,14 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
 
 @router.get("", response_model=List[NoteResponse])
 async def list_notes(
-    x_project_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """List all notes for the current project, ordered by most recent first."""
-    project_id = get_project_id(x_project_id)
-    if not project_id:
-        raise HTTPException(status_code=400, detail="Project ID required")
-
     notes = (
         db.query(Note)
-        .filter(Note.project_id == project_id)
+        .filter(Note.project_id == project.id)
         .filter(Note.is_active == True)
         .order_by(Note.created_at.desc())
         .all()
@@ -196,25 +184,11 @@ async def list_notes(
 async def create_note(
     note_data: NoteCreate,
     background_tasks: BackgroundTasks,
-    x_project_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Create a new note (regular or voting)."""
-    project_id = get_project_id(x_project_id)
-    if not project_id:
-        raise HTTPException(status_code=400, detail="Project ID required")
-
-    project = db.query(Project).filter(Project.id == project_id, Project.is_active == True).first()
-    membership = db.query(ProjectMember).filter(
-        ProjectMember.project_id == project_id,
-        ProjectMember.user_id == current_user.id,
-        ProjectMember.is_active == True,
-        ProjectMember.invitation_accepted == True,
-    ).first()
-    if not project or not membership:
-        raise HTTPException(status_code=403, detail="No tenés acceso a este proyecto")
-
     is_votacion = note_data.note_type in (NoteType.VOTACION, NoteType.VOTING)
     is_reunion = note_data.note_type in (NoteType.REUNION, NoteType.REGULAR)
 
@@ -225,12 +199,12 @@ async def create_note(
 
     # Create the note
     note = Note(
-        project_id=project_id,
+        project_id=project.id,
         title=note_data.title,
-        content=note_data.content,
+        content=sanitize_rich_text(note_data.content),
         note_type=note_data.note_type,
         meeting_date=note_data.meeting_date if is_reunion else None,
-        voting_description=note_data.voting_description if is_votacion else None,
+        voting_description=sanitize_rich_text(note_data.voting_description) if is_votacion else None,
         voting_closes_at=voting_closes_at,
         is_voting_closed=False,
         created_by=current_user.id,
@@ -242,7 +216,7 @@ async def create_note(
     if is_reunion:
         allowed_participant_ids = {
             member.user_id for member in db.query(ProjectMember).filter(
-                ProjectMember.project_id == project_id,
+                ProjectMember.project_id == project.id,
                 ProjectMember.is_active == True,
                 ProjectMember.invitation_accepted == True,
             ).all()
@@ -275,20 +249,16 @@ async def create_note(
 
 @router.get("/unread-count", response_model=dict)
 async def get_unread_count(
-    x_project_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Get count of unread notes for the current user in the project."""
-    project_id = get_project_id(x_project_id)
-    if not project_id:
-        raise HTTPException(status_code=400, detail="Project ID required")
-
     unread_count = (
         db.query(NoteParticipant)
         .join(Note)
         .filter(
-            Note.project_id == project_id,
+            Note.project_id == project.id,
             Note.is_active == True,
             NoteParticipant.user_id == current_user.id,
             NoteParticipant.is_read == False,
@@ -304,9 +274,14 @@ async def get_note(
     note_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Get note detail with comments and votes. Marks note as read for the current user."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(
+        Note.id == note_id,
+        Note.project_id == project.id,
+        Note.is_active == True,
+    ).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -329,9 +304,10 @@ async def update_note(
     note_data: NoteUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Update a note (only creator or project admin can update)."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -344,11 +320,11 @@ async def update_note(
     if note_data.title is not None:
         note.title = note_data.title
     if note_data.content is not None:
-        note.content = note_data.content
+        note.content = sanitize_rich_text(note_data.content)
     if note_data.meeting_date is not None and note.note_type in (NoteType.REUNION, NoteType.REGULAR):
         note.meeting_date = note_data.meeting_date
     if note_data.voting_description is not None and note.note_type in (NoteType.VOTACION, NoteType.VOTING):
-        note.voting_description = note_data.voting_description
+        note.voting_description = sanitize_rich_text(note_data.voting_description)
 
     db.commit()
     db.refresh(note)
@@ -361,9 +337,10 @@ async def delete_note(
     note_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Soft delete a note (only creator or project admin can delete)."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -386,16 +363,17 @@ async def add_comment(
     comment_data: CommentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Add a comment to a note."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
     comment = NoteComment(
         note_id=note_id,
         user_id=current_user.id,
-        content=comment_data.content,
+        content=sanitize_plain_text(comment_data.content),
     )
     db.add(comment)
     db.commit()
@@ -417,6 +395,7 @@ async def delete_comment(
     comment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Delete a comment (only comment owner or admin can delete)."""
     comment = (
@@ -428,7 +407,9 @@ async def delete_comment(
         raise HTTPException(status_code=404, detail="Comment not found")
 
     # Check permissions - comment owner or project admin
-    note = db.query(Note).filter(Note.id == note_id).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
     is_admin = note and note.project_id and is_project_admin(db, current_user.id, note.project_id)
     if comment.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
@@ -447,9 +428,10 @@ async def cast_vote(
     vote_data: CastVote,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Cast a vote on a voting note (irreversible for non-admin)."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -495,10 +477,11 @@ async def reset_vote(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Reset a user's vote (project admin only)."""
     # Get the note to check project admin
-    note = db.query(Note).filter(Note.id == note_id).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -527,9 +510,10 @@ async def close_voting(
     note_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Close voting on a voting note (project admin only)."""
-    note = db.query(Note).filter(Note.id == note_id, Note.is_active == True).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.project_id == project.id, Note.is_active == True).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, List
@@ -10,7 +10,7 @@ from app.schemas.rubro import RubroResponse
 
 class ExpenseBase(BaseModel):
     description: str
-    amount_original: Decimal
+    amount_original: Decimal = Field(gt=0)
     currency_original: Currency
     provider_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -21,23 +21,23 @@ class ExpenseBase(BaseModel):
 
 class ExpensePayer(BaseModel):
     user_id: int
-    amount: Decimal
+    amount: Decimal = Field(gt=0)
 
 
 class ExpenseCreate(ExpenseBase):
-    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
+    exchange_rate_override: Optional[Decimal] = Field(default=None, gt=0)  # Manual TC override (DUAL mode)
     payers: Optional[List[ExpensePayer]] = None  # Who paid this expense (current_account mode)
 
 
 class ExpenseUpdate(BaseModel):
     description: Optional[str] = None
-    amount_original: Optional[Decimal] = None
+    amount_original: Optional[Decimal] = Field(default=None, gt=0)
     currency_original: Optional[Currency] = None
     provider_id: Optional[int] = None
     category_id: Optional[int] = None
     rubro_id: Optional[int] = None
     expense_date: Optional[datetime] = None
-    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
+    exchange_rate_override: Optional[Decimal] = Field(default=None, gt=0)  # Manual TC override (DUAL mode)
     is_contribution: Optional[bool] = None
 
 

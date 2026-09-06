@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional
@@ -37,10 +37,10 @@ class PaymentResponse(PaymentBase):
 
 
 class PaymentMarkPaid(BaseModel):
-    amount_paid: Decimal
+    amount_paid: Decimal = Field(gt=0)
     currency_paid: Currency
     payment_date: Optional[datetime] = None
-    exchange_rate_override: Optional[Decimal] = None  # Manual TC override (DUAL mode)
+    exchange_rate_override: Optional[Decimal] = Field(default=None, gt=0)  # Manual TC override (DUAL mode)
 
 
 class PaymentApproval(BaseModel):
@@ -50,15 +50,15 @@ class PaymentApproval(BaseModel):
 
 class AdminMarkAllPaid(BaseModel):
     payment_date: Optional[datetime] = None
-    exchange_rate_override: Optional[Decimal] = None
+    exchange_rate_override: Optional[Decimal] = Field(default=None, gt=0)
     currency: Optional[str] = None  # "USD" or "ARS" (for DUAL mode only)
 
 
 class AdminMarkContributionPaid(BaseModel):
     """Schema for admin to mark a contribution payment as paid directly"""
-    amount_paid: Optional[Decimal] = None  # If None, uses amount_due
+    amount_paid: Optional[Decimal] = Field(default=None, gt=0)  # If None, uses amount due minus offsets
     payment_date: Optional[datetime] = None
-    exchange_rate_override: Optional[Decimal] = None
+    exchange_rate_override: Optional[Decimal] = Field(default=None, gt=0)
 
 
 class ExpenseInfo(BaseModel):

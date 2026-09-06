@@ -19,7 +19,7 @@ from app.schemas.contribution import (
 )
 from app.models.contribution_absorption import ContributionAbsorption
 from app.schemas.payment import PaymentMarkPaid, PaymentApproval, AdminMarkContributionPaid
-from app.utils.dependencies import get_current_user, get_project_admin_user, get_project_from_header
+from app.utils.dependencies import get_current_user, get_project_admin_user, get_required_project
 from app.models.user import User
 from app.models.contribution import Contribution, Currency, ContributionStatus
 from app.models.contribution_payment import ContributionPayment
@@ -30,13 +30,30 @@ from app.services.balance_audit import record_member_balance_delta
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
 
+def remaining_contribution_amount(payment: ContributionPayment) -> Decimal:
+    return (Decimal(str(payment.amount_due)) - Decimal(str(payment.amount_offset or 0))).quantize(Decimal("0.01"))
+
+
+def require_full_contribution_payment(payment: ContributionPayment, amount: Decimal) -> Decimal:
+    expected = remaining_contribution_amount(payment)
+    actual = Decimal(str(amount)).quantize(Decimal("0.01"))
+    if expected <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este aporte no tiene saldo pendiente")
+    if actual != expected:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"El pago debe ser por el saldo pendiente completo: {expected:.2f}",
+        )
+    return actual
+
+
 @router.get("", response_model=List[ContributionWithMyPayment])
 async def list_contributions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
-    skip: int = 0,
-    limit: int = 100,
+    project: Project = Depends(get_required_project),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """List all contribution requests for the current project with current user's payment info"""
     if not project:
@@ -106,7 +123,7 @@ async def list_contributions(
 async def list_unabsorbed_unilateral(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """List unilateral contributions with remaining balance (not fully absorbed). Admin only."""
     if not project:
@@ -153,7 +170,7 @@ async def list_unabsorbed_unilateral(
 async def get_my_pending_contributions_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Get count of pending contribution payments for the current user.
@@ -181,16 +198,16 @@ async def get_contribution(
     contribution_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """Get a specific contribution request with full participant payment details"""
-    contribution = db.query(Contribution).filter(Contribution.id == contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == contribution_id,
+        Contribution.project_id == project.id,
+    ).first()
 
     if not contribution:
         raise HTTPException(status_code=404, detail="Contribution not found")
-
-    if project and contribution.project_id != project.id:
-        raise HTTPException(status_code=403, detail="Contribution belongs to different project")
 
     # Get all payments with user info
     payments = db.query(ContributionPayment).filter(
@@ -243,7 +260,7 @@ async def create_contribution(
     contribution_data: ContributionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """Create a new contribution request (project admin only). Optionally absorb unilateral contributions."""
     if not project:
@@ -363,7 +380,7 @@ async def create_unilateral_contribution(
     data: UnilateralContributionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """Create a direct (unilateral) contribution. Any member can do this."""
     if not project:
@@ -386,7 +403,7 @@ async def create_unilateral_contribution(
         ProjectMember.project_id == project.id,
         ProjectMember.user_id == current_user.id,
         ProjectMember.is_active == True,
-    ).first()
+    ).with_for_update().first()
     if not member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -494,7 +511,7 @@ async def create_balance_adjustment(
     adjustment_data: BalanceAdjustmentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """Create a direct balance adjustment (admin only). Amount can be positive or negative."""
     if not project:
@@ -527,7 +544,7 @@ async def create_balance_adjustment(
     members = db.query(ProjectMember).filter(
         ProjectMember.project_id == project.id,
         ProjectMember.is_active == True,
-    ).all()
+    ).with_for_update().all()
 
     now = datetime.utcnow()
 
@@ -596,7 +613,7 @@ async def submit_contribution_payment(
     payment_data: PaymentMarkPaid,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Submit a contribution payment (mark as paid).
@@ -606,7 +623,16 @@ async def submit_contribution_payment(
     from datetime import datetime
     from app.utils.dependencies import is_project_admin
 
-    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+    payment = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(
+            ContributionPayment.id == payment_id,
+            Contribution.project_id == project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -628,12 +654,17 @@ async def submit_contribution_payment(
         )
 
     # Get contribution and project to check if individual or user is admin
-    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == payment.contribution_id,
+        Contribution.project_id == project.id,
+    ).first()
     if not contribution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contribution not found",
         )
+
+    amount_paid = require_full_contribution_payment(payment, payment_data.amount_paid)
 
     project_obj = db.query(Project).filter(Project.id == contribution.project_id).first()
     is_individual = project_obj.is_individual if project_obj else False
@@ -641,7 +672,7 @@ async def submit_contribution_payment(
     currency_mode = getattr(project_obj, 'currency_mode', 'DUAL') or 'DUAL'
 
     # Update payment info
-    payment.amount_paid = payment_data.amount_paid
+    payment.amount_paid = amount_paid
     payment.payment_date = payment_data.payment_date or datetime.utcnow()
     payment.submitted_at = datetime.utcnow()
 
@@ -691,7 +722,7 @@ async def submit_contribution_payment(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == contribution.project_id,
         ProjectMember.user_id == current_user.id,
-    ).first()
+    ).with_for_update().first()
 
     if is_individual or user_is_admin:
         payment.is_paid = True
@@ -893,11 +924,17 @@ async def upload_contribution_receipt(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Upload receipt for a contribution payment"""
     from app.services.file_storage import save_receipt
 
-    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+    payment = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(ContributionPayment.id == payment_id, Contribution.project_id == project.id)
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -926,11 +963,17 @@ async def download_contribution_receipt(
     payment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
 ):
     """Download receipt for a contribution payment"""
     from app.services.file_storage import get_file_path, get_file_url
 
-    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+    payment = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(ContributionPayment.id == payment_id, Contribution.project_id == project.id)
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -983,6 +1026,7 @@ async def approve_contribution_payment(
     approval: PaymentApproval,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    selected_project: Project = Depends(get_required_project),
 ):
     """
     Approve or reject a contribution payment (project admin only).
@@ -990,7 +1034,16 @@ async def approve_contribution_payment(
     from datetime import datetime
     from app.utils.dependencies import is_project_admin
 
-    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+    payment = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(
+            ContributionPayment.id == payment_id,
+            Contribution.project_id == selected_project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -999,7 +1052,10 @@ async def approve_contribution_payment(
         )
 
     # Get contribution and verify user is admin of the project
-    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == payment.contribution_id,
+        Contribution.project_id == selected_project.id,
+    ).first()
     if not contribution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1032,7 +1088,7 @@ async def approve_contribution_payment(
         member = db.query(ProjectMember).filter(
             ProjectMember.project_id == contribution.project_id,
             ProjectMember.user_id == payment.user_id,
-        ).first()
+        ).with_for_update().first()
 
         if member:
             project = db.query(Project).filter(Project.id == contribution.project_id).first()
@@ -1110,6 +1166,7 @@ async def admin_mark_contribution_paid(
     data: AdminMarkContributionPaid,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    selected_project: Project = Depends(get_required_project),
 ):
     """
     Mark a contribution payment as paid directly (project admin only).
@@ -1119,7 +1176,16 @@ async def admin_mark_contribution_paid(
     from app.utils.dependencies import is_project_admin
     from app.services.exchange_rate import fetch_blue_dollar_rate_sync
 
-    payment = db.query(ContributionPayment).filter(ContributionPayment.id == payment_id).first()
+    payment = (
+        db.query(ContributionPayment)
+        .join(Contribution)
+        .filter(
+            ContributionPayment.id == payment_id,
+            Contribution.project_id == selected_project.id,
+        )
+        .with_for_update()
+        .first()
+    )
 
     if not payment:
         raise HTTPException(
@@ -1128,7 +1194,10 @@ async def admin_mark_contribution_paid(
         )
 
     # Get contribution and verify user is admin of the project
-    contribution = db.query(Contribution).filter(Contribution.id == payment.contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == payment.contribution_id,
+        Contribution.project_id == selected_project.id,
+    ).first()
     if not contribution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1152,7 +1221,11 @@ async def admin_mark_contribution_paid(
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
     # Determine amount to use
-    amount_paid = data.amount_paid if data.amount_paid else payment.amount_due
+    remaining_amount = remaining_contribution_amount(payment)
+    amount_paid = require_full_contribution_payment(
+        payment,
+        data.amount_paid if data.amount_paid is not None else remaining_amount,
+    )
 
     # Update payment info
     payment.amount_paid = amount_paid
@@ -1206,7 +1279,7 @@ async def admin_mark_contribution_paid(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == contribution.project_id,
         ProjectMember.user_id == payment.user_id,
-    ).first()
+    ).with_for_update().first()
 
     if member:
         # Credit balance according to currency_mode
@@ -1271,7 +1344,7 @@ async def delete_contribution(
     contribution_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
-    project: Optional[Project] = Depends(get_project_from_header),
+    project: Project = Depends(get_required_project),
 ):
     """
     Delete a contribution (admin only).
@@ -1292,7 +1365,7 @@ async def delete_contribution(
     contribution = db.query(Contribution).filter(
         Contribution.id == contribution_id,
         Contribution.project_id == project.id,
-    ).first()
+    ).with_for_update().first()
 
     if not contribution:
         raise HTTPException(
@@ -1319,7 +1392,7 @@ async def delete_contribution(
     # Get all payments for this contribution
     payments = db.query(ContributionPayment).filter(
         ContributionPayment.contribution_id == contribution.id,
-    ).all()
+    ).with_for_update().all()
 
     # Check if any payments have been made (for regular contributions)
     if not contribution.is_unilateral and not contribution.is_adjustment:
@@ -1337,7 +1410,7 @@ async def delete_contribution(
         member = db.query(ProjectMember).filter(
             ProjectMember.project_id == project.id,
             ProjectMember.user_id == contribution.contributor_user_id,
-        ).first()
+        ).with_for_update().first()
 
         if member:
             # Reverse the balance credit based on currency mode
@@ -1374,7 +1447,7 @@ async def delete_contribution(
         members = db.query(ProjectMember).filter(
             ProjectMember.project_id == project.id,
             ProjectMember.is_active == True,
-        ).all()
+        ).with_for_update().all()
         
         for member in members:
             percentage = member.participation_percentage / Decimal(100)
