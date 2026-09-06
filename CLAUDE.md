@@ -203,6 +203,7 @@ This separation allows users to backfill historical expenses and payments with c
 - Users only see projects where they are members (no global admin access)
 - Project admins can grant admin privileges to other members via the Participantes page
 - The legacy `User.is_admin` flag never authorizes account or project operations; admins cannot change another user's password
+- Creating a note sends an individual Resend email to every active, verified member who accepted the project invitation
 
 ## Project Creation Flow
 **New projects are individual (single-user) by default:**

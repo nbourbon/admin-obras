@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +9,7 @@ from app.models.note import Note, NoteParticipant, NoteType
 from app.models.note_comment import NoteComment
 from app.models.vote import VoteOption, UserVote
 from app.models.project_member import ProjectMember
+from app.models.project import Project
 from app.schemas.note import (
     NoteCreate,
     NoteUpdate,
@@ -22,6 +23,7 @@ from app.schemas.note import (
     VoterInfo,
 )
 from app.utils.dependencies import get_current_user, is_project_admin
+from app.services.note_email import schedule_note_emails
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -30,8 +32,12 @@ def is_voting_effectively_closed(note: Note) -> bool:
     """Returns True if voting is closed — either manually by admin or past the deadline."""
     if note.is_voting_closed:
         return True
-    if note.voting_closes_at and note.voting_closes_at < datetime.now(timezone.utc):
-        return True
+    if note.voting_closes_at:
+        deadline = note.voting_closes_at
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        if deadline < datetime.now(timezone.utc):
+            return True
     return False
 
 
@@ -189,6 +195,7 @@ async def list_notes(
 @router.post("", response_model=NoteResponse)
 async def create_note(
     note_data: NoteCreate,
+    background_tasks: BackgroundTasks,
     x_project_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -197,6 +204,16 @@ async def create_note(
     project_id = get_project_id(x_project_id)
     if not project_id:
         raise HTTPException(status_code=400, detail="Project ID required")
+
+    project = db.query(Project).filter(Project.id == project_id, Project.is_active == True).first()
+    membership = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True,
+        ProjectMember.invitation_accepted == True,
+    ).first()
+    if not project or not membership:
+        raise HTTPException(status_code=403, detail="No tenés acceso a este proyecto")
 
     is_votacion = note_data.note_type in (NoteType.VOTACION, NoteType.VOTING)
     is_reunion = note_data.note_type in (NoteType.REUNION, NoteType.REGULAR)
@@ -223,6 +240,15 @@ async def create_note(
 
     # Participants only for reunion type
     if is_reunion:
+        allowed_participant_ids = {
+            member.user_id for member in db.query(ProjectMember).filter(
+                ProjectMember.project_id == project_id,
+                ProjectMember.is_active == True,
+                ProjectMember.invitation_accepted == True,
+            ).all()
+        }
+        if any(user_id not in allowed_participant_ids for user_id in note_data.participant_ids):
+            raise HTTPException(status_code=422, detail="Todos los asistentes deben ser participantes activos del proyecto")
         for user_id in note_data.participant_ids:
             participant = NoteParticipant(
                 note_id=note.id,
@@ -242,6 +268,7 @@ async def create_note(
 
     db.commit()
     db.refresh(note)
+    schedule_note_emails(db, background_tasks, note, project.name)
 
     return build_note_response(note, db)
 

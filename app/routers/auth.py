@@ -72,9 +72,10 @@ def forgot_password(data: EmailRequest, request: Request, tasks: BackgroundTasks
     user = get_user_by_email(db, str(data.email))
     if user and user.is_active:
         if user.google_id and not user.password_hash:
-            tasks.add_task(send_email, user.email, 'Acceso a Admin Obras',
+            tasks.add_task(send_email, user.email, 'Acceso a Proyectos Compartidos',
                            'Tu cuenta usa Google. Elegí Continuar con Google en la aplicación. '
-                           'Si perdiste el acceso a Google, recuperalo desde https://accounts.google.com/signin/recovery',
+                           'Si perdiste el acceso a Google, recuperalo desde https://accounts.google.com/signin/recovery\n\n'
+                           'Proyectos Compartidos - una solución de obrador.xyz',
                            'google-help-' + secrets.token_hex(16))
         else:
             issue_action(db, tasks, user, 'reset' if user.email_verified else 'verify')
@@ -128,9 +129,10 @@ def complete_action(data: CompleteActionRequest, request: Request, tasks: Backgr
         ).values(used_at=now))
     db.commit()
     if needs_password:
-        tasks.add_task(send_email, user.email, 'Contraseña actualizada — Admin Obras',
-                       'Se actualizó tu contraseña de Admin Obras. Las sesiones anteriores fueron cerradas. '
-                       'Si no realizaste este cambio, solicitá recuperar tu contraseña desde la aplicación.',
+        tasks.add_task(send_email, user.email, 'Contraseña actualizada — Proyectos Compartidos',
+                       'Se actualizó tu contraseña de Obrador. Las sesiones anteriores fueron cerradas. '
+                       'Si no realizaste este cambio, solicitá recuperar tu contraseña desde la aplicación.\n\n'
+                       'Proyectos Compartidos - una solución de obrador.xyz',
                        f'password-changed-{action.id}')
     return {'message': 'Listo. Ya podés iniciar sesión.'}
 

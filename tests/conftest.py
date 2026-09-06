@@ -63,10 +63,12 @@ def client(_test_client, _reset_db):
 def sent_emails(monkeypatch):
     """All tests capture emails locally; never send real email."""
     from app.services import auth_email
+    from app.services import note_email
     from app.routers import auth
     messages = []
     async def capture(to, subject, text, delivery_id):
         messages.append({'to': to, 'subject': subject, 'text': text, 'id': delivery_id})
     monkeypatch.setattr(auth_email, 'send_email', capture)
+    monkeypatch.setattr(note_email, 'send_email', capture)
     monkeypatch.setattr(auth, 'send_email', capture)
     return messages

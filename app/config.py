@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
     resend_api_key: str = ""
-    email_from: str = "Admin Obras <no-reply@notificaciones.obrador.xyz>"
+    email_from: str = "Proyectos Compartidos <no-reply@notificaciones.obrador.xyz>"
     frontend_url: str = "http://localhost:3000"
 
     # File upload settings

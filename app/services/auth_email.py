@@ -76,10 +76,13 @@ def issue_action(db: Session, tasks: BackgroundTasks, user, purpose: str, member
     url = f'{get_settings().frontend_url.rstrip("/")}/account-action#token={raw}'
     subjects = {'verify': 'Confirmá tu correo', 'reset': 'Restablecé tu contraseña', 'invite': 'Invitación a una obra'}
     intro = (f'Te invitaron a la obra {project_name}.\n' if purpose == 'invite' else '')
-    text = (f'{intro}{subjects[purpose]} en Admin Obras:\n\n{url}\n\n'
+    heading = 'Restablecé tu Contraseña en Obrador' if purpose == 'reset' else f'{subjects[purpose]} en Obrador'
+    text = (f'{intro}{heading}:\n\n{url}\n\n'
             f'Este enlace se puede usar una sola vez y vence en {"20 minutos" if purpose == "reset" else "24 horas"}.\n'
-            'Si no esperabas este correo, podés ignorarlo. No compartas el enlace.')
-    tasks.add_task(send_email, user.email, subjects[purpose] + ' — Admin Obras', text, f'auth-action-{action.token_hash}')
+            'Si no esperabas este correo, podés ignorarlo. No compartas el enlace.\n\n'
+            'Proyectos Compartidos - una solución de obrador.xyz')
+    tasks.add_task(send_email, user.email, subjects[purpose] + ' — Proyectos Compartidos', text,
+                   f'auth-action-{action.token_hash}')
     return action
 
 

@@ -239,7 +239,7 @@ Most endpoints require an `X-Project-ID` header to scope data to the current pro
 
 ### Notes
 - `GET /notes` - List project notes
-- `POST /notes` - Create note (regular or voting)
+- `POST /notes` - Create a notification, meeting note, or vote and email all active project members
 - `GET /notes/{id}` - Get note with comments and votes
 - `PUT /notes/{id}` - Update note
 - `DELETE /notes/{id}` - Delete note
@@ -257,7 +257,7 @@ See `.env.example` for all available configuration options:
   - **Production**: `postgresql://user:pass@host:5432/dbname`
 - `SECRET_KEY` - JWT signing key (change in production!)
 - `RESEND_API_KEY` - Resend API key used by the backend for account emails
-- `EMAIL_FROM` - Verified sender, e.g. `Admin Obras <no-reply@notificaciones.obrador.xyz>`
+- `EMAIL_FROM` - Verified sender, e.g. `Proyectos Compartidos <no-reply@notificaciones.obrador.xyz>`
 - `FRONTEND_URL` - HTTPS frontend origin used to build account links
 - `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time (default: 1440 = 24 hours)
 - `MAX_FILE_SIZE_MB` - Maximum upload file size (default: 10)

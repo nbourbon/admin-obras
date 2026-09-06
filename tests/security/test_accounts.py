@@ -74,6 +74,9 @@ def test_reset_is_single_use_revokes_all_sessions_and_old_links(client, sent_ema
     for _ in range(2):
         assert client.post('/auth/forgot-password', json={'email': 'owner@example.com'}).status_code == 202
         tokens.append(token_from(sent_emails))
+    assert sent_emails[-1]['subject'] == 'Restablecé tu contraseña — Proyectos Compartidos'
+    assert 'Restablecé tu Contraseña en Obrador:' in sent_emails[-1]['text']
+    assert sent_emails[-1]['text'].endswith('Proyectos Compartidos - una solución de obrador.xyz')
     assert client.get('/auth/me', headers=old_headers).status_code == 200
     assert client.post('/auth/complete-action', json={'token': tokens[0], 'password': 'new-password-123'}).status_code == 200
     assert client.get('/auth/me', headers=old_headers).status_code == 401
