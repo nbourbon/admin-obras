@@ -10,6 +10,8 @@ primary_region = 'gru'
 
 [env]
   PORT = '8080'
+  DEBUG = 'false'
+  FRONTEND_URL = 'https://admin-obras-pied.vercel.app'
 
 [http_service]
   internal_port = 8080

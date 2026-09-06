@@ -69,8 +69,28 @@ def init_db():
         ContributionAbsorption,
         AvanceObra,
         BalanceMovement,
+        AuthAction,
+        AuthRateLimit,
     )
     Base.metadata.create_all(bind=engine)
+
+    # Security migrations must complete before serving requests. Keep them atomic.
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    user_cols = {c['name'] for c in inspector.get_columns('users')}
+    member_cols = {c['name'] for c in inspector.get_columns('project_members')}
+    with engine.begin() as conn:
+        if 'email_verified' not in user_cols:
+            conn.execute(text('ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE'))
+            # Preserve established accounts; invited placeholders must prove identity.
+            existing_account = 'password_hash IS NOT NULL'
+            if 'google_id' in user_cols:
+                existing_account += ' OR google_id IS NOT NULL'
+            conn.execute(text(f'UPDATE users SET email_verified = TRUE WHERE {existing_account}'))
+        if 'auth_version' not in user_cols:
+            conn.execute(text('ALTER TABLE users ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0'))
+        if 'invitation_accepted' not in member_cols:
+            conn.execute(text('ALTER TABLE project_members ADD COLUMN invitation_accepted BOOLEAN NOT NULL DEFAULT TRUE'))
 
     # Run migrations for new columns on existing tables
     _run_migrations()

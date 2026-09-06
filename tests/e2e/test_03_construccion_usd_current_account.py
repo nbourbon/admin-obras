@@ -11,6 +11,7 @@ No hay Paso 7 (TC no aplica).
 """
 
 from decimal import Decimal
+from tests.user_factory import seed_verified_user
 
 import pytest
 
@@ -54,7 +55,7 @@ def test_escenario_03_construccion_usd_current_account(client):
     # SETUP: Usuarios, proyecto y miembros
     # -----------------------------------------------------------------------
 
-    r = client.post("/auth/register-first-admin", json={
+    r = seed_verified_user(json={
         "email": "u1@escenario03.com",
         "password": "Test1234!",
         "full_name": "Usuario 1",
@@ -70,7 +71,7 @@ def test_escenario_03_construccion_usd_current_account(client):
     token_u1 = r.json()["access_token"]
     h1 = {"Authorization": f"Bearer {token_u1}"}
 
-    r = client.post("/auth/register", json={
+    r = seed_verified_user(json={
         "email": "u2@escenario03.com",
         "password": "Test1234!",
         "full_name": "Usuario 2",

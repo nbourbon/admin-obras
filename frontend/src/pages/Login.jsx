@@ -104,6 +104,10 @@ function Login() {
             </div>
           </div>
 
+          <div className="flex justify-between text-sm text-blue-600">
+            <Link to="/forgot-password">Olvidé mi contraseña</Link>
+            <Link to="/resend-verification">Verificar mi correo</Link>
+          </div>
           <button
             type="submit"
             disabled={loading}

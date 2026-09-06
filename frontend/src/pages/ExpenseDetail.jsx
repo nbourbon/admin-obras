@@ -626,7 +626,7 @@ function ExpenseDetail() {
                   </button>
                 </div>
               </div>
-            ) : user?.is_admin ? (
+            ) : isProjectAdmin ? (
               <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
                 <Upload className="text-gray-400 mb-2" size={32} />
                 <span className="text-gray-600">

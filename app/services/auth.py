@@ -3,6 +3,7 @@ from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException, status
 
 from app.config import get_settings
@@ -14,6 +15,8 @@ settings = get_settings()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
+    if len(plain_password.encode("utf-8")) > 72:
+        return False
     return bcrypt.checkpw(
         plain_password.encode('utf-8'),
         hashed_password.encode('utf-8')
@@ -53,8 +56,8 @@ def decode_token(token: str) -> TokenData:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         user_id = int(sub)
-        return TokenData(user_id=user_id, email=email)
-    except JWTError:
+        return TokenData(user_id=user_id, email=email, auth_version=int(payload.get("ver", 0)))
+    except (JWTError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
@@ -64,7 +67,7 @@ def decode_token(token: str) -> TokenData:
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     """Authenticate a user by email and password."""
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(func.lower(User.email) == email.strip().lower()).first()
     if not user:
         return None
     if not user.password_hash:
@@ -77,7 +80,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     """Get a user by email."""
-    return db.query(User).filter(User.email == email).first()
+    return db.query(User).filter(func.lower(User.email) == email.strip().lower()).first()
 
 
 def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
@@ -103,10 +106,10 @@ def create_user(
 
     hashed_password = get_password_hash(password)
     user = User(
-        email=email,
+        email=email.strip().lower(),
         password_hash=hashed_password,
         full_name=full_name,
-        is_admin=is_admin,
+        is_admin=False,
     )
     db.add(user)
     db.commit()

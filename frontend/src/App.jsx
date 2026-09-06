@@ -3,14 +3,13 @@ import { useAuth } from './context/AuthContext'
 import { useProject } from './context/ProjectContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Register from './pages/Register'
+import AccountAccess from './pages/AccountAccess'
 import Dashboard from './pages/Dashboard'
 import Expenses from './pages/Expenses'
 import ExpenseDetail from './pages/ExpenseDetail'
 import Contributions from './pages/Contributions'
 import ContributionDetail from './pages/ContributionDetail'
 import PendingApprovals from './pages/PendingApprovals'
-import Users from './pages/Users'
 import Providers from './pages/Providers'
 import Categories from './pages/Categories'
 import Rubros from './pages/Rubros'
@@ -58,7 +57,10 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<AccountAccess key="register" mode="register" />} />
+      <Route path="/forgot-password" element={<AccountAccess key="forgot" mode="forgot" />} />
+      <Route path="/resend-verification" element={<AccountAccess key="verify" mode="verify" />} />
+      <Route path="/account-action" element={<AccountAccess key="action" mode="action" />} />
 
       <Route path="/" element={
         <ProtectedRoute>
@@ -77,7 +79,7 @@ function App() {
 
         {/* Admin routes (project admin only) */}
         <Route path="pending-approvals" element={<AdminRoute><PendingApprovals /></AdminRoute>} />
-        <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
+        <Route path="users" element={<Navigate to="/project-members" replace />} />
         <Route path="project-members" element={<AdminRoute><ProjectMembers /></AdminRoute>} />
         <Route path="providers" element={<AdminRoute><Providers /></AdminRoute>} />
         <Route path="categories" element={<AdminRoute><Categories /></AdminRoute>} />

@@ -7,6 +7,10 @@ de la app, de modo que el engine de SQLAlchemy se crea apuntando a la BD de test
 import os
 import pytest
 
+os.environ["DEBUG"] = "false"
+os.environ["RESEND_API_KEY"] = "local-test-key"
+os.environ["FRONTEND_URL"] = "https://admin-obras.test"
+
 # 1. Setear la BD de test ANTES de cualquier import de la app
 _TEST_DB_PATH = "./tests/test_e2e.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH}"
@@ -53,3 +57,16 @@ def _reset_db(_test_client):
 def client(_test_client, _reset_db):
     """TestClient con BD limpia para cada test."""
     return _test_client
+
+
+@pytest.fixture(autouse=True)
+def sent_emails(monkeypatch):
+    """All tests capture emails locally; never send real email."""
+    from app.services import auth_email
+    from app.routers import auth
+    messages = []
+    async def capture(to, subject, text, delivery_id):
+        messages.append({'to': to, 'subject': subject, 'text': text, 'id': delivery_id})
+    monkeypatch.setattr(auth_email, 'send_email', capture)
+    monkeypatch.setattr(auth, 'send_email', capture)
+    return messages

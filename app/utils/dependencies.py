@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.is_active or not user.email_verified or user.auth_version != token_data.auth_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is inactive",
@@ -40,13 +40,8 @@ async def get_current_user(
 async def get_current_admin_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Get the current user and verify they are an admin."""
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    return current_user
+    # Legacy global privileges no longer authorize any operation.
+    raise HTTPException(403, "La administración es por proyecto. No existen administradores globales.")
 
 
 async def get_project_from_header(
@@ -76,7 +71,8 @@ async def get_project_from_header(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == x_project_id,
         ProjectMember.user_id == current_user.id,
-        ProjectMember.is_active == True
+        ProjectMember.is_active == True,
+        ProjectMember.invitation_accepted == True
     ).first()
 
     if not member:
@@ -101,6 +97,7 @@ async def get_required_project(
 
 
 async def get_project_admin_user(
+    request: Request,
     x_project_id: Optional[int] = Header(None, alias="X-Project-ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -109,6 +106,9 @@ async def get_project_admin_user(
     Get current user and verify they are an admin of the specified project.
     Raises 403 if user is not an admin of the project.
     """
+    path_project_id = request.path_params.get("project_id")
+    if path_project_id is not None and int(path_project_id) != x_project_id:
+        raise HTTPException(403, "El proyecto de la URL no coincide con el seleccionado")
     if x_project_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -130,7 +130,8 @@ async def get_project_admin_user(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == x_project_id,
         ProjectMember.user_id == current_user.id,
-        ProjectMember.is_active == True
+        ProjectMember.is_active == True,
+        ProjectMember.invitation_accepted == True
     ).first()
 
     if not member or not member.is_admin:
@@ -151,6 +152,7 @@ def is_project_admin(db: Session, user_id: int, project_id: int) -> bool:
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == user_id,
         ProjectMember.is_active == True,
+        ProjectMember.invitation_accepted == True,
         ProjectMember.is_admin == True
     ).first()
     return member is not None

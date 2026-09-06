@@ -10,6 +10,7 @@ No hay Paso 7 (TC no aplica).
 """
 
 from decimal import Decimal
+from tests.user_factory import seed_verified_user
 
 import pytest
 
@@ -44,7 +45,7 @@ def my_status(client, headers):
 
 def setup_two_member_ars_current_account_project(client, email_suffix):
     """Create a construction project in ARS current-account mode with 70/30 members."""
-    r = client.post("/auth/register-first-admin", json={
+    r = seed_verified_user(json={
         "email": f"u1-{email_suffix}@example.com",
         "password": "Test1234!",
         "full_name": "Usuario 1",
@@ -59,7 +60,7 @@ def setup_two_member_ars_current_account_project(client, email_suffix):
     assert r.status_code == 200, f"login u1: {r.text}"
     h1 = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
-    r = client.post("/auth/register", json={
+    r = seed_verified_user(json={
         "email": f"u2-{email_suffix}@example.com",
         "password": "Test1234!",
         "full_name": "Usuario 2",
@@ -96,7 +97,7 @@ def setup_two_member_ars_current_account_project(client, email_suffix):
 
 def setup_two_member_dual_current_account_project(client, email_suffix):
     """Create a construction project in DUAL current-account mode with 70/30 members."""
-    r = client.post("/auth/register-first-admin", json={
+    r = seed_verified_user(json={
         "email": f"u1-dual-{email_suffix}@example.com",
         "password": "Test1234!",
         "full_name": "Usuario 1",
@@ -111,7 +112,7 @@ def setup_two_member_dual_current_account_project(client, email_suffix):
     assert r.status_code == 200, f"login u1 dual: {r.text}"
     h1 = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
-    r = client.post("/auth/register", json={
+    r = seed_verified_user(json={
         "email": f"u2-dual-{email_suffix}@example.com",
         "password": "Test1234!",
         "full_name": "Usuario 2",
@@ -173,7 +174,7 @@ def test_escenario_02_construccion_ars_current_account(client):
     # SETUP: Usuarios, proyecto y miembros
     # -----------------------------------------------------------------------
 
-    r = client.post("/auth/register-first-admin", json={
+    r = seed_verified_user(json={
         "email": "u1@escenario02.com",
         "password": "Test1234!",
         "full_name": "Usuario 1",
@@ -189,7 +190,7 @@ def test_escenario_02_construccion_ars_current_account(client):
     token_u1 = r.json()["access_token"]
     h1 = {"Authorization": f"Bearer {token_u1}"}
 
-    r = client.post("/auth/register", json={
+    r = seed_verified_user(json={
         "email": "u2@escenario02.com",
         "password": "Test1234!",
         "full_name": "Usuario 2",

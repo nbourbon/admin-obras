@@ -1,4 +1,5 @@
 from app.models.user import User
+from app.models.auth_action import AuthAction, AuthRateLimit
 from app.models.provider import Provider
 from app.models.category import Category
 from app.models.rubro import Rubro
@@ -39,4 +40,6 @@ __all__ = [
     "ContributionAbsorption",
     "AvanceObra",
     "BalanceMovement",
+    "AuthAction",
+    "AuthRateLimit",
 ]

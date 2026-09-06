@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { projectsAPI, authAPI } from '../api/client'
+import { projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield, History, ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -57,7 +57,7 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
         </div>
 
         <p className="text-gray-600 text-sm mb-3">
-          Ingresa el email del participante. Si ya existe como usuario, se agregara al proyecto. Si no existe, se creara un usuario nuevo que debera configurar su contrasena en el primer inicio de sesion.
+          Ingresá el correo del participante. Recibirá una invitación para aceptar el acceso a la obra. Si es nuevo, elegirá su contraseña desde ese enlace. Su porcentaje se incluye en el reparto desde que lo agregás.
         </p>
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4 flex items-start gap-2">
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
@@ -151,7 +151,7 @@ function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberI
               disabled={loading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Creando...' : 'Crear y Agregar'}
+              {loading ? 'Enviando...' : 'Agregar e invitar'}
             </button>
           </div>
         </form>
@@ -503,7 +503,9 @@ function ProjectMembers() {
               {members.map((member) => (
                 <tr key={member.id}>
                   <td className="px-6 py-4 font-medium">{member.user_name}</td>
-                  <td className="px-6 py-4 text-gray-500">{member.user_email}</td>
+                  <td className="px-6 py-4 text-gray-500">{member.user_email}
+                    {member.invitation_accepted === false && <span className="block text-xs text-amber-700">Invitación pendiente</span>}
+                  </td>
                   <td className="px-6 py-4">
                     <span className="font-semibold text-blue-600">
                       {member.participation_percentage}%
@@ -522,6 +524,13 @@ function ProjectMembers() {
                   {isProjectAdmin && (
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {member.invitation_accepted === false && <button className="text-sm text-blue-600" onClick={async (event) => {
+                          const button = event.currentTarget
+                          button.disabled = true
+                          try { const response = await projectsAPI.resendInvitation(currentProject.id, member.user_id); alert(response.data.message) }
+                          catch (err) { alert(err.response?.data?.detail || 'No se pudo reenviar la invitación') }
+                          finally { button.disabled = false }
+                        }}>Reenviar invitación</button>}
                         <button
                           onClick={() => handleEdit(member)}
                           className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"

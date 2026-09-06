@@ -68,6 +68,7 @@ class ProjectMemberUpdate(BaseModel):
 
 
 class ProjectMemberResponse(BaseModel):
+    invitation_accepted: bool = True
     id: int
     project_id: int
     user_id: int

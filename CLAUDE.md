@@ -173,7 +173,10 @@ The system distinguishes between **event dates** (when something actually happen
 This separation allows users to backfill historical expenses and payments with correct dates while maintaining full audit trails.
 
 ## API Authentication
-- First admin: `POST /auth/register-first-admin` (only works if no users exist)
+- Public signup starts at `POST /auth/self-register`; the user chooses a password from a single-use email verification link
+- Password recovery uses a 20-minute single-use link and increments `User.auth_version` to revoke prior sessions and recovery links
+- Project invitations use 24-hour single-use links; pending invitees participate in project accounting but cannot access project data until acceptance
+- Account emails are sent through Resend using `RESEND_API_KEY`, `EMAIL_FROM`, and `FRONTEND_URL`
 - Login: `POST /auth/login` returns JWT token
 - Use `Authorization: Bearer <token>` header for protected endpoints
 - Frontend stores token in localStorage
@@ -194,11 +197,12 @@ This separation allows users to backfill historical expenses and payments with c
 - `/register` - Self-registration for new users
 
 ## Project Permissions (Per-Project Admin)
-- **Any user can create a project** and becomes its admin automatically
+- **Any verified user can create a project** and becomes its admin automatically
 - **Project admins** can: create expenses, manage providers/categories, add/remove members, approve payments
 - **Regular members** can: view expenses, submit payments, view notes, vote on voting notes
 - Users only see projects where they are members (no global admin access)
 - Project admins can grant admin privileges to other members via the Participantes page
+- The legacy `User.is_admin` flag never authorizes account or project operations; admins cannot change another user's password
 
 ## Project Creation Flow
 **New projects are individual (single-user) by default:**

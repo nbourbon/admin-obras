@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
@@ -41,6 +41,7 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
+    auth_version: int = 0
     user_id: Optional[int] = None
     email: Optional[str] = None
 
@@ -51,3 +52,27 @@ class PasswordChange(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     token: str
+
+
+class RegistrationRequest(BaseModel):
+    email: EmailStr
+    full_name: str = Field(min_length=1, max_length=255)
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class ActionRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+
+
+class CompleteActionRequest(ActionRequest):
+    password: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        if value is not None and (len(value) < 10 or len(value.encode("utf-8")) > 72):
+            raise ValueError("Usá al menos 10 caracteres y como máximo 72 bytes para la contraseña")
+        return value

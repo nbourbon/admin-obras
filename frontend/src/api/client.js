@@ -32,8 +32,9 @@ client.interceptors.response.use(
     const config = error.config
 
     // Retry on network errors or 502/503/504 (backend starting up)
-    const isNetworkError = !error.response
-    const isServerStarting = [502, 503, 504].includes(error.response?.status)
+    const canRetry = ['get', 'head'].includes(config?.method?.toLowerCase()) && !axios.isCancel(error)
+    const isNetworkError = !error.response && canRetry
+    const isServerStarting = canRetry && [502, 503, 504].includes(error.response?.status)
 
     if ((isNetworkError || isServerStarting) && config && !config._retryCount) {
       config._retryCount = 0
@@ -48,7 +49,7 @@ client.interceptors.response.use(
     }
 
     // Handle auth errors (only on actual 401 responses, not network errors)
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !config?.url?.startsWith('/auth/')) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
@@ -65,19 +66,11 @@ export const authAPI = {
     }),
   googleLogin: (token) => client.post('/auth/google', { token }),
   me: () => client.get('/auth/me'),
-  registerFirstAdmin: (data) => client.post('/auth/register-first-admin', data),
-  register: (data) => client.post('/auth/register', data),
+  forgotPassword: (email) => client.post('/auth/forgot-password', { email }),
+  resendVerification: (email) => client.post('/auth/resend-verification', { email }),
+  actionInfo: (token) => client.post('/auth/action-info', { token }),
+  completeAction: (token, password) => client.post('/auth/complete-action', { token, password }),
   selfRegister: (data) => client.post('/auth/self-register', data),
-}
-
-// Users API
-export const usersAPI = {
-  list: (includeInactive = false) => client.get(`/users?include_inactive=${includeInactive}`),
-  get: (id) => client.get(`/users/${id}`),
-  update: (id, data) => client.put(`/users/${id}`, data),
-  delete: (id) => client.delete(`/users/${id}`),
-  validateParticipation: () => client.get('/users/participation-validation'),
-  changePassword: (id, newPassword) => client.put(`/users/${id}/change-password`, { new_password: newPassword }),
 }
 
 // Providers API
@@ -205,6 +198,7 @@ export const projectsAPI = {
   updateMember: (id, userId, data) => client.put(`/projects/${id}/members/${userId}`, data),
   removeMember: (id, userId) => client.delete(`/projects/${id}/members/${userId}`),
   validateParticipation: (id) => client.get(`/projects/${id}/participation-validation`),
+  resendInvitation: (id, userId) => client.post(`/projects/${id}/members/${userId}/resend-invitation`),
   memberHistory: (id) => client.get(`/projects/${id}/members/history`),
 }
 

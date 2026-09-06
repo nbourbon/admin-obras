@@ -1,6 +1,9 @@
 from typing import List
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from pydantic import EmailStr
+from app.services.auth_email import require_email_config, issue_action, rate_limit
+from app.services.auth import get_user_by_email
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -66,6 +69,7 @@ async def list_projects(
         .join(ProjectMember)
         .filter(
             ProjectMember.user_id == current_user.id,
+            ProjectMember.invitation_accepted == True,
             ProjectMember.is_active == True,
             Project.is_active == True,
         )
@@ -169,6 +173,7 @@ async def get_project(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == current_user.id,
+        ProjectMember.invitation_accepted == True,
         ProjectMember.is_active == True,
     ).first()
     if not member:
@@ -199,6 +204,7 @@ async def get_project(
             participation_percentage=m.participation_percentage,
             is_admin=m.is_admin,
             is_active=m.is_active,
+            invitation_accepted=m.invitation_accepted,
             created_at=m.created_at,
         )
         for m in members
@@ -329,6 +335,7 @@ async def list_project_members(
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == current_user.id,
+        ProjectMember.invitation_accepted == True,
         ProjectMember.is_active == True,
     ).first()
     if not member:
@@ -359,6 +366,7 @@ async def list_project_members(
             participation_percentage=m.participation_percentage,
             is_admin=m.is_admin,
             is_active=m.is_active,
+            invitation_accepted=m.invitation_accepted,
             created_at=m.created_at,
         )
         for m in members
@@ -399,6 +407,9 @@ async def add_project_member(
             detail="User not found",
         )
 
+    if not user.email_verified:
+        raise HTTPException(400, "Invitá al participante por email para verificar su cuenta")
+
     # Check if already a member
     existing = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
@@ -413,6 +424,7 @@ async def add_project_member(
             )
         # Reactivate
         existing.is_active = True
+        existing.invitation_accepted = True
         existing.participation_percentage = member_data.participation_percentage
         existing.is_admin = member_data.is_admin
         db.commit()
@@ -430,6 +442,7 @@ async def add_project_member(
             participation_percentage=existing.participation_percentage,
             is_admin=existing.is_admin,
             is_active=existing.is_active,
+            invitation_accepted=existing.invitation_accepted,
             created_at=existing.created_at,
         )
 
@@ -456,146 +469,65 @@ async def add_project_member(
         participation_percentage=member.participation_percentage,
         is_admin=member.is_admin,
         is_active=member.is_active,
+        invitation_accepted=member.invitation_accepted,
         created_at=member.created_at,
     )
 
 
 @router.post("/{project_id}/members/by-email", response_model=ProjectMemberResponse)
-async def add_project_member_by_email(
-    project_id: int,
-    email: str,
-    participation_percentage: float,
-    is_admin: bool = False,
-    full_name: str = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_project_admin_user),
+def add_project_member_by_email(
+    project_id: int, email: EmailStr, participation_percentage: Decimal,
+    tasks: BackgroundTasks, request: Request, is_admin: bool = False, full_name: str = None,
+    db: Session = Depends(get_db), current_user: User = Depends(get_project_admin_user),
 ):
-    """
-    Add a member to a project by email (project admin only).
-    - If user exists with that email: add to project
-    - If user doesn't exist: create user without password (they'll set it on first login)
-    """
-    from app.schemas.project import ProjectMemberCreate as PMC
-    from decimal import Decimal
-
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.is_active == True,
-    ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-
-    # Check if user exists by email
-    user = db.query(User).filter(
-        User.email == email.lower(),
-        User.is_active == True,
-    ).first()
-
+    """Reserve participation and invite the recipient; access starts on acceptance."""
+    if not participation_percentage.is_finite() or not 0 <= participation_percentage <= 100:
+        raise HTTPException(422, "El porcentaje debe estar entre 0 y 100")
+    require_email_config()
+    rate_limit(db, request, 'email', str(email))
+    project = db.get(Project, project_id)
+    user = get_user_by_email(db, str(email))
+    if user and not user.is_active:
+        raise HTTPException(400, "No se puede invitar esa cuenta")
     if not user:
-        # Create new user without password
-        if not full_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Full name is required for new users",
-            )
-
-        user = User(
-            email=email.lower(),
-            full_name=full_name,
-            password_hash=None,  # No password - user must login via Google or set password
-        )
+        if not full_name or not full_name.strip() or len(full_name) > 255:
+            raise HTTPException(422, "Ingresá el nombre completo del participante")
+        user = User(email=str(email).lower(), full_name=full_name.strip(), email_verified=False, is_admin=False)
         db.add(user)
-        db.commit()
-        db.refresh(user)
-
-    # Check if already a member
-    existing = db.query(ProjectMember).filter(
-        ProjectMember.project_id == project_id,
-        ProjectMember.user_id == user.id,
-    ).first()
-
-    if existing:
-        if existing.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{user.full_name} ({user.email}) is already a member of this project",
-            )
-        # Reactivate
-        old_pct = existing.participation_percentage
-        old_admin = existing.is_admin
-        existing.is_active = True
-        existing.participation_percentage = Decimal(str(participation_percentage))
-        existing.is_admin = is_admin
-        db.commit()
-        db.refresh(existing)
-
-        # Auto-update project mode if needed
-        auto_update_project_mode(db, project_id)
-
-        db.add(ProjectMemberHistory(
-            project_id=project_id,
-            user_id=user.id,
-            changed_by=current_user.id,
-            action="added",
-            old_percentage=old_pct,
-            new_percentage=existing.participation_percentage,
-            old_is_admin=old_admin,
-            new_is_admin=is_admin,
-        ))
-        db.commit()
-        return ProjectMemberResponse(
-            id=existing.id,
-            project_id=existing.project_id,
-            user_id=existing.user_id,
-            user_name=user.full_name,
-            user_email=user.email,
-            participation_percentage=existing.participation_percentage,
-            is_admin=existing.is_admin,
-            is_active=existing.is_active,
-            created_at=existing.created_at,
-        )
-
-    # Create new membership
-    member = ProjectMember(
-        project_id=project_id,
-        user_id=user.id,
-        participation_percentage=Decimal(str(participation_percentage)),
-        is_admin=is_admin,
-    )
-    db.add(member)
+        db.flush()
+    member = db.query(ProjectMember).filter_by(project_id=project_id, user_id=user.id).first()
+    if member and member.is_active:
+        raise HTTPException(400, "El participante ya fue agregado. Usá Reenviar invitación si todavía no aceptó.")
+    if not member:
+        member = ProjectMember(project_id=project_id, user_id=user.id)
+        db.add(member)
+    member.is_active = True
+    member.invitation_accepted = False
+    member.participation_percentage = participation_percentage
+    member.is_admin = is_admin
+    db.flush()
+    issue_action(db, tasks, user, 'invite', member, project.name)
+    db.add(ProjectMemberHistory(project_id=project_id, user_id=user.id, changed_by=current_user.id,
+        action='invited', new_percentage=participation_percentage, new_is_admin=is_admin))
     db.commit()
-    db.refresh(member)
-
-    # Auto-update project mode if needed
     auto_update_project_mode(db, project_id)
+    return ProjectMemberResponse(id=member.id, project_id=project_id, user_id=user.id,
+        user_name=user.full_name, user_email=user.email, participation_percentage=member.participation_percentage,
+        is_admin=member.is_admin, is_active=True, invitation_accepted=False, created_at=member.created_at)
 
-    db.add(ProjectMemberHistory(
-        project_id=project_id,
-        user_id=user.id,
-        changed_by=current_user.id,
-        action="added",
-        old_percentage=None,
-        new_percentage=member.participation_percentage,
-        old_is_admin=None,
-        new_is_admin=is_admin,
-    ))
+
+@router.post("/{project_id}/members/{user_id}/resend-invitation", status_code=202)
+def resend_invitation(project_id: int, user_id: int, request: Request, tasks: BackgroundTasks,
+                      db: Session = Depends(get_db), current_user: User = Depends(get_project_admin_user)):
+    require_email_config()
+    member = db.query(ProjectMember).filter_by(project_id=project_id, user_id=user_id, is_active=True).first()
+    if not member or member.invitation_accepted:
+        raise HTTPException(400, "No hay una invitación pendiente para este participante")
+    user = db.get(User, user_id)
+    rate_limit(db, request, 'email', user.email)
+    issue_action(db, tasks, user, 'invite', member, db.get(Project, project_id).name)
     db.commit()
-
-    return ProjectMemberResponse(
-        id=member.id,
-        project_id=member.project_id,
-        user_id=member.user_id,
-        user_name=user.full_name,
-        user_email=user.email,
-        participation_percentage=member.participation_percentage,
-        is_admin=member.is_admin,
-        is_active=member.is_active,
-        created_at=member.created_at,
-    )
+    return {'message': 'Invitación solicitada. El destinatario recibirá un enlace nuevo.'}
 
 
 @router.put("/{project_id}/members/{user_id}", response_model=ProjectMemberResponse)
@@ -624,10 +556,11 @@ async def update_project_member(
     update_data = member_data.model_dump(exclude_unset=True)
 
     # Prevent removing admin role if this is the last admin
-    if "is_admin" in update_data and not update_data["is_admin"] and member.is_admin:
+    if member.is_admin and (update_data.get("is_admin") is False or update_data.get("is_active") is False):
         admin_count = db.query(ProjectMember).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.is_admin == True,
+            ProjectMember.invitation_accepted == True,
             ProjectMember.is_active == True,
         ).count()
         if admin_count <= 1:
@@ -665,6 +598,7 @@ async def update_project_member(
         participation_percentage=member.participation_percentage,
         is_admin=member.is_admin,
         is_active=member.is_active,
+        invitation_accepted=member.invitation_accepted,
         created_at=member.created_at,
     )
 
@@ -696,6 +630,7 @@ async def remove_project_member(
         admin_count = db.query(ProjectMember).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.is_admin == True,
+            ProjectMember.invitation_accepted == True,
             ProjectMember.is_active == True,
         ).count()
         if admin_count <= 1:
@@ -705,6 +640,9 @@ async def remove_project_member(
             )
 
     member.is_active = False
+    from app.models.auth_action import AuthAction
+    from datetime import datetime
+    db.query(AuthAction).filter(AuthAction.member_id == member.id, AuthAction.used_at.is_(None)).update({'used_at': datetime.utcnow()})
     db.commit()
 
     # Auto-update project mode if needed

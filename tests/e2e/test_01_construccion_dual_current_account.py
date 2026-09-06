@@ -14,6 +14,7 @@ Pasos cubiertos:
 """
 
 from decimal import Decimal
+from tests.user_factory import seed_verified_user
 from unittest.mock import patch
 
 import pytest
@@ -63,7 +64,7 @@ def test_escenario_01_construccion_dual_current_account(client):
     # -----------------------------------------------------------------------
 
     # Registrar Usuario 1 (admin global)
-    r = client.post("/auth/register-first-admin", json={
+    r = seed_verified_user(json={
         "email": "u1@escenario01.com",
         "password": "Test1234!",
         "full_name": "Usuario 1",
@@ -81,7 +82,7 @@ def test_escenario_01_construccion_dual_current_account(client):
     h1 = {"Authorization": f"Bearer {token_u1}"}
 
     # Registrar Usuario 2 (usando credenciales de admin)
-    r = client.post("/auth/register", json={
+    r = seed_verified_user(json={
         "email": "u2@escenario01.com",
         "password": "Test1234!",
         "full_name": "Usuario 2",

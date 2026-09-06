@@ -16,7 +16,8 @@ A full-stack application for managing construction expenses among multiple parti
 - **File uploads**: Attach invoices to expenses and receipts to payments with preview support
 - **Dashboard**: Visual summary of total expenses, pending payments, and expense evolution per project
 - **Category colors**: Assign colors to categories for visual identification
-- **Role-based access**: Admin users can create expenses, manage participants, and approve payments
+- **Project-based access**: Each project has its own admins; creating an account never grants global administration
+- **Secure account access**: Email verification, project invitations, and single-use password reset links sent with Resend
 - **Meeting notes**: Record meeting minutes with rich text editor
 - **Weighted voting**: Create voting notes where each vote is weighted by the participant's ownership percentage
 
@@ -96,20 +97,9 @@ The frontend will be available at http://localhost:3000
 
 ## Getting Started
 
-### 1. Create the first admin user
+### 1. Create an account
 
-Since there are no users initially, you can create the first admin via the API:
-
-```bash
-curl -X POST "http://localhost:8000/auth/register-first-admin" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@example.com",
-    "password": "your-password",
-    "full_name": "Admin User",
-    "participation_percentage": 25
-  }'
-```
+Open `/register`, enter your name and email, and follow the verification link. The password is chosen only after proving access to the mailbox. Any authenticated user can create a project and becomes admin of that project only.
 
 ### 2. Log in to the frontend
 
@@ -203,15 +193,17 @@ construccion-edificio/
 Most endpoints require an `X-Project-ID` header to scope data to the current project.
 
 ### Authentication
-- `POST /auth/register-first-admin` - Create first admin (only works once)
-- `POST /auth/register` - Register new user (admin only)
+- `POST /auth/self-register` - Start registration and send email verification
+- `POST /auth/resend-verification` - Send a new account verification link
+- `POST /auth/forgot-password` - Send a password recovery link
+- `POST /auth/action-info` - Validate a verification, invitation, or recovery link
+- `POST /auth/complete-action` - Complete a single-use account action
 - `POST /auth/login` - Login and get JWT token
 - `GET /auth/me` - Get current user info
 
-### Users
-- `GET /users` - List all participants
-- `PUT /users/{id}` - Update user
-- `DELETE /users/{id}` - Deactivate user
+### Accounts and members
+- Global `/users` administration endpoints are retired. Users manage their own credentials through verified email links.
+- Project administrators manage only the members of their own projects through the project member endpoints below.
 
 ### Expenses
 - `GET /expenses` - List all expenses
@@ -231,12 +223,13 @@ Most endpoints require an `X-Project-ID` header to scope data to the current pro
 
 ### Projects
 - `GET /projects` - List user's projects
-- `POST /projects` - Create project (admin only)
+- `POST /projects` - Create project (the creator becomes its project administrator)
 - `GET /projects/{id}` - Get project with members
 - `PUT /projects/{id}` - Update project
 - `DELETE /projects/{id}` - Deactivate project
 - `GET /projects/{id}/members` - List project members
-- `POST /projects/{id}/members` - Add member to project
+- `POST /projects/{id}/members/by-email` - Invite a member by email
+- `POST /projects/{id}/members/{user_id}/resend-invitation` - Resend a pending invitation
 - `PUT /projects/{id}/members/{user_id}` - Update member percentage
 - `DELETE /projects/{id}/members/{user_id}` - Remove member from project
 - `GET /projects/{id}/participation-validation` - Validate percentages sum to 100%
@@ -263,6 +256,9 @@ See `.env.example` for all available configuration options:
   - **Default**: `sqlite:///./data/construction.db` (local development)
   - **Production**: `postgresql://user:pass@host:5432/dbname`
 - `SECRET_KEY` - JWT signing key (change in production!)
+- `RESEND_API_KEY` - Resend API key used by the backend for account emails
+- `EMAIL_FROM` - Verified sender, e.g. `Admin Obras <no-reply@notificaciones.obrador.xyz>`
+- `FRONTEND_URL` - HTTPS frontend origin used to build account links
 - `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time (default: 1440 = 24 hours)
 - `MAX_FILE_SIZE_MB` - Maximum upload file size (default: 10)
 - `EXCHANGE_RATE_CACHE_MINUTES` - Exchange rate cache duration (default: 60)
