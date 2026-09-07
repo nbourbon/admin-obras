@@ -40,6 +40,11 @@ class ContributionPayment(Base):
     amount_paid_usd = Column(Numeric(15, 2), nullable=True, default=0)
     amount_paid_ars = Column(Numeric(15, 2), nullable=True, default=0)
 
+    # Soft delete mirrors contributions so historical allocations remain exact.
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

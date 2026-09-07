@@ -22,6 +22,7 @@ A full-stack application for managing construction expenses among multiple parti
 - **Meeting notes**: Record meeting minutes with a rich text editor; stored and legacy HTML is sanitized before display
 - **Accounting guards**: Monetary operations reject non-positive amounts, contribution payments must cover the full remaining amount, and PostgreSQL row locks serialize balance changes
 - **Weighted voting**: Create voting notes where each vote is weighted by the participant's ownership percentage
+- **Auditable accounting corrections**: Deleting an expense or contribution records a reversal and keeps the original records; restoring an expense replays its linked payments and contributions atomically
 
 ## Tech Stack
 
@@ -140,6 +141,7 @@ Record meeting minutes and make decisions:
 - **Voting notes**: Create polls where votes are weighted by ownership percentage
   - Example: A 85% owner's vote outweighs a 15% owner's vote
   - Results show both vote count and total participation percentage
+  - The percentage is captured when the vote is cast, so later membership changes do not rewrite historical results
   - Votes are irreversible (only admin can reset)
 
 ## Project Structure

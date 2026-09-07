@@ -62,6 +62,9 @@ class Expense(Base):
     is_deleted = Column(Boolean, default=False, nullable=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deletion_reason = Column(Text, nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    idempotency_key = Column(String(100), nullable=True)
 
     # Timestamps
     expense_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

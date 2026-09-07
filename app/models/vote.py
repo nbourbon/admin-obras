@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -23,12 +23,15 @@ class UserVote(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vote_option_id = Column(Integer, ForeignKey("vote_options.id"), nullable=False)
+    note_id = Column(Integer, ForeignKey("notes.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    participation_percentage = Column(Numeric(5, 2), nullable=True)
     voted_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Unique constraint: one vote per user per note (enforced at application level via note_id)
     __table_args__ = (
         UniqueConstraint('vote_option_id', 'user_id', name='unique_user_vote_per_option'),
+        UniqueConstraint('note_id', 'user_id', name='unique_user_vote_per_note'),
     )
 
     # Relationships

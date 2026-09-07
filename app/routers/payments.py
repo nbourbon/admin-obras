@@ -24,6 +24,8 @@ from app.services.expense_splitter import update_expense_status
 from app.services.exchange_rate import fetch_blue_dollar_rate_sync
 from app.services.file_storage import save_receipt, get_file_path, get_file_url
 from app.services.balance_audit import record_member_balance_delta
+from app.services.accounting_reversal import change_member_balance, expense_payment_debit
+from app.models.project_member import ProjectMember
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -231,7 +233,11 @@ async def get_pending_approval_payments(
         )
     )
 
-    contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+    contribution_query = contribution_query.join(Contribution).filter(
+        Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
+        ContributionPayment.is_deleted == False,
+    )
 
     contribution_payments = contribution_query.order_by(ContributionPayment.submitted_at.desc()).all()
 
@@ -391,7 +397,11 @@ async def get_pending_approval_count(
         ((ContributionPayment.submitted_at != None) & (ContributionPayment.is_paid == False))
     )
 
-    contribution_query = contribution_query.join(Contribution).filter(Contribution.project_id == project.id)
+    contribution_query = contribution_query.join(Contribution).filter(
+        Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
+        ContributionPayment.is_deleted == False,
+    )
 
     contribution_count = contribution_query.count()
 
@@ -656,6 +666,8 @@ async def approve_payment(
             .filter(
                 ContributionPayment.id == payment_id,
                 Contribution.project_id == selected_project.id,
+                Contribution.is_deleted == False,
+                ContributionPayment.is_deleted == False,
             )
             .with_for_update()
             .first()
@@ -663,7 +675,10 @@ async def approve_payment(
 
         if contribution_payment:
             # Handle contribution payment approval
-            contribution = db.query(Contribution).filter(Contribution.id == contribution_payment.contribution_id).first()
+            contribution = db.query(Contribution).filter(
+                Contribution.id == contribution_payment.contribution_id,
+                Contribution.is_deleted == False,
+            ).first()
 
             if not contribution:
                 raise HTTPException(
@@ -1062,7 +1077,28 @@ async def unmark_payment_as_paid(
             detail="Not authorized to cancel this submission",
         )
 
+    project_obj = db.query(Project).filter(Project.id == expense.project_id).first()
+    type_params = getattr(project_obj, "type_parameters", None) or {}
+    if payment.is_paid and type_params.get("contribution_mode") == "current_account":
+        member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == expense.project_id,
+            ProjectMember.user_id == payment.user_id,
+        ).with_for_update().first()
+        if not member:
+            raise HTTPException(status_code=409, detail="No se encontró la cuenta del participante")
+        currency_mode = getattr(project_obj, "currency_mode", "DUAL") or "DUAL"
+        currency, debited = expense_payment_debit(payment, currency_mode)
+        change_member_balance(
+            db, member, currency, debited,
+            movement_type="reversal", source_type="participant_payment", source_id=payment.id,
+            description=f"Pago desmarcado: {expense.description}", actor_id=current_user.id,
+        )
+
     payment.amount_paid = None
+    payment.amount_paid_usd = None
+    payment.amount_paid_ars = None
+    payment.exchange_rate_at_payment = None
+    payment.exchange_rate_source = None
     payment.currency_paid = None
     payment.is_pending_approval = False
     payment.is_paid = False

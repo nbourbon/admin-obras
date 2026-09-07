@@ -192,6 +192,7 @@ async def get_dashboard_summary(
         ).filter(
             Contribution.project_id == project.id,
             Contribution.status == ContributionStatus.APPROVED,
+            Contribution.is_deleted == False,
         )
         contributions_totals = contributions_query.first()
         total_contributions_usd = Decimal(str(contributions_totals.total_usd or 0))

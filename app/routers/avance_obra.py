@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -12,6 +12,8 @@ from app.utils.dependencies import (
 from app.models.user import User
 from app.models.project import Project
 from app.models.avance_obra import AvanceObra
+from app.models.rubro import Rubro
+from app.models.category import Category
 
 router = APIRouter(prefix="/avance-obra", tags=["Avance de Obra"])
 
@@ -41,6 +43,37 @@ async def save_avance_obra(
     project: Project = Depends(get_required_project),
 ):
     """Replace all avance de obra entries for the current project (admin only)."""
+    keys = [(entry.rubro_id, entry.category_id) for entry in entries]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(status_code=422, detail="Hay filas de avance repetidas")
+
+    rubro_ids = {entry.rubro_id for entry in entries}
+    valid_rubros = {
+        row.id for row in db.query(Rubro).filter(
+            Rubro.project_id == project.id,
+            Rubro.id.in_(rubro_ids),
+            Rubro.is_active == True,
+        ).all()
+    } if rubro_ids else set()
+    if valid_rubros != rubro_ids:
+        raise HTTPException(status_code=422, detail="Uno de los rubros no pertenece al proyecto")
+
+    category_ids = {entry.category_id for entry in entries if entry.category_id is not None}
+    categories = db.query(Category).filter(
+        Category.project_id == project.id,
+        Category.id.in_(category_ids),
+        Category.is_active == True,
+    ).all() if category_ids else []
+    categories_by_id = {category.id: category for category in categories}
+    if set(categories_by_id) != category_ids:
+        raise HTTPException(status_code=422, detail="Una de las categorías no pertenece al proyecto")
+    if any(
+        entry.category_id is not None
+        and categories_by_id[entry.category_id].rubro_id != entry.rubro_id
+        for entry in entries
+    ):
+        raise HTTPException(status_code=422, detail="Una categoría no corresponde al rubro indicado")
+
     # Delete existing entries
     db.query(AvanceObra).filter(AvanceObra.project_id == project.id).delete()
 

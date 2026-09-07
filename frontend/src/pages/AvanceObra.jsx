@@ -69,11 +69,15 @@ function AvanceObra() {
 
   const handleSave = async () => {
     const payload = []
+    const invalidRows = []
 
     for (const [key, entry] of Object.entries(entries)) {
       if (!entry.checked) continue
       const val = parseFloat(entry.value)
-      if (isNaN(val) || val < 0 || val > 100) continue
+      if (isNaN(val) || val < 0 || val > 100) {
+        invalidRows.push(key)
+        continue
+      }
 
       if (key.startsWith('r-')) {
         const rubroId = parseInt(key.slice(2))
@@ -87,6 +91,11 @@ function AvanceObra() {
       }
     }
 
+    if (invalidRows.length > 0) {
+      setError('Revisá los porcentajes marcados: todos deben ser números entre 0 y 100.')
+      return
+    }
+
     try {
       setSaving(true)
       setError(null)
@@ -94,7 +103,7 @@ function AvanceObra() {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
-      setError('Error al guardar los cambios')
+      setError(err.response?.data?.detail || 'Error al guardar los cambios')
       console.error(err)
     } finally {
       setSaving(false)

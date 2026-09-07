@@ -43,6 +43,10 @@ class ContributionResponse(ContributionBase):
     expense_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime]
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
+    deletion_reason: Optional[str] = None
 
     class Config:
         from_attributes = True

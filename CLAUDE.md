@@ -118,6 +118,7 @@ Configuration is loaded in this order (higher priority overwrites lower):
 
 ### Database Migrations
 The app uses a custom migration system in `database.py` (`_run_migrations()`) that:
+  - Fails startup on a migration error instead of serving with a partially migrated schema
 - Automatically adds new columns to existing tables
 - Works with both SQLite and PostgreSQL
 - Runs on startup via `init_db()`
@@ -241,6 +242,7 @@ This approach simplifies onboarding - users start simple and grow complexity as 
 ### Weighted Voting
 Votes are weighted by each participant's ownership percentage:
 - Each vote carries the weight of the voter's `participation_percentage`
+- New votes snapshot that percentage at voting time; historical results do not change when project percentages are edited
 - Example: If user A (85%) votes for Option 1 and user B (15%) votes for Option 2, Option 1 wins with 85%
 - Results show both vote count AND total participation percentage per option
 - The option with the highest accumulated percentage is marked as "GANADOR"

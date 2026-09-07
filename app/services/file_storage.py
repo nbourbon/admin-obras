@@ -48,8 +48,6 @@ def get_receipts_dir() -> Path:
 
 def validate_file(file: UploadFile) -> None:
     """Validate file size and type."""
-    max_size = settings.max_file_size_mb * 1024 * 1024  # Convert to bytes
-
     if file.filename:
         ext = file.filename.lower().split(".")[-1]
         allowed_extensions = ["pdf", "jpg", "jpeg", "png"]
@@ -58,6 +56,19 @@ def validate_file(file: UploadFile) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}",
             )
+
+
+async def read_validated_file(file: UploadFile) -> bytes:
+    """Read at most the configured limit plus one byte, then reject oversized files."""
+    max_size = settings.max_file_size_mb * 1024 * 1024
+    await file.seek(0)
+    contents = await file.read(max_size + 1)
+    if len(contents) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"El archivo supera el máximo permitido de {settings.max_file_size_mb} MB",
+        )
+    return contents
 
 
 def generate_unique_filename(original_filename: str) -> str:
@@ -75,8 +86,7 @@ def is_url(path: str) -> bool:
 async def upload_to_cloudinary(file: UploadFile, folder: str, public_id: str) -> str:
     """Upload file to Cloudinary and return the URL."""
     try:
-        await file.seek(0)
-        contents = await file.read()
+        contents = await read_validated_file(file)
         result = cloudinary.uploader.upload(
             contents,
             folder=f"construccion/{folder}",
@@ -107,8 +117,7 @@ async def save_invoice(file: UploadFile, expense_id: int) -> str:
         # Local storage fallback
         file_path = get_invoices_dir() / f"expense_{expense_id}_{filename}"
         try:
-            await file.seek(0)
-            contents = await file.read()
+            contents = await read_validated_file(file)
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
         finally:
@@ -135,8 +144,7 @@ async def save_receipt(file: UploadFile, payment_id: int) -> str:
         # Local storage fallback
         file_path = get_receipts_dir() / f"payment_{payment_id}_{filename}"
         try:
-            await file.seek(0)
-            contents = await file.read()
+            contents = await read_validated_file(file)
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
         finally:
@@ -163,8 +171,7 @@ async def save_contribution_receipt(file: UploadFile, contribution_id: int) -> s
         # Local storage fallback
         file_path = get_receipts_dir() / f"contribution_{contribution_id}_{filename}"
         try:
-            await file.seek(0)
-            contents = await file.read()
+            contents = await read_validated_file(file)
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
         finally:

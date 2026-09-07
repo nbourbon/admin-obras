@@ -61,6 +61,10 @@ class ExpenseResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[int] = None
+    deletion_reason: Optional[str] = None
+    updated_by: Optional[int] = None
 
     # Include related objects
     provider: Optional[ProviderResponse] = None

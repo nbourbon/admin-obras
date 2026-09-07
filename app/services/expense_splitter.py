@@ -602,6 +602,7 @@ def update_expense_status(db: Session, expense_id: int) -> ExpenseStatus:
     payments = (
         db.query(ParticipantPayment)
         .filter(ParticipantPayment.expense_id == expense_id)
+        .filter(ParticipantPayment.is_deleted == False)
         .all()
     )
 

@@ -119,6 +119,10 @@ def _run_migrations():
     payments_cols = get_cols('participant_payments')
     notes_cols = get_cols('notes')
     users_cols = get_cols('users')
+    user_votes_cols = get_cols('user_votes')
+    contributions_cols = get_cols('contributions')
+    contribution_payments_cols = get_cols('contribution_payments')
+    contribution_absorptions_cols = get_cols('contribution_absorptions')
 
     # Collect all pending migrations, then execute in a single connection
     pending = []
@@ -211,6 +215,15 @@ def _run_migrations():
         if 'rubro_id' not in expenses_cols:
             pending.append(('ALTER TABLE expenses ADD COLUMN rubro_id INTEGER',
                             'Added rubro_id to expenses'))
+        if 'deletion_reason' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN deletion_reason TEXT',
+                            'Added deletion_reason to expenses'))
+        if 'updated_by' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN updated_by INTEGER',
+                            'Added updated_by to expenses'))
+        if 'idempotency_key' not in expenses_cols:
+            pending.append(('ALTER TABLE expenses ADD COLUMN idempotency_key VARCHAR(100)',
+                            'Added idempotency key to expenses'))
 
     # --- Participant payments table ---
     if payments_cols:
@@ -244,6 +257,23 @@ def _run_migrations():
                             'Added voting_closes_at to notes'))
             pending.append(('ALTER TABLE notes ADD COLUMN is_voting_closed BOOLEAN DEFAULT FALSE',
                             'Added is_voting_closed to notes'))
+
+    # --- Votes: preserve the weight at voting time and enforce one vote per note ---
+    if user_votes_cols:
+        if 'note_id' not in user_votes_cols:
+            pending.append(('ALTER TABLE user_votes ADD COLUMN note_id INTEGER',
+                            'Added note_id to user votes'))
+            pending.append(('''
+                UPDATE user_votes
+                SET note_id = (
+                    SELECT vote_options.note_id FROM vote_options
+                    WHERE vote_options.id = user_votes.vote_option_id
+                )
+                WHERE note_id IS NULL
+            ''', 'Backfilled note_id on user votes'))
+        if 'participation_percentage' not in user_votes_cols:
+            pending.append(('ALTER TABLE user_votes ADD COLUMN participation_percentage NUMERIC(5,2)',
+                            'Added historical participation percentage to user votes'))
 
     # --- Note participants table ---
     note_participants_cols = get_cols('note_participants')
@@ -292,7 +322,6 @@ def _run_migrations():
                                 'Removed participation_percentage from users (now project-level only)'))
 
     # --- Contribution payments table ---
-    contribution_payments_cols = get_cols('contribution_payments')
     if contribution_payments_cols:
         if 'currency_paid' not in contribution_payments_cols:
             pending.append(('ALTER TABLE contribution_payments ADD COLUMN currency_paid VARCHAR(3)',
@@ -315,6 +344,13 @@ def _run_migrations():
         if 'rejection_reason' not in contribution_payments_cols:
             pending.append(('ALTER TABLE contribution_payments ADD COLUMN rejection_reason VARCHAR(500)',
                             'Added rejection_reason to contribution_payments'))
+        if 'is_deleted' not in contribution_payments_cols:
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL',
+                            'Added soft delete to contribution payments'))
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN deleted_at TIMESTAMP',
+                            'Added deleted_at to contribution payments'))
+            pending.append(('ALTER TABLE contribution_payments ADD COLUMN deleted_by INTEGER',
+                            'Added deleted_by to contribution payments'))
 
     # --- Avance de Obra table ---
     # Note: for new installs, create_all() handles this; migration handles existing DBs
@@ -402,9 +438,15 @@ def _run_migrations():
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 )
             ''', 'Created contribution_absorptions table (PostgreSQL)'))
+    elif contribution_absorptions_cols and 'is_deleted' not in contribution_absorptions_cols:
+        pending.append(('ALTER TABLE contribution_absorptions ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL',
+                        'Added soft delete to contribution absorptions'))
+        pending.append(('ALTER TABLE contribution_absorptions ADD COLUMN deleted_at TIMESTAMP',
+                        'Added deleted_at to contribution absorptions'))
+        pending.append(('ALTER TABLE contribution_absorptions ADD COLUMN deleted_by INTEGER',
+                        'Added deleted_by to contribution absorptions'))
 
     # --- Contributions table ---
-    contributions_cols = get_cols('contributions')
     existing_indexes = {}
 
     def has_index(table, index_name):
@@ -418,6 +460,18 @@ def _run_migrations():
         if table in table_names and not has_index(table, index_name):
             pending.append((sql, description))
     if contributions_cols:
+        if 'is_deleted' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE NOT NULL',
+                            'Added soft delete to contributions'))
+            pending.append(('ALTER TABLE contributions ADD COLUMN deleted_at TIMESTAMP',
+                            'Added deleted_at to contributions'))
+            pending.append(('ALTER TABLE contributions ADD COLUMN deleted_by INTEGER',
+                            'Added deleted_by to contributions'))
+            pending.append(('ALTER TABLE contributions ADD COLUMN deletion_reason TEXT',
+                            'Added deletion_reason to contributions'))
+        if 'idempotency_key' not in contributions_cols:
+            pending.append(('ALTER TABLE contributions ADD COLUMN idempotency_key VARCHAR(120)',
+                            'Added idempotency key to contributions'))
         # Rename user_id to created_by if needed
         if 'user_id' in contributions_cols and 'created_by' not in contributions_cols:
             pending.append(('ALTER TABLE contributions RENAME COLUMN user_id TO created_by',
@@ -497,6 +551,13 @@ def _run_migrations():
     )
     add_index(
         'expenses',
+        'uq_expenses_project_idempotency',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_expenses_project_idempotency '
+        'ON expenses (project_id, idempotency_key)',
+        'Added expense idempotency guarantee',
+    )
+    add_index(
+        'expenses',
         'ix_expenses_project_contribution_deleted_date',
         'CREATE INDEX IF NOT EXISTS ix_expenses_project_contribution_deleted_date '
         'ON expenses (project_id, is_contribution, is_deleted, expense_date DESC)',
@@ -548,8 +609,15 @@ def _run_migrations():
         'contributions',
         'ix_contributions_project_status',
         'CREATE INDEX IF NOT EXISTS ix_contributions_project_status '
-        'ON contributions (project_id, status)',
+        'ON contributions (project_id, is_deleted, status)',
         'Added index for approved contribution summaries',
+    )
+    add_index(
+        'contributions',
+        'uq_contributions_project_idempotency',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_contributions_project_idempotency '
+        'ON contributions (project_id, idempotency_key)',
+        'Added contribution idempotency guarantee',
     )
     add_index(
         'contribution_payments',
@@ -579,6 +647,12 @@ def _run_migrations():
         'ON balance_movements (source_type, source_id)',
         'Added index for balance movement source lookups',
     )
+    add_index(
+        'user_votes',
+        'uq_user_votes_note_user',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_user_votes_note_user ON user_votes (note_id, user_id)',
+        'Enforced one vote per user and note',
+    )
 
     # Execute all pending migrations
     if not pending:
@@ -594,5 +668,5 @@ def _run_migrations():
                 print(f"  Migration: {description}")
             except Exception as e:
                 conn.rollback()
-                print(f"  Migration warning ({description}): {e}")
+                raise RuntimeError(f"Migration failed ({description})") from e
     print("Migrations: Complete")

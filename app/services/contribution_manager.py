@@ -114,7 +114,10 @@ def approve_contribution(
     - DUAL mode: updates balance_ars only (contributions are always in ARS in DUAL mode)
     """
     # Get contribution
-    contribution = db.query(Contribution).filter(Contribution.id == contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == contribution_id,
+        Contribution.is_deleted == False,
+    ).first()
     if not contribution:
         raise ValueError("Contribution not found")
 
@@ -163,7 +166,10 @@ def reject_contribution(
     rejection_reason: str,
 ) -> Contribution:
     """Reject a contribution without updating balances."""
-    contribution = db.query(Contribution).filter(Contribution.id == contribution_id).first()
+    contribution = db.query(Contribution).filter(
+        Contribution.id == contribution_id,
+        Contribution.is_deleted == False,
+    ).first()
     if not contribution:
         raise ValueError("Contribution not found")
 
@@ -296,6 +302,7 @@ def get_contributions_by_participant(
         )
         .filter(Contribution.project_id == project_id)
         .filter(Contribution.status == ContributionStatus.APPROVED)
+        .filter(Contribution.is_deleted == False)
         .group_by(Contribution.created_by)
         .all()
     )

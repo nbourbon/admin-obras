@@ -1,7 +1,7 @@
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Header
 from fastapi.responses import FileResponse, Response, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import update as sa_update
@@ -20,6 +20,14 @@ from app.services.exchange_rate import fetch_blue_dollar_rate_sync, convert_curr
 from app.services.expense_splitter import create_participant_payments, create_payments_current_account, update_expense_status
 from app.services.file_storage import save_invoice, get_file_path, get_file_url
 from app.services.balance_audit import record_member_balance_delta
+from app.services.accounting_reversal import (
+    change_member_balance,
+    expense_payment_debit,
+    locked_members,
+    restore_contribution,
+    reverse_contribution,
+)
+from app.models.contribution import Contribution
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -139,6 +147,7 @@ async def list_expenses(
 @router.post("", response_model=ExpenseWithPayments, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     expense_data: ExpenseCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", max_length=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
     project: Project = Depends(get_required_project),
@@ -147,6 +156,17 @@ async def create_expense(
     Create a new expense (project admin only).
     This will automatically create payment records for all active project members.
     """
+    # Serialize project writes so the idempotency check and accounting mutation
+    # form one critical section.
+    db.query(Project).filter(Project.id == project.id).with_for_update().one()
+    if idempotency_key:
+        existing = db.query(Expense).filter(
+            Expense.project_id == project.id,
+            Expense.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            return await get_expense(existing.id, db, current_user, project)
+
     # Project is required for new expenses
     if not project:
         raise HTTPException(
@@ -253,6 +273,7 @@ async def create_expense(
         category_id=expense_data.category_id,
         created_by=current_user.id,
         project_id=project.id,
+        idempotency_key=idempotency_key,
         expense_date=expense_data.expense_date or datetime.utcnow(),
     )
     db.add(expense)
@@ -486,8 +507,9 @@ async def update_expense(
     project: Project = Depends(get_required_project),
 ):
     """
-    Update an expense (project admin only).
-    Note: Updating amount will NOT recalculate participant payments.
+    Update non-accounting fields of an expense (project admin only).
+    Monetary corrections must be made by deleting and recreating the expense so
+    balances, participant allocations and the audit trail stay consistent.
     """
     expense = db.query(Expense).filter(Expense.id == expense_id, Expense.project_id == project.id).first()
     if not expense:
@@ -505,40 +527,44 @@ async def update_expense(
 
     update_data = expense_data.model_dump(exclude_unset=True)
 
-    # Extract exchange_rate_override before setting attributes
-    exchange_rate_override = update_data.pop("exchange_rate_override", None)
+    requested_amount = update_data.get("amount_original", expense.amount_original)
+    requested_currency = update_data.get("currency_original", expense.currency_original)
+    requested_contribution = update_data.get("is_contribution", expense.is_contribution)
+    exchange_override = update_data.get("exchange_rate_override")
+    monetary_change = (
+        Decimal(str(requested_amount)) != Decimal(str(expense.amount_original))
+        or requested_currency != expense.currency_original
+        or requested_contribution != expense.is_contribution
+        or (
+            exchange_override is not None
+            and Decimal(str(exchange_override)) != Decimal(str(expense.exchange_rate_used))
+        )
+    )
+    if monetary_change:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Para corregir importe, moneda o tipo de cambio eliminá y volvé a crear el gasto. Así se recalculan saldos y aportes sin perder auditoría.",
+        )
+    for field in ("amount_original", "currency_original", "exchange_rate_override", "is_contribution"):
+        update_data.pop(field, None)
 
-    # If amount or currency is being updated, recalculate conversions
-    if "amount_original" in update_data or "currency_original" in update_data or exchange_rate_override:
-        amount = update_data.get("amount_original", expense.amount_original)
-        currency = update_data.get("currency_original", expense.currency_original)
+    related_models = {
+        "provider_id": (Provider, "Proveedor"),
+        "category_id": (Category, "Categoría"),
+    }
+    from app.models.rubro import Rubro
+    related_models["rubro_id"] = (Rubro, "Rubro")
+    for field, (model, label) in related_models.items():
+        if field not in update_data or update_data[field] is None:
+            continue
+        related = db.query(model).filter(model.id == update_data[field]).first()
+        if not related or not related.is_active or related.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{label} inválido para este proyecto",
+            )
 
-        # Determine currency mode from project
-        project = db.query(Project).filter(Project.id == expense.project_id).first() if expense.project_id else None
-        currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
-
-        if currency_mode in ("ARS", "USD"):
-            if currency_mode == "ARS":
-                update_data["amount_usd"] = Decimal("0")
-                update_data["amount_ars"] = amount
-            else:
-                update_data["amount_usd"] = amount
-                update_data["amount_ars"] = Decimal("0")
-            update_data["exchange_rate_used"] = Decimal("0")
-        else:
-            if exchange_rate_override:
-                exchange_rate = exchange_rate_override
-                update_data["exchange_rate_source"] = "manual"
-            else:
-                exchange_rate = fetch_blue_dollar_rate_sync()
-                update_data["exchange_rate_source"] = "auto"
-
-            currency_value = currency.value if hasattr(currency, 'value') else currency
-            amount_usd, amount_ars = convert_currency(amount, currency_value, exchange_rate)
-
-            update_data["amount_usd"] = amount_usd
-            update_data["amount_ars"] = amount_ars
-            update_data["exchange_rate_used"] = exchange_rate
+    update_data["updated_by"] = current_user.id
 
     db.execute(
         sa_update(Expense).where(Expense.id == expense_id).values(**update_data)
@@ -649,6 +675,7 @@ async def download_invoice(
 async def delete_expense(
     expense_id: int,
     confirmed: bool = Query(False, description="Confirm deletion even with paid payments"),
+    reason: str = Query("Corrección administrativa", min_length=3, max_length=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     selected_project: Project = Depends(get_required_project),
@@ -661,7 +688,8 @@ async def delete_expense(
     expense = db.query(Expense).filter(
         Expense.id == expense_id,
         Expense.project_id == selected_project.id,
-    ).first()
+        Expense.is_deleted == False,
+    ).with_for_update().first()
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -730,77 +758,48 @@ async def delete_expense(
     project = db.query(Project).filter(Project.id == expense.project_id).first()
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
-    # Auto-delete all payments that don't have a participant-uploaded receipt
-    # Note: In direct_payment mode, we do NOT restore balances because payments were made
-    # directly by users (not from their account balance)
+    member_map = locked_members(db, expense.project_id)
+    type_params = getattr(project, 'type_parameters', None) or {}
+    contribution_mode = type_params.get('contribution_mode', 'both')
+
+    # Restore the exact debits made from account balances. Do not recalculate from
+    # percentages because those may have changed since the expense was created.
     for payment in auto_delete_payments:
-        # Only restore balance if payment was made FROM balance (current_account mode)
-        # In direct_payment mode, users paid directly, so no balance to restore
-        type_params = getattr(project, 'type_parameters', None) or {}
-        contribution_mode = type_params.get('contribution_mode', 'both')
-        
-        # Only restore balance in current_account mode where payments come from balance
         if contribution_mode == 'current_account' and payment.is_paid and not payment.receipt_file_path:
-            member = db.query(ProjectMember).filter(
-                ProjectMember.project_id == expense.project_id,
-                ProjectMember.user_id == payment.user_id,
-            ).first()
-
-            if member:
-                # Restore balance according to currency_mode
-                if currency_mode == "ARS":
-                    if payment.amount_paid_ars:
-                        member.balance_ars += payment.amount_paid_ars
-                        record_member_balance_delta(
-                            db,
-                            member=member,
-                            currency="ARS",
-                            amount=payment.amount_paid_ars,
-                            movement_type="reversal",
-                            source_type="participant_payment",
-                            source_id=payment.id,
-                            description=f"Reversión por eliminación: {expense.description}",
-                            created_by=current_user.id,
-                        )
-                elif currency_mode == "USD":
-                    if payment.amount_paid_usd:
-                        member.balance_usd += payment.amount_paid_usd
-                        record_member_balance_delta(
-                            db,
-                            member=member,
-                            currency="USD",
-                            amount=payment.amount_paid_usd,
-                            movement_type="reversal",
-                            source_type="participant_payment",
-                            source_id=payment.id,
-                            description=f"Reversión por eliminación: {expense.description}",
-                            created_by=current_user.id,
-                        )
-                else:  # DUAL
-                    if payment.amount_paid_ars:
-                        member.balance_ars += payment.amount_paid_ars
-                        record_member_balance_delta(
-                            db,
-                            member=member,
-                            currency="ARS",
-                            amount=payment.amount_paid_ars,
-                            movement_type="reversal",
-                            source_type="participant_payment",
-                            source_id=payment.id,
-                            description=f"Reversión por eliminación: {expense.description}",
-                            created_by=current_user.id,
-                        )
-
-                member.balance_updated_at = datetime.utcnow()
+            member = member_map.get(payment.user_id)
+            if not member:
+                raise HTTPException(status_code=409, detail="No se encontró la cuenta histórica de un participante")
+            currency, debited = expense_payment_debit(payment, currency_mode)
+            change_member_balance(
+                db, member, currency, debited,
+                movement_type="reversal", source_type="participant_payment", source_id=payment.id,
+                description=f"Reversión por eliminación: {expense.description}", actor_id=current_user.id,
+            )
 
         payment.is_deleted = True
         payment.deleted_at = datetime.utcnow()
         payment.deleted_by = current_user.id
 
+    # Contributions entered together with the expense are one accounting unit.
+    # Reverse them in the same transaction so the administrator never needs each
+    # participant to remove a generated contribution separately.
+    linked_contributions = (
+        db.query(Contribution)
+        .filter(Contribution.expense_id == expense.id, Contribution.is_deleted == False)
+        .with_for_update()
+        .all()
+    )
+    for contribution in linked_contributions:
+        reverse_contribution(
+            db, contribution, project=project, actor_id=current_user.id,
+            reason=reason, members=member_map, allow_linked_expense=True,
+        )
+
     # Soft delete the expense
     expense.is_deleted = True
     expense.deleted_at = datetime.utcnow()
     expense.deleted_by = current_user.id
+    expense.deletion_reason = reason
 
     db.commit()
 
@@ -968,10 +967,65 @@ async def restore_expense(
             detail="Expense is not deleted",
         )
 
-    # Restore the expense
+    project_type_params = getattr(project, "type_parameters", None) or {}
+    contribution_mode = project_type_params.get("contribution_mode", "both")
+    member_map = locked_members(db, expense.project_id)
+    currency_mode = getattr(project, "currency_mode", "DUAL") or "DUAL"
+
+    linked_contributions = (
+        db.query(Contribution)
+        .filter(Contribution.expense_id == expense.id, Contribution.is_deleted == True)
+        .with_for_update()
+        .all()
+    )
+    for contribution in linked_contributions:
+        restore_contribution(
+            db, contribution, project=project, actor_id=current_user.id, members=member_map
+        )
+
+    payments = (
+        db.query(ParticipantPayment)
+        .filter(ParticipantPayment.expense_id == expense.id, ParticipantPayment.is_deleted == True)
+        .with_for_update()
+        .all()
+    )
+    if contribution_mode == "current_account":
+        required: dict[str, Decimal] = {"ARS": Decimal("0"), "USD": Decimal("0")}
+        for payment in payments:
+            if payment.is_paid:
+                currency, debited = expense_payment_debit(payment, currency_mode)
+                required[currency] += debited
+        available = {
+            "ARS": sum(Decimal(str(member.balance_ars or 0)) for member in member_map.values()),
+            "USD": sum(Decimal(str(member.balance_usd or 0)) for member in member_map.values()),
+        }
+        for currency in ("ARS", "USD"):
+            if available[currency] < required[currency]:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"No se puede restaurar: la caja necesita {required[currency]:.2f} {currency} y tiene {available[currency]:.2f}.",
+                )
+        for payment in payments:
+            if payment.is_paid:
+                member = member_map.get(payment.user_id)
+                if not member:
+                    raise HTTPException(status_code=409, detail="No se encontró la cuenta histórica de un participante")
+                currency, debited = expense_payment_debit(payment, currency_mode)
+                change_member_balance(
+                    db, member, currency, -debited,
+                    movement_type="restoration", source_type="participant_payment", source_id=payment.id,
+                    description=f"Restauración de gasto: {expense.description}", actor_id=current_user.id,
+                )
+    for payment in payments:
+        payment.is_deleted = False
+        payment.deleted_at = None
+        payment.deleted_by = None
+
+    # Restore the expense and its original payment state in the same transaction.
     expense.is_deleted = False
     expense.deleted_at = None
     expense.deleted_by = None
+    expense.deletion_reason = None
 
     db.commit()
     db.refresh(expense)

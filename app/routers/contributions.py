@@ -1,7 +1,7 @@
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Header
 from fastapi.responses import FileResponse, Response, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
@@ -26,6 +26,7 @@ from app.models.contribution_payment import ContributionPayment
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.services.balance_audit import record_member_balance_delta
+from app.services.accounting_reversal import reverse_contribution
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -64,7 +65,7 @@ async def list_contributions(
 
     contributions = (
         db.query(Contribution)
-        .filter(Contribution.project_id == project.id)
+        .filter(Contribution.project_id == project.id, Contribution.is_deleted == False)
         .order_by(Contribution.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -75,7 +76,8 @@ async def list_contributions(
     result = []
     for contrib in contributions:
         payments = db.query(ContributionPayment).filter(
-            ContributionPayment.contribution_id == contrib.id
+            ContributionPayment.contribution_id == contrib.id,
+            ContributionPayment.is_deleted == False,
         ).all()
 
         # Find current user's payment
@@ -136,6 +138,7 @@ async def list_unabsorbed_unilateral(
         Contribution.project_id == project.id,
         Contribution.is_unilateral == True,
         Contribution.status == ContributionStatus.APPROVED,
+        Contribution.is_deleted == False,
     ).order_by(Contribution.created_at.asc()).all()
 
     from app.models.payment import ParticipantPayment
@@ -186,7 +189,9 @@ async def get_my_pending_contributions_count(
     # Count contribution payments for this user that are not paid
     count = db.query(ContributionPayment).join(Contribution).filter(
         Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
         ContributionPayment.user_id == current_user.id,
+        ContributionPayment.is_deleted == False,
         ContributionPayment.is_paid == False,
     ).count()
 
@@ -204,6 +209,7 @@ async def get_contribution(
     contribution = db.query(Contribution).filter(
         Contribution.id == contribution_id,
         Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
     ).first()
 
     if not contribution:
@@ -211,7 +217,8 @@ async def get_contribution(
 
     # Get all payments with user info
     payments = db.query(ContributionPayment).filter(
-        ContributionPayment.contribution_id == contribution.id
+        ContributionPayment.contribution_id == contribution.id,
+        ContributionPayment.is_deleted == False,
     ).all()
     
     # Force refresh to get latest receipt_file_path values
@@ -258,6 +265,7 @@ async def get_contribution(
 @router.post("", response_model=ContributionResponse, status_code=status.HTTP_201_CREATED)
 async def create_contribution(
     contribution_data: ContributionCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", max_length=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
     project: Project = Depends(get_required_project),
@@ -269,6 +277,16 @@ async def create_contribution(
             detail="X-Project-ID header is required",
         )
 
+    db.query(Project).filter(Project.id == project.id).with_for_update().one()
+    stored_key = f"formal:{idempotency_key}" if idempotency_key else None
+    if stored_key:
+        existing = db.query(Contribution).filter(
+            Contribution.project_id == project.id,
+            Contribution.idempotency_key == stored_key,
+        ).first()
+        if existing:
+            return existing
+
     # Create contribution record
     contribution = Contribution(
         description=contribution_data.description,
@@ -276,6 +294,7 @@ async def create_contribution(
         currency=contribution_data.currency,
         project_id=project.id,
         created_by=current_user.id,
+        idempotency_key=stored_key,
     )
 
     db.add(contribution)
@@ -311,6 +330,7 @@ async def create_contribution(
                 Contribution.project_id == project.id,
                 Contribution.is_unilateral == True,
                 Contribution.status == ContributionStatus.APPROVED,
+                Contribution.is_deleted == False,
             ).first()
             if not unilateral:
                 continue
@@ -378,6 +398,7 @@ async def create_contribution(
 @router.post("/unilateral", response_model=ContributionResponse, status_code=status.HTTP_201_CREATED)
 async def create_unilateral_contribution(
     data: UnilateralContributionCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", max_length=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     project: Project = Depends(get_required_project),
@@ -388,6 +409,16 @@ async def create_unilateral_contribution(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Project-ID header is required",
         )
+
+    db.query(Project).filter(Project.id == project.id).with_for_update().one()
+    stored_key = f"unilateral:{idempotency_key}" if idempotency_key else None
+    if stored_key:
+        existing = db.query(Contribution).filter(
+            Contribution.project_id == project.id,
+            Contribution.idempotency_key == stored_key,
+        ).first()
+        if existing:
+            return existing
 
     # Validate contribution_mode allows this
     type_params = getattr(project, 'type_parameters', None) or {}
@@ -415,8 +446,10 @@ async def create_unilateral_contribution(
         Contribution.project_id == project.id,
         Contribution.is_unilateral == False,
         Contribution.is_adjustment == False,
+        Contribution.is_deleted == False,
         ContributionPayment.user_id == current_user.id,
         ContributionPayment.is_paid == False,
+        ContributionPayment.is_deleted == False,
     ).first()
     if pending_formal:
         raise HTTPException(
@@ -441,6 +474,7 @@ async def create_unilateral_contribution(
         status=ContributionStatus.APPROVED if auto_approve else ContributionStatus.PENDING,
         is_unilateral=True,
         contributor_user_id=current_user.id,
+        idempotency_key=stored_key,
     )
     db.add(contribution)
     db.flush()
@@ -509,6 +543,7 @@ async def create_unilateral_contribution(
 @router.post("/adjust-balance", response_model=ContributionResponse, status_code=status.HTTP_201_CREATED)
 async def create_balance_adjustment(
     adjustment_data: BalanceAdjustmentCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", max_length=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
     project: Project = Depends(get_required_project),
@@ -519,6 +554,16 @@ async def create_balance_adjustment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Project-ID header is required",
         )
+
+    db.query(Project).filter(Project.id == project.id).with_for_update().one()
+    stored_key = f"adjustment:{idempotency_key}" if idempotency_key else None
+    if stored_key:
+        existing = db.query(Contribution).filter(
+            Contribution.project_id == project.id,
+            Contribution.idempotency_key == stored_key,
+        ).first()
+        if existing:
+            return existing
 
     if adjustment_data.amount == 0:
         raise HTTPException(
@@ -537,6 +582,7 @@ async def create_balance_adjustment(
         created_by=current_user.id,
         status=ContributionStatus.APPROVED,
         is_adjustment=True,
+        idempotency_key=stored_key,
     )
     db.add(contribution)
     db.flush()
@@ -629,6 +675,8 @@ async def submit_contribution_payment(
         .filter(
             ContributionPayment.id == payment_id,
             Contribution.project_id == project.id,
+            Contribution.is_deleted == False,
+            ContributionPayment.is_deleted == False,
         )
         .with_for_update()
         .first()
@@ -657,6 +705,7 @@ async def submit_contribution_payment(
     contribution = db.query(Contribution).filter(
         Contribution.id == payment.contribution_id,
         Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
     ).first()
     if not contribution:
         raise HTTPException(
@@ -932,7 +981,12 @@ async def upload_contribution_receipt(
     payment = (
         db.query(ContributionPayment)
         .join(Contribution)
-        .filter(ContributionPayment.id == payment_id, Contribution.project_id == project.id)
+        .filter(
+            ContributionPayment.id == payment_id,
+            Contribution.project_id == project.id,
+            Contribution.is_deleted == False,
+            ContributionPayment.is_deleted == False,
+        )
         .first()
     )
 
@@ -971,7 +1025,12 @@ async def download_contribution_receipt(
     payment = (
         db.query(ContributionPayment)
         .join(Contribution)
-        .filter(ContributionPayment.id == payment_id, Contribution.project_id == project.id)
+        .filter(
+            ContributionPayment.id == payment_id,
+            Contribution.project_id == project.id,
+            Contribution.is_deleted == False,
+            ContributionPayment.is_deleted == False,
+        )
         .first()
     )
 
@@ -1040,6 +1099,8 @@ async def approve_contribution_payment(
         .filter(
             ContributionPayment.id == payment_id,
             Contribution.project_id == selected_project.id,
+            Contribution.is_deleted == False,
+            ContributionPayment.is_deleted == False,
         )
         .with_for_update()
         .first()
@@ -1055,6 +1116,7 @@ async def approve_contribution_payment(
     contribution = db.query(Contribution).filter(
         Contribution.id == payment.contribution_id,
         Contribution.project_id == selected_project.id,
+        Contribution.is_deleted == False,
     ).first()
     if not contribution:
         raise HTTPException(
@@ -1182,6 +1244,8 @@ async def admin_mark_contribution_paid(
         .filter(
             ContributionPayment.id == payment_id,
             Contribution.project_id == selected_project.id,
+            Contribution.is_deleted == False,
+            ContributionPayment.is_deleted == False,
         )
         .with_for_update()
         .first()
@@ -1197,6 +1261,7 @@ async def admin_mark_contribution_paid(
     contribution = db.query(Contribution).filter(
         Contribution.id == payment.contribution_id,
         Contribution.project_id == selected_project.id,
+        Contribution.is_deleted == False,
     ).first()
     if not contribution:
         raise HTTPException(
@@ -1342,20 +1407,12 @@ async def admin_mark_contribution_paid(
 @router.delete("/{contribution_id}", status_code=status.HTTP_200_OK)
 async def delete_contribution(
     contribution_id: int,
+    reason: str = Query("Corrección administrativa", min_length=3, max_length=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_project_admin_user),
     project: Project = Depends(get_required_project),
 ):
-    """
-    Delete a contribution (admin only).
-    
-    For unilateral (individual) contributions:
-    - Reverses the balance credit if it was approved
-    - Only allowed if the contribution has not been absorbed by other requests
-    
-    For regular contributions:
-    - Only allowed if no payments have been made yet
-    """
+    """Reverse a contribution and keep every source record for audit."""
     if not project:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1365,6 +1422,7 @@ async def delete_contribution(
     contribution = db.query(Contribution).filter(
         Contribution.id == contribution_id,
         Contribution.project_id == project.id,
+        Contribution.is_deleted == False,
     ).with_for_update().first()
 
     if not contribution:
@@ -1373,120 +1431,13 @@ async def delete_contribution(
             detail="Contribution not found",
         )
 
-    # Check if contribution has been absorbed (only applies to unilateral)
-    if contribution.is_unilateral:
-        absorption_count = db.query(ContributionAbsorption).filter(
-            ContributionAbsorption.unilateral_id == contribution.id,
-        ).count()
-        
-        if absorption_count > 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se puede eliminar este aporte porque ya fue absorbido por una solicitud de aporte grupal. "
-                       "Eliminá primero la solicitud de aporte grupal que lo absorbió.",
-            )
-    
-    # Get currency mode for balance adjustments
-    currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
-
-    # Get all payments for this contribution
-    payments = db.query(ContributionPayment).filter(
-        ContributionPayment.contribution_id == contribution.id,
-    ).with_for_update().all()
-
-    # Check if any payments have been made (for regular contributions)
-    if not contribution.is_unilateral and not contribution.is_adjustment:
-        paid_payments = [p for p in payments if p.is_paid]
-        if paid_payments:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se puede eliminar esta solicitud de aporte porque ya hay pagos realizados. "
-                       "Contactá al administrador del sistema.",
-            )
-
-    # For approved unilateral contributions, reverse the balance credit
-    if contribution.is_unilateral and contribution.status == ContributionStatus.APPROVED:
-        # Get the contributor's member record
-        member = db.query(ProjectMember).filter(
-            ProjectMember.project_id == project.id,
-            ProjectMember.user_id == contribution.contributor_user_id,
-        ).with_for_update().first()
-
-        if member:
-            # Reverse the balance credit based on currency mode
-            if currency_mode == "USD":
-                member.balance_usd -= contribution.amount
-                record_member_balance_delta(
-                    db,
-                    member=member,
-                    currency="USD",
-                    amount=-contribution.amount,
-                    movement_type="reversal",
-                    source_type="contribution",
-                    source_id=contribution.id,
-                    description=f"Reversión: {contribution.description}",
-                    created_by=current_user.id,
-                )
-            else:
-                member.balance_ars -= contribution.amount
-                record_member_balance_delta(
-                    db,
-                    member=member,
-                    currency="ARS",
-                    amount=-contribution.amount,
-                    movement_type="reversal",
-                    source_type="contribution",
-                    source_id=contribution.id,
-                    description=f"Reversión: {contribution.description}",
-                    created_by=current_user.id,
-                )
-            member.balance_updated_at = datetime.utcnow()
-
-    # For adjustments, reverse the balance for all members
-    if contribution.is_adjustment and contribution.status == ContributionStatus.APPROVED:
-        members = db.query(ProjectMember).filter(
-            ProjectMember.project_id == project.id,
-            ProjectMember.is_active == True,
-        ).with_for_update().all()
-        
-        for member in members:
-            percentage = member.participation_percentage / Decimal(100)
-            member_amount = (contribution.amount * percentage).quantize(Decimal("0.01"))
-            
-            if currency_mode == "USD":
-                member.balance_usd -= member_amount
-                record_member_balance_delta(
-                    db,
-                    member=member,
-                    currency="USD",
-                    amount=-member_amount,
-                    movement_type="reversal",
-                    source_type="contribution",
-                    source_id=contribution.id,
-                    description=f"Reversión: {contribution.description}",
-                    created_by=current_user.id,
-                )
-            else:
-                member.balance_ars -= member_amount
-                record_member_balance_delta(
-                    db,
-                    member=member,
-                    currency="ARS",
-                    amount=-member_amount,
-                    movement_type="reversal",
-                    source_type="contribution",
-                    source_id=contribution.id,
-                    description=f"Reversión: {contribution.description}",
-                    created_by=current_user.id,
-                )
-            member.balance_updated_at = datetime.utcnow()
-
-    # Delete all associated payments (cascade should handle this, but being explicit)
-    for payment in payments:
-        db.delete(payment)
-
-    # Delete the contribution
-    db.delete(contribution)
+    reverse_contribution(
+        db,
+        contribution,
+        project=project,
+        actor_id=current_user.id,
+        reason=reason,
+    )
     db.commit()
 
     return {

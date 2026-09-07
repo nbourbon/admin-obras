@@ -42,6 +42,13 @@ class Contribution(Base):
     absorbed_amount = Column(Numeric(15, 2), default=0, nullable=False)  # How much absorbed by formal requests
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # If created from expense screen
 
+    # Soft delete keeps the accounting source available for later audits.
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deletion_reason = Column(Text, nullable=True)
+    idempotency_key = Column(String(120), nullable=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -116,7 +116,7 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
         for vote in option.votes:
             voter = db.query(User).filter(User.id == vote.user_id).first()
             if voter:
-                voter_percentage = member_percentages.get(vote.user_id, 0)
+                voter_percentage = float(vote.participation_percentage) if vote.participation_percentage is not None else member_percentages.get(vote.user_id, 0)
                 voters.append(VoterInfo(
                     user_id=vote.user_id,
                     user_name=voter.full_name,
@@ -461,9 +461,18 @@ async def cast_vote(
         raise HTTPException(status_code=400, detail="You have already voted on this note")
 
     # Create the vote
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == note.project_id,
+        ProjectMember.user_id == current_user.id,
+        ProjectMember.is_active == True,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=403, detail="No sos miembro activo de este proyecto")
     vote = UserVote(
         vote_option_id=vote_data.option_id,
+        note_id=note.id,
         user_id=current_user.id,
+        participation_percentage=member.participation_percentage,
     )
     db.add(vote)
     db.commit()
