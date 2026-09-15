@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useProject } from '../context/ProjectContext'
+import { useAuth } from '../context/AuthContext'
 import { projectsAPI } from '../api/client'
-import { Briefcase, Plus, Check, X, Settings } from 'lucide-react'
+import { Briefcase, Plus, Check, X, Settings, LogOut } from 'lucide-react'
 
 const CURRENCY_MODE_OPTIONS = [
   { value: 'DUAL', label: 'Doble Moneda (USD + ARS)', description: 'Registra gastos en ambas monedas con tipo de cambio' },
@@ -203,6 +205,8 @@ function CreateProjectModal({ isOpen, onClose, onCreated }) {
 }
 
 function ProjectSelector() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const {
     projects,
     currentProject,
@@ -233,6 +237,11 @@ function ProjectSelector() {
     await refreshProjects()
   }
 
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
@@ -246,15 +255,31 @@ function ProjectSelector() {
           </p>
         </div>
 
-        {/* Settings Toggle */}
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            <Settings size={18} />
-            Preferencias
-          </button>
+        {/* Account and selector actions */}
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 text-sm">
+            <p className="font-medium text-gray-900 truncate">{user?.full_name}</p>
+            <p className="text-gray-500 truncate">{user?.email}</p>
+          </div>
+          <div className="flex items-center gap-1 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setShowSettings(!showSettings)}
+              aria-expanded={showSettings}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              <Settings size={18} />
+              Preferencias
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+            >
+              <LogOut size={18} />
+              Cerrar sesión
+            </button>
+          </div>
         </div>
 
         {/* Settings Panel */}
