@@ -24,6 +24,8 @@ from app.models.project_member import ProjectMember
 from app.models.project_member_history import ProjectMemberHistory
 from app.schemas.project import ProjectMemberHistoryResponse
 
+from app.services.composition import guard_member_edit
+
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
@@ -395,6 +397,8 @@ async def add_project_member(
             detail="Project not found",
         )
 
+    guard_member_edit(db, project_id, 0, member_data.participation_percentage)
+
     # Check if user exists
     user = db.query(User).filter(
         User.id == member_data.user_id,
@@ -483,6 +487,7 @@ def add_project_member_by_email(
     """Reserve participation and invite the recipient; access starts on acceptance."""
     if not participation_percentage.is_finite() or not 0 <= participation_percentage <= 100:
         raise HTTPException(422, "El porcentaje debe estar entre 0 y 100")
+    guard_member_edit(db, project_id, 0, participation_percentage)
     require_email_config()
     rate_limit(db, request, 'email', str(email))
     project = db.get(Project, project_id)
@@ -553,6 +558,7 @@ async def update_project_member(
     old_percentage = member.participation_percentage
     old_is_admin = member.is_admin
 
+    guard_member_edit(db, project_id, old_percentage, member_data.participation_percentage if member_data.participation_percentage is not None else old_percentage, removing=member_data.is_active is False)
     update_data = member_data.model_dump(exclude_unset=True)
 
     # Prevent removing admin role if this is the last admin
@@ -639,6 +645,7 @@ async def remove_project_member(
                 detail="No se puede eliminar al único admin del proyecto. Asigná otro admin primero.",
             )
 
+    guard_member_edit(db, project_id, old_percentage, 0, removing=True)
     member.is_active = False
     from app.models.auth_action import AuthAction
     from datetime import datetime

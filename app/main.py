@@ -73,6 +73,8 @@ app.add_middleware(
 )
 
 # Include routers
+from app.routers.compositions import router as compositions_router
+app.include_router(compositions_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(providers_router)

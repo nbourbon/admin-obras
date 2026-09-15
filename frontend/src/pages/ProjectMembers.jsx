@@ -1,174 +1,16 @@
+import CompositionModal from '../components/CompositionModal'
 import { useState, useEffect } from 'react'
 import { projectsAPI } from '../api/client'
 import { useProject } from '../context/ProjectContext'
 import { Users as UsersIcon, Edit2, Trash2, X, AlertCircle, UserPlus, User, AlertTriangle, Shield, History, ChevronDown, ChevronUp } from 'lucide-react'
 
-function AddMemberModal({ isOpen, onClose, onSuccess, projectId, existingMemberIds }) {
-  const [email, setEmail] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [percentage, setPercentage] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [isProjectAdmin, setIsProjectAdmin] = useState(false)
-
-  useEffect(() => {
-    if (isOpen) {
-      setEmail('')
-      setFullName('')
-      setPercentage('')
-      setIsProjectAdmin(false)
-      setError('')
-    }
-  }, [isOpen])
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      await projectsAPI.addMemberByEmail(
-        projectId,
-        email,
-        parseFloat(percentage) || 0,
-        isProjectAdmin,
-        fullName || undefined
-      )
-
-      onSuccess()
-      onClose()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al agregar participante')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Agregar Participante</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
-          </button>
-        </div>
-
-        <p className="text-gray-600 text-sm mb-3">
-          Ingresá el correo del participante. Recibirá una invitación para aceptar el acceso a la obra. Si es nuevo, elegirá su contraseña desde ese enlace. Su porcentaje se incluye en el reparto desde que lo agregás.
-        </p>
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4 flex items-start gap-2">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-          <span>
-            Una vez agregado, asegurate de que los porcentajes de todos los participantes sumen exactamente 100%.
-            Mientras no sumen 100%, los nuevos gastos no se distribuiran correctamente.
-          </span>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="email@ejemplo.com"
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre Completo (opcional)
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Solo para usuarios nuevos"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Si el email ya existe, este campo se ignora
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Porcentaje de Participacion (%)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              required
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="new_is_project_admin"
-              checked={isProjectAdmin}
-              onChange={(e) => setIsProjectAdmin(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="new_is_project_admin" className="text-sm text-gray-700">
-              Es admin del proyecto
-            </label>
-          </div>
-          <p className="text-xs text-gray-500">
-            Los admins pueden crear gastos, proveedores, categorias y gestionar miembros.
-          </p>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Enviando...' : 'Agregar e invitar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 function EditPercentageModal({ isOpen, onClose, onSuccess, projectId, member }) {
-  const [percentage, setPercentage] = useState('')
   const [memberIsAdmin, setMemberIsAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (member) {
-      setPercentage(member.participation_percentage.toString())
       setMemberIsAdmin(member.is_admin || false)
     }
   }, [member])
@@ -180,7 +22,6 @@ function EditPercentageModal({ isOpen, onClose, onSuccess, projectId, member }) 
 
     try {
       await projectsAPI.updateMember(projectId, member.user_id, {
-        participation_percentage: parseFloat(percentage) || 0,
         is_admin: memberIsAdmin,
       })
       onSuccess()
@@ -215,21 +56,7 @@ function EditPercentageModal({ isOpen, onClose, onSuccess, projectId, member }) 
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Porcentaje de Participacion (%)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              required
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <p className="text-sm text-gray-500">Para modificar porcentajes, usá Cambiar composición.</p>
 
           <div className="flex items-center gap-2">
             <input
@@ -274,7 +101,8 @@ function ProjectMembers() {
   const [members, setMembers] = useState([])
   const [validation, setValidation] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showComposition, setShowComposition] = useState(false)
+  const [compositions, setCompositions] = useState([])
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
   const [isIndividual, setIsIndividual] = useState(false)
@@ -297,12 +125,14 @@ function ProjectMembers() {
     if (!currentProject) return
 
     try {
-      const [membersRes, validationRes] = await Promise.all([
+      const [membersRes, validationRes, changesRes] = await Promise.all([
         projectsAPI.members(currentProject.id),
         projectsAPI.validateParticipation(currentProject.id),
+        isProjectAdmin ? projectsAPI.compositions(currentProject.id) : Promise.resolve({ data: [] }),
       ])
       setMembers(membersRes.data)
       setValidation(validationRes.data)
+      setCompositions(changesRes.data)
     } catch (err) {
       console.error('Error loading members:', err)
     } finally {
@@ -317,7 +147,8 @@ function ProjectMembers() {
   const loadHistory = async () => {
     if (!currentProject || !isProjectAdmin) return
     try {
-      const res = await projectsAPI.memberHistory(currentProject.id)
+      const [res, changes] = await Promise.all([projectsAPI.memberHistory(currentProject.id), projectsAPI.compositions(currentProject.id)])
+      setCompositions(changes.data)
       setHistory(res.data)
     } catch (err) {
       console.error('Error loading history:', err)
@@ -336,7 +167,7 @@ function ProjectMembers() {
       await projectsAPI.removeMember(currentProject.id, userId)
       loadData()
     } catch (err) {
-      console.error('Error removing member:', err)
+      alert(err.response?.data?.detail || 'No se pudo quitar el miembro')
     }
   }
 
@@ -398,11 +229,11 @@ function ProjectMembers() {
         </div>
         {isProjectAdmin && (
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => setShowComposition(true)}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
           >
             <UserPlus size={20} />
-            <span>Agregar</span>
+            <span>Cambiar composición</span>
           </button>
         )}
       </div>
@@ -457,7 +288,7 @@ function ProjectMembers() {
             </p>
             {isProjectAdmin && (
               <p className="text-sm text-yellow-600 mt-1 font-medium">
-                Edita los porcentajes usando el boton de edicion en cada fila hasta llegar a 100%.
+                Usá Cambiar composición para guardar el reparto completo y su rebalanceo.
               </p>
             )}
           </div>
@@ -574,6 +405,8 @@ function ProjectMembers() {
         </div>
       )}
 
+      {isProjectAdmin && compositions.length > 0 && <div className="bg-white rounded-xl shadow-sm p-5 space-y-3"><h2 className="font-semibold">Rebalanceos registrados</h2>{compositions.map(c => <details key={c.id} className="border rounded-lg p-3"><summary className="cursor-pointer">{new Date(c.effective_at).toLocaleString('es-AR')} · {c.reason} · {c.currency} {Number(c.total_investment).toLocaleString('es-AR')}</summary><p className="text-sm text-gray-500 my-2">Registrado: {new Date(c.created_at).toLocaleString('es-AR')} · Impacto en caja: 0</p>{c.rows.map(r => <p key={r.key} className="text-sm">{r.name}: {r.old_percentage}% → {r.percentage}% · Ajuste {c.currency} {r.adjustment} · Compensación {c.currency} {r.external_settlement}</p>)}{c.settlements.map((s, i) => <p key={i} className="text-sm text-gray-500">{c.rows.find(r => r.key === s.payer_key)?.name} → {c.rows.find(r => r.key === s.recipient_key)?.name}: {c.currency} {s.amount} · {new Date(s.paid_at).toLocaleString('es-AR')} · {s.reference}</p>)}</details>)}</div>}
+
       {/* Participation History - admin only */}
       {isProjectAdmin && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -642,13 +475,7 @@ function ProjectMembers() {
         </div>
       )}
 
-      <AddMemberModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSuccess={loadData}
-        projectId={currentProject.id}
-        existingMemberIds={members.map((m) => m.user_id)}
-      />
+      {showComposition && <CompositionModal key={currentProject.id} project={currentProject} members={members} onClose={() => setShowComposition(false)} onSuccess={loadData} />}
 
       <EditPercentageModal
         isOpen={showEditModal}

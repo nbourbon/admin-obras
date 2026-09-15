@@ -201,6 +201,9 @@ export const exchangeRateAPI = {
 
 // Projects API
 export const projectsAPI = {
+  previewComposition: (id, data) => client.post(`/projects/${id}/compositions/preview`, data),
+  changeComposition: (id, data) => client.post(`/projects/${id}/compositions`, data),
+  compositions: (id) => client.get(`/projects/${id}/compositions`),
   list: () => client.get('/projects'),
   get: (id) => client.get(`/projects/${id}`),
   create: (data) => client.post('/projects', data),

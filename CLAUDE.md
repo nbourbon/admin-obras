@@ -282,3 +282,25 @@ After pushing changes (either Render or Fly.io):
 - **Keep CLAUDE.md updated**: Always update this file with relevant project information, architectural decisions, and setup changes.
 - **Keep README.md updated**: When adding new relevant modules or features, update the project README to reflect the current state of the project.
 - **Atomic commits**: When the user requests multiple unrelated tasks in a single prompt (e.g., "add notes module AND add individual projects"), ask if they want separate commits for each feature. This keeps git history clean and makes it easier to revert specific changes if needed.
+
+## Participation cutovers
+- `CompositionChange` stores immutable cutover snapshots with decimal strings,
+  actor, effective time, original/new participation, historical burden, balance
+  deltas, external settlements and a project-scoped idempotency key.
+- `app/services/composition.py` computes mandatory historical investment
+  rebalancing. Repeated changes subtract prior rebalance adjustments from original
+  expense allocations; external settlements never affect the investment basis.
+- Confirmation locks the project and all member accounts, recomputes the preview,
+  and atomically stores membership changes, zero-sum audited movements and invites.
+- DUAL basis is historical USD, translated to ARS balance using the explicitly
+  supplied cutover rate. It is not a persistent USD debt subledger.
+- Cutovers are chronological, non-future, and after all existing investment
+  expenses. Older expense creation, date changes, deletion/restoration and payment
+  allocation deletion are blocked; paying existing obligations remains permitted.
+- Legacy per-member percentage edits are blocked once accounting exists; use the
+  composition endpoint. Economic exits use 0%, keeping historical account/access.
+- Inconsistent expense allocations block preview instead of inventing a baseline.
+- New table is initialized on startup; PostgreSQL enables RLS. No production
+  migration/backfill was executed while implementing this feature.
+- `tests/e2e/test_05_composition.py` covers currencies, payment modes, pending
+  obligations, external settlements, repeated changes, idempotency and guards.

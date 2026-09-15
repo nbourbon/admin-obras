@@ -272,3 +272,43 @@ See `.env.example` for all available configuration options:
 ## License
 
 MIT
+
+## Changes to project participation
+
+Administrators use **Participantes → Cambiar composición** to submit the entire
+new allocation (exactly 100%) in one transaction. The preview calculates a
+mandatory rebalance of accumulated investment, including unpaid expenses. It
+preserves original expense/payment allocations and records separate, zero-sum
+balance movements. New members can be entered by name and email; invitations are
+issued after confirmation. A member leaving the economic composition remains at
+0% with their account and access intact.
+
+External payments between members may be recorded in full or in part at the
+cutover, with payer, recipient, amount, date and reference. They cancel the
+corresponding rebalance credit/debt without increasing or reducing project cash.
+Historical receipts remain visible on the participants page. Repeated confirmation
+is idempotent; an outdated preview must be recalculated.
+
+ARS projects use historical ARS amounts; USD and DUAL projects use historical USD
+amounts. DUAL adjustments are converted to the existing ARS account at an explicit
+cutover exchange rate. This does not introduce a separate USD-denominated debt
+account: subsequent USD dashboard equivalents can fluctuate. Expenses and earlier
+rebalance adjustments, rather than total deposits or cash on hand, determine the
+investment basis. Original pending expense obligations remain payable separately.
+
+Cutovers must be at or before the present, after the previous cutover and after
+all recorded non-deleted investment expenses. The cutover closes the earlier
+period to new expenses, date changes, deletions and restorations that would alter
+the investment basis; payments of original obligations remain possible. Reconcile
+existing differences between expenses and participant allocations before changing
+composition. Future scheduling and reopening closed periods are not implemented.
+This feature does not introduce a separate supplier-invoice/payment lifecycle.
+
+API (project administrator, matching `X-Project-ID`):
+- `POST /projects/{id}/compositions/preview`
+- `POST /projects/{id}/compositions`
+- `GET /projects/{id}/compositions`
+
+`composition_changes` is created by the existing startup schema initialization;
+PostgreSQL startup enables RLS on this backend-only table. No production data is
+rewritten or automatically rebalanced during migration.

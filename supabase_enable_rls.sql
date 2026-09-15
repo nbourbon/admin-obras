@@ -22,6 +22,7 @@ ALTER TABLE IF EXISTS public.contribution_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.contribution_absorptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.avance_obra ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.balance_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.composition_changes ENABLE ROW LEVEL SECURITY;
 
 -- Remove existing Data API access. The server-side postgres/service role is
 -- intentionally unaffected.
@@ -51,6 +52,7 @@ WHERE n.nspname = 'public'
       'projects',
       'project_members',
       'project_member_history',
+      'composition_changes',
       'providers',
       'categories',
       'rubros',

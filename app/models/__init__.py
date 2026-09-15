@@ -16,6 +16,7 @@ from app.models.contribution_payment import ContributionPayment
 from app.models.contribution_absorption import ContributionAbsorption
 from app.models.avance_obra import AvanceObra
 from app.models.balance_movement import BalanceMovement
+from app.models.composition_change import CompositionChange
 
 __all__ = [
     "User",
@@ -40,6 +41,7 @@ __all__ = [
     "ContributionAbsorption",
     "AvanceObra",
     "BalanceMovement",
+    "CompositionChange",
     "AuthAction",
     "AuthRateLimit",
 ]

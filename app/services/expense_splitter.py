@@ -163,6 +163,10 @@ def create_payments_current_account(
         if any(Decimal(str(payer["amount"])) <= 0 for payer in payers):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Los aportes de los pagadores deben ser mayores que cero")
 
+    if sum((Decimal(str(m.participation_percentage)) for m in members), Decimal(0)) != 100:
+        from fastapi import HTTPException
+        raise HTTPException(409, "La composición debe sumar 100% antes de cargar gastos")
+
     # Calculate amounts per member
     def calc_amounts(percentage):
         if currency_mode == "ARS":
@@ -191,11 +195,15 @@ def create_payments_current_account(
             member_amounts[max_idx][2] += diff_ars
 
     # Check if total balance is sufficient
-    total_balance = sum(Decimal(str(m.balance_ars)) for m in members)
+    cash_members = db.query(ProjectMember).filter_by(
+        project_id=expense.project_id,
+        is_active=True,
+    ).all()
+    total_balance = sum(Decimal(str(m.balance_ars)) for m in cash_members)
     expense_amount = Decimal(str(expense.amount_ars)) if currency_mode != "USD" else Decimal(str(expense.amount_usd))
 
     if currency_mode == "USD":
-        total_balance = sum(Decimal(str(m.balance_usd)) for m in members)
+        total_balance = sum(Decimal(str(m.balance_usd)) for m in cash_members)
 
     balance_sufficient = total_balance >= expense_amount
 
@@ -442,6 +450,10 @@ def create_participant_payments(
     # Use project members if expense has a project, otherwise fall back to global users
     if expense.project_id:
         members = get_project_members(db, expense.project_id)
+
+        if sum((Decimal(str(m.participation_percentage)) for m in members), Decimal(0)) != 100:
+            from fastapi import HTTPException
+            raise HTTPException(409, "La composición debe sumar 100% antes de cargar gastos")
 
         # First pass: calculate amounts for all members
         member_amounts = []

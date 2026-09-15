@@ -1,3 +1,4 @@
+from app.services.composition import guard_open_date
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
@@ -166,6 +167,8 @@ async def create_expense(
         ).first()
         if existing:
             return await get_expense(existing.id, db, current_user, project)
+
+    guard_open_date(db, project.id, expense_data.expense_date or datetime.utcnow())
 
     # Project is required for new expenses
     if not project:
@@ -527,6 +530,10 @@ async def update_expense(
 
     update_data = expense_data.model_dump(exclude_unset=True)
 
+    if "expense_date" in update_data:
+        guard_open_date(db, project.id, expense.expense_date)
+        guard_open_date(db, project.id, update_data["expense_date"] or expense.expense_date)
+
     requested_amount = update_data.get("amount_original", expense.amount_original)
     requested_currency = update_data.get("currency_original", expense.currency_original)
     requested_contribution = update_data.get("is_contribution", expense.is_contribution)
@@ -758,6 +765,7 @@ async def delete_expense(
     project = db.query(Project).filter(Project.id == expense.project_id).first()
     currency_mode = getattr(project, 'currency_mode', 'DUAL') or 'DUAL'
 
+    guard_open_date(db, expense.project_id, expense.expense_date)
     member_map = locked_members(db, expense.project_id)
     type_params = getattr(project, 'type_parameters', None) or {}
     contribution_mode = type_params.get('contribution_mode', 'both')
@@ -969,6 +977,7 @@ async def restore_expense(
 
     project_type_params = getattr(project, "type_parameters", None) or {}
     contribution_mode = project_type_params.get("contribution_mode", "both")
+    guard_open_date(db, expense.project_id, expense.expense_date)
     member_map = locked_members(db, expense.project_id)
     currency_mode = getattr(project, "currency_mode", "DUAL") or "DUAL"
 

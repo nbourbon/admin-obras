@@ -1285,6 +1285,9 @@ async def delete_payment(
             detail="No se puede eliminar un pago que ya fue aprobado. Contacte al administrador.",
         )
 
+    from app.services.composition import guard_open_date
+    guard_open_date(db, project.id, expense.expense_date)
+
     # Soft delete the payment
     payment.is_deleted = True
     payment.deleted_at = datetime.utcnow()

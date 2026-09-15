@@ -126,6 +126,9 @@ def _run_migrations():
 
     # Collect all pending migrations, then execute in a single connection
     pending = []
+    if engine.dialect.name == "postgresql":
+        pending.append(("ALTER TABLE composition_changes ENABLE ROW LEVEL SECURITY",
+                        "Protect backend-only composition history"))
 
     # --- Projects table ---
     if projects_cols:
