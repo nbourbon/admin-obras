@@ -475,7 +475,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+      <div className="bg-white rounded-xl max-w-lg w-full min-w-0 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Editar Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -650,7 +650,7 @@ function EditExpenseModal({ isOpen, onClose, onUpdated, expense, providers: init
               required
               value={formData.expense_date}
               onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="block w-full min-w-0 max-w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -841,7 +841,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+      <div className="bg-white rounded-xl max-w-md w-full min-w-0 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Nuevo Gasto</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -1018,7 +1018,7 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               required
               value={formData.expense_date}
               onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="block w-full min-w-0 max-w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -1107,13 +1107,13 @@ function CreateExpenseModal({ isOpen, onClose, onCreated, providers: initialProv
               Factura (opcional)
             </label>
             {invoiceFile ? (
-              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                <FileText className="text-blue-600" size={20} />
-                <span className="flex-1 text-sm text-blue-700 truncate">{invoiceFile.name}</span>
+              <div className="flex min-w-0 items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                <FileText className="shrink-0 text-blue-600" size={20} />
+                <span className="min-w-0 flex-1 truncate text-sm text-blue-700">{invoiceFile.name}</span>
                 <button
                   type="button"
                   onClick={() => setInvoiceFile(null)}
-                  className="text-red-500 hover:text-red-700"
+                  className="shrink-0 text-red-500 hover:text-red-700"
                 >
                   <X size={18} />
                 </button>
