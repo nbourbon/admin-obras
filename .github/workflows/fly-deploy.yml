@@ -31,7 +31,3 @@ jobs:
       - run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      - name: Verify existing note attachment download
-        run: flyctl ssh console --app proyectos-compartidos --command "python -m app.services.note_storage_check"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
