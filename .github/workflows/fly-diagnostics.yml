@@ -1,0 +1,33 @@
+name: Fly Runtime Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fly-diagnostics.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Inspect machine state
+        run: flyctl status --app proyectos-compartidos
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Inspect health checks
+        run: flyctl checks list --app proyectos-compartidos
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Read sanitized runtime errors
+        shell: bash
+        run: |
+          flyctl logs --app proyectos-compartidos --no-tail | python3 -c '
+          import re, sys
+          for line in sys.stdin:
+              if re.search(r"ERROR|WARNING|Traceback|OOM|out of memory|Killed|exited|Main child|Starting|Listening|error|failed", line, re.I):
+                  print(re.sub(r"(?:https?|postgres(?:ql)?(?:\+psycopg)?):[^\s]+", "[URL]", line), end="")
+          '
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
