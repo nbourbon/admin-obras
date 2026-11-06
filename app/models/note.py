@@ -31,6 +31,8 @@ class Note(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    attachments = relationship("NoteAttachment", cascade="all, delete-orphan")
+
     # Relationships
     project = relationship("Project", back_populates="notes")
     creator = relationship("User", back_populates="notes_created", foreign_keys=[created_by])
@@ -52,3 +54,16 @@ class NoteParticipant(Base):
     # Relationships
     note = relationship("Note", back_populates="participants")
     user = relationship("User", back_populates="note_participations")
+
+
+class NoteAttachment(Base):
+    __tablename__ = "note_attachments"
+
+    id = Column(Integer, primary_key=True)
+    note_id = Column(Integer, ForeignKey("notes.id"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    storage_key = Column(String(512), nullable=False)
+    content_type = Column(String(100), nullable=False)
+    size = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

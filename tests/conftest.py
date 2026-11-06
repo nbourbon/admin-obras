@@ -66,8 +66,8 @@ def sent_emails(monkeypatch):
     from app.services import note_email
     from app.routers import auth
     messages = []
-    async def capture(to, subject, text, delivery_id):
-        messages.append({'to': to, 'subject': subject, 'text': text, 'id': delivery_id})
+    async def capture(to, subject, text, delivery_id, attachments=None):
+        messages.append({'to': to, 'subject': subject, 'text': text, 'id': delivery_id, 'attachments': attachments})
     monkeypatch.setattr(auth_email, 'send_email', capture)
     monkeypatch.setattr(note_email, 'send_email', capture)
     monkeypatch.setattr(auth, 'send_email', capture)

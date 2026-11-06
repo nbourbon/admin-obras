@@ -1,17 +1,21 @@
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.models.note import Note, NoteParticipant, NoteType
+from app.models.note import Note, NoteParticipant, NoteType, NoteAttachment
 from app.models.note_comment import NoteComment
 from app.models.vote import VoteOption, UserVote
 from app.models.project_member import ProjectMember
 from app.models.project import Project
 from app.schemas.note import (
     NoteCreate,
+    NoteNotify,
+    NoteAttachmentResponse,
     NoteUpdate,
     NoteResponse,
     NoteDetailResponse,
@@ -25,6 +29,7 @@ from app.schemas.note import (
 from app.utils.dependencies import get_current_user, get_required_project, is_project_admin
 from app.services.note_email import schedule_note_emails
 from app.services.html_sanitizer import sanitize_plain_text, sanitize_rich_text
+from app.services.note_attachments import prepare_attachments, persist_attachments, read_attachment
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -154,6 +159,7 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
         updated_at=note.updated_at,
         participant_count=len(note.participants),
         comment_count=len(comments),
+        attachments=[NoteAttachmentResponse.model_validate(a) for a in note.attachments if a.is_active],
         participants=participants,
         comments=comments,
         vote_options=vote_options,
@@ -188,6 +194,14 @@ async def create_note(
     current_user: User = Depends(get_current_user),
     project: Project = Depends(get_required_project),
 ):
+    note = _prepare_note(note_data, db, current_user, project)
+    db.commit()
+    db.refresh(note)
+    schedule_note_emails(db, background_tasks, note, project.name)
+    return build_note_response(note, db)
+
+
+def _prepare_note(note_data, db, current_user, project):
     """Create a new note (regular or voting)."""
     is_votacion = note_data.note_type in (NoteType.VOTACION, NoteType.VOTING)
     is_reunion = note_data.note_type in (NoteType.REUNION, NoteType.REGULAR)
@@ -240,10 +254,29 @@ async def create_note(
             )
             db.add(option)
 
-    db.commit()
-    db.refresh(note)
-    schedule_note_emails(db, background_tasks, note, project.name)
+    return note
 
+
+@router.post("/with-attachments", response_model=NoteResponse)
+async def create_note_with_attachments(
+    background_tasks: BackgroundTasks,
+    data: str = Form(...),
+    files: List[UploadFile] = File(...),
+    include_attachments: bool = Form(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project: Project = Depends(get_required_project),
+):
+    try:
+        note_data = NoteCreate.model_validate_json(data)
+    except ValidationError:
+        raise HTTPException(422, "Los datos de la nota no son válidos")
+    prepared = await prepare_attachments(files)
+    note = _prepare_note(note_data, db, current_user, project)
+    await persist_attachments(db, note, prepared)
+    db.refresh(note)
+    schedule_note_emails(db, background_tasks, note, project.name,
+                         include_attachments=include_attachments, attachment_contents=prepared)
     return build_note_response(note, db)
 
 
@@ -539,3 +572,71 @@ async def close_voting(
     db.commit()
 
     return {"message": "Voting closed successfully"}
+
+
+# All file operations use the same project membership and editing rules as notes.
+def attachment_note(db, note_id, project, user, editing=False):
+    note = db.query(Note).filter_by(id=note_id, project_id=project.id, is_active=True).first()
+    if not note:
+        raise HTTPException(404, "Nota no encontrada")
+    if editing and note.created_by != user.id and not is_project_admin(db, user.id, project.id):
+        raise HTTPException(403, "No tenés permiso para modificar esta nota")
+    return note
+
+
+@router.post("/{note_id}/attachments")
+async def add_attachments(note_id: int, files: List[UploadFile] = File(...),
+                          db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+                          project: Project = Depends(get_required_project)):
+    note = attachment_note(db, note_id, project, current_user, True)
+    # Serialize uploads so concurrent requests cannot exceed the note's limits.
+    db.query(Note).filter_by(id=note.id).with_for_update().one()
+    db.expire(note, ["attachments"])
+    prepared = await prepare_attachments(files, [a for a in note.attachments if a.is_active])
+    note.updated_at = datetime.now(timezone.utc)
+    await persist_attachments(db, note, prepared)
+    return {"message": "Adjuntos guardados"}
+
+
+@router.get("/{note_id}/attachments/{attachment_id}")
+async def download_attachment(note_id: int, attachment_id: int,
+                              db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+                              project: Project = Depends(get_required_project)):
+    note = attachment_note(db, note_id, project, current_user)
+    attachment = next((a for a in note.attachments if a.id == attachment_id and a.is_active), None)
+    if not attachment:
+        raise HTTPException(404, "Adjunto no encontrado")
+    from urllib.parse import quote
+    return Response(await read_attachment(attachment), media_type=attachment.content_type,
+                    headers={"Content-Disposition": "attachment; filename*=UTF-8''" + quote(attachment.filename),
+                             "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.delete("/{note_id}/attachments/{attachment_id}")
+async def remove_attachment(note_id: int, attachment_id: int,
+                            db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+                            project: Project = Depends(get_required_project)):
+    note = attachment_note(db, note_id, project, current_user, True)
+    attachment = next((a for a in note.attachments if a.id == attachment_id and a.is_active), None)
+    if not attachment:
+        raise HTTPException(404, "Adjunto no encontrado")
+    attachment.is_active = False
+    note.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Adjunto eliminado"}
+
+
+@router.post("/{note_id}/notify")
+async def notify_note(note_id: int, data: NoteNotify, background_tasks: BackgroundTasks,
+                      db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+                      project: Project = Depends(get_required_project)):
+    note = attachment_note(db, note_id, project, current_user, True)
+    contents = []
+    active = [a for a in note.attachments if a.is_active]
+    if data.include_attachments and sum(a.size for a in active) <= 10 * 1024 * 1024:
+        for a in active:
+            contents.append((a.filename, a.content_type, await read_attachment(a)))
+    count = schedule_note_emails(db, background_tasks, note, project.name,
+                                 include_attachments=data.include_attachments,
+                                 attachment_contents=contents, update=True)
+    return {"message": "Notificación programada", "recipients": count}

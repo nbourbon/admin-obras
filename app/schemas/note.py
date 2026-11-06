@@ -115,7 +115,22 @@ class NoteResponse(NoteBase):
         from_attributes = True
 
 
+class NoteAttachmentResponse(BaseModel):
+    id: int
+    filename: str
+    content_type: str
+    size: int
+
+    class Config:
+        from_attributes = True
+
+
+class NoteNotify(BaseModel):
+    include_attachments: bool = True
+
+
 class NoteDetailResponse(NoteResponse):
+    attachments: List[NoteAttachmentResponse] = []
     participants: List[NoteParticipantResponse] = []
     comments: List[CommentResponse] = []
     vote_options: List[VoteOptionWithVoters] = []

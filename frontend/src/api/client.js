@@ -234,6 +234,21 @@ export const notesAPI = {
   vote: (id, data) => client.post(`/notes/${id}/vote`, data),
   resetVote: (noteId, userId) => client.delete(`/notes/${noteId}/vote/${userId}`),
   closeVoting: (noteId) => client.post(`/notes/${noteId}/close-voting`),
+  createWithAttachments: (data, files, includeAttachments) => {
+    const form = new FormData()
+    form.append('data', JSON.stringify(data))
+    form.append('include_attachments', includeAttachments)
+    files.forEach(file => form.append('files', file))
+    return client.post('/notes/with-attachments', form, { timeout: 120000, headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  addAttachments: (id, files) => {
+    const form = new FormData()
+    files.forEach(file => form.append('files', file))
+    return client.post(`/notes/${id}/attachments`, form, { timeout: 120000, headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  downloadAttachment: (id, fileId) => client.get(`/notes/${id}/attachments/${fileId}`, { responseType: 'blob' }),
+  removeAttachment: (id, fileId) => client.delete(`/notes/${id}/attachments/${fileId}`),
+  notify: (id, includeAttachments) => client.post(`/notes/${id}/notify`, { include_attachments: includeAttachments }),
   unreadCount: () => client.get('/notes/unread-count'),
 }
 

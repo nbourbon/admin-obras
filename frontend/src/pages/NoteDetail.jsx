@@ -1,3 +1,5 @@
+import FilePreviewModal from '../components/FilePreviewModal'
+import NoteFilePicker, { validateNoteFiles } from '../components/NoteFilePicker'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { notesAPI } from '../api/client'
@@ -38,6 +40,11 @@ function NoteDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { isProjectAdmin } = useProject()
+  const [preview, setPreview] = useState(null)
+  const [files, setFiles] = useState([])
+  const [fileBusy, setFileBusy] = useState(false)
+  const [fileMessage, setFileMessage] = useState('')
+  const [includeAttachments, setIncludeAttachments] = useState(true)
   const [note, setNote] = useState(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -51,6 +58,8 @@ function NoteDetail() {
   useEffect(() => {
     loadNote()
   }, [id])
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url) }, [preview])
 
   const loadNote = async () => {
     try {
@@ -178,6 +187,24 @@ function NoteDetail() {
     }
   }
 
+  const fileAction = async (action, message = '') => {
+    setFileBusy(true)
+    setFileMessage('')
+    try { await action(); setFileMessage(message) }
+    catch (err) { setFileMessage(err.response?.data?.detail || err.message || 'No se pudo completar la operación') }
+    finally { setFileBusy(false) }
+  }
+
+  const openAttachment = async (file, download) => {
+    const response = await notesAPI.downloadAttachment(id, file.id)
+    const url = URL.createObjectURL(new Blob([response.data], { type: file.content_type }))
+    if (download) {
+      const link = document.createElement('a')
+      link.href = url; link.download = file.filename; link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } else setPreview({ url, file })
+  }
+
   const canEdit = note && (note.created_by === user?.id || isProjectAdmin)
   const typeConfig = note ? (NOTE_TYPE_CONFIG[note.note_type] || NOTE_TYPE_CONFIG.reunion) : NOTE_TYPE_CONFIG.reunion
   const TypeIcon = typeConfig.icon
@@ -216,6 +243,8 @@ function NoteDetail() {
 
   return (
     <div className="space-y-4 overflow-x-hidden">
+      <FilePreviewModal isOpen={Boolean(preview)} onClose={() => setPreview(null)} fileUrl={preview?.url}
+        fileName={preview?.file.filename} onDownload={() => fileAction(() => openAttachment(preview.file, true))} />
       {/* Header - Back button and title */}
       <div className="flex items-start gap-3">
         <button
@@ -301,6 +330,33 @@ function NoteDetail() {
           />
         )}
       </div>
+
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h3 className="font-medium text-gray-900">Adjuntos</h3>
+        {!note.attachments?.length && <p className="text-sm text-gray-500">Sin adjuntos.</p>}
+        {note.attachments?.map(file => <div key={file.id} className="flex flex-wrap items-center gap-3 text-sm border-b pb-2">
+          <span className="flex-1 break-all">{file.filename} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+          <button disabled={fileBusy} className="text-blue-600" onClick={() => fileAction(() => openAttachment(file, false))}>Abrir</button>
+          <button disabled={fileBusy} className="text-blue-600" onClick={() => fileAction(() => openAttachment(file, true))}>Descargar</button>
+          {canEdit && <button disabled={fileBusy} className="text-red-600" onClick={() => {
+            if (confirm('¿Quitar este adjunto de la nota?')) fileAction(async () => { await notesAPI.removeAttachment(id, file.id); await loadNote() })
+          }}>Quitar</button>}
+        </div>)}
+        {canEdit && <>
+          <NoteFilePicker files={files} onChange={setFiles} disabled={fileBusy} />
+          {files.length > 0 && <button disabled={fileBusy} className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => fileAction(async () => {
+            validateNoteFiles(files)
+            await notesAPI.addAttachments(id, files)
+            setFiles([])
+            await loadNote()
+          }, 'Adjuntos guardados. Podés notificar la actualización cuando esté lista.')}>Guardar adjuntos</button>}
+          <label className="flex gap-2 text-sm"><input type="checkbox" checked={includeAttachments} onChange={e => setIncludeAttachments(e.target.checked)} />Incluir archivos adjuntos en el correo</label>
+          <button disabled={fileBusy || files.length > 0 || isEditing} className="px-3 py-2 border rounded-lg disabled:opacity-50" onClick={() => {
+            if (confirm('¿Enviar la nota actualizada a todos los miembros activos y verificados del proyecto?')) fileAction(() => notesAPI.notify(id, includeAttachments), 'Notificación programada para los miembros del proyecto.')
+          }}>Notificar actualización</button>
+        </>}
+        {fileMessage && <p role="status" className="text-sm text-gray-700">{fileMessage}</p>}
+      </section>
 
       {/* Edit/Delete actions */}
       {canEdit && !isEditing && (

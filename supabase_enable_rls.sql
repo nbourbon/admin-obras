@@ -13,6 +13,7 @@ ALTER TABLE IF EXISTS public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.participant_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.exchange_rate_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.note_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.note_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.note_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.vote_options ENABLE ROW LEVEL SECURITY;
@@ -60,6 +61,7 @@ WHERE n.nspname = 'public'
       'participant_payments',
       'exchange_rate_log',
       'notes',
+      'note_attachments',
       'note_participants',
       'note_comments',
       'vote_options',

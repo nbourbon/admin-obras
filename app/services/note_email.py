@@ -1,5 +1,7 @@
 """Plain-text email notifications for newly created project notes."""
 from html.parser import HTMLParser
+import base64
+from uuid import uuid4
 
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
@@ -84,7 +86,7 @@ def build_note_email(note: Note, project_name: str, participant_names: list[str]
     return subject, "\n\n".join(sections)
 
 
-def schedule_note_emails(db: Session, tasks: BackgroundTasks, note: Note, project_name: str) -> int:
+def schedule_note_emails(db: Session, tasks: BackgroundTasks, note: Note, project_name: str, *, include_attachments=True, attachment_contents=(), update=False) -> int:
     recipients = (
         db.query(User)
         .join(ProjectMember, ProjectMember.user_id == User.id)
@@ -100,12 +102,26 @@ def schedule_note_emails(db: Session, tasks: BackgroundTasks, note: Note, projec
     )
     participant_names = [participant.user.full_name for participant in note.participants if participant.user]
     subject, text = build_note_email(note, project_name, participant_names)
+    if update:
+        subject = f"Actualización de nota - Proyecto {project_name}"
+    active = [a for a in note.attachments if a.is_active]
+    attachments = []
+    if include_attachments and sum(a.size for a in active) <= 10 * 1024 * 1024:
+        attachments = [{"filename": name,
+                        "content": base64.b64encode(contents).decode("ascii")}
+                       for name, mime, contents in attachment_contents]
+    if active:
+        listing = "\n".join(f"- {a.filename}" for a in active)
+        status = "Incluidos en este correo." if attachments else "Disponibles en la nota dentro de la app (no adjuntos a este correo)."
+        text += f"\n\nArchivos de la nota:\n{listing}\n{status}"
+    delivery = uuid4().hex if update else "created"
     for recipient in recipients:
         tasks.add_task(
             send_email,
             recipient.email,
             subject,
             text,
-            f"project-note-{note.id}-user-{recipient.id}",
+            f"project-note-{note.id}-user-{recipient.id}-{delivery}",
+            **({"attachments": attachments} if attachments else {}),
         )
     return len(recipients)

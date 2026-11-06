@@ -50,14 +50,15 @@ def rate_limit(db: Session, request: Request, scope: str, email: str = ''):
     db.commit()
 
 
-async def send_email(to: str, subject: str, text: str, delivery_id: str):
+async def send_email(to: str, subject: str, text: str, delivery_id: str, attachments=None):
     settings = get_settings()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post('https://api.resend.com/emails', headers={
                 'Authorization': f'Bearer {settings.resend_api_key}',
                 'Idempotency-Key': delivery_id,
-            }, json={'from': settings.email_from, 'to': [to], 'subject': subject, 'text': text})
+            }, json={'from': settings.email_from, 'to': [to], 'subject': subject, 'text': text,
+                     **({'attachments': attachments} if attachments else {})})
             response.raise_for_status()
     except httpx.HTTPError:
         # Do not include recipient, response body, API key, or link in logs.

@@ -1,3 +1,4 @@
+import NoteFilePicker, { validateNoteFiles } from '../components/NoteFilePicker'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { notesAPI, projectsAPI } from '../api/client'
@@ -40,6 +41,8 @@ const NOTE_TYPE_CONFIG = {
 }
 
 function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
+  const [files, setFiles] = useState([])
+  const [includeAttachments, setIncludeAttachments] = useState(true)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [noteType, setNoteType] = useState('reunion')
@@ -99,18 +102,22 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
         }
       }
 
-      await notesAPI.create(data)
+      validateNoteFiles(files)
+      if (files.length) await notesAPI.createWithAttachments(data, files, includeAttachments)
+      else await notesAPI.create(data)
       onSuccess()
       onClose()
       resetForm()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear la nota')
+      setError(err.response?.data?.detail || err.message || 'Error al crear la nota')
     } finally {
       setLoading(false)
     }
   }
 
   const resetForm = () => {
+    setFiles([])
+    setIncludeAttachments(true)
     setTitle('')
     setContent('')
     setNoteType('reunion')
@@ -342,6 +349,8 @@ function CreateNoteModal({ isOpen, onClose, onSuccess, projectId }) {
             </>
           )}
 
+          <NoteFilePicker files={files} onChange={setFiles} disabled={loading} />
+          {files.length > 0 && <label className="flex gap-2 text-sm"><input type="checkbox" checked={includeAttachments} onChange={e => setIncludeAttachments(e.target.checked)} />Incluir archivos adjuntos en el correo</label>}
           <div className="flex gap-3 pt-4">
             <button
               type="button"

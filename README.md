@@ -312,3 +312,36 @@ API (project administrator, matching `X-Project-ID`):
 `composition_changes` is created by the existing startup schema initialization;
 PostgreSQL startup enables RLS on this backend-only table. No production data is
 rewritten or automatically rebalanced during migration.
+
+
+### Archivos adjuntos en notas
+
+Las notas de reunión, notificación y votación admiten PDF, JPG y PNG: hasta
+10 archivos, 10 MB por archivo (configurable en el backend) y 50 MB en total.
+La creación con archivos valida y guarda todo antes de publicar y programar
+los correos. El autor y los administradores pueden agregar o quitar adjuntos;
+los miembros con acceso al proyecto pueden abrirlos y descargarlos.
+
+- `POST /notes` conserva la creación JSON existente sin archivos.
+- `POST /notes/with-attachments`: multipart con `data` (JSON de NoteCreate),
+  `files` (repetido) e `include_attachments` (booleano, por defecto true).
+- `GET /notes/{id}` incluye `attachments`: id, filename, content_type y size.
+- `POST /notes/{id}/attachments`: multipart con `files`; no envía emails.
+- `GET /notes/{id}/attachments/{attachment_id}`: descarga autenticada.
+- `DELETE /notes/{id}/attachments/{attachment_id}`: baja lógica del adjunto.
+- `POST /notes/{id}/notify`: JSON `{"include_attachments": true}`; programa
+  una notificación de actualización a los mismos destinatarios que la creación.
+
+Todos estos endpoints requieren autenticación y `X-Project-ID`. Los archivos
+se guardan como recursos autenticados en Cloudinary o en `uploads/notes` en
+modo local; la API no entrega las direcciones del proveedor. La tabla
+`note_attachments` se crea al iniciar el backend, con RLS en PostgreSQL.
+Quitar un adjunto impide nuevas descargas desde la app, pero conserva el archivo
+para mantener el historial. No revoca copias ya descargadas o enviadas por email.
+
+Si los adjuntos suman hasta 10 MB y la opción está activada, se incluyen como
+archivos en el correo. Si superan ese total o se desactiva la opción, el email
+lista sus nombres e indica que están disponibles desde el enlace a la nota.
+Agregar archivos a una nota existente requiere pulsar **Guardar adjuntos** y,
+para avisar a los miembros, **Notificar actualización**. Las notificaciones usan
+las tareas en segundo plano existentes; “programada” no confirma la entrega.
