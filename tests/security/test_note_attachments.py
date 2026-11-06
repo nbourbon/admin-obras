@@ -140,3 +140,68 @@ def test_email_transport_serializes_attachments_without_affecting_account_emails
     asyncio.run(_deliver_email('local@example.test', 'Cuenta', 'Contenido', 'attachment-transport-test'))
     assert payloads[0]['attachments'] == [attachment]
     assert 'attachments' not in payloads[1]
+
+
+def _mock_cloud_download(monkeypatch, status=200):
+    import cloudinary
+    import httpx
+    from urllib.parse import parse_qs
+    config = cloudinary.config()
+    monkeypatch.setattr(config, 'cloud_name', 'note-test')
+    monkeypatch.setattr(config, 'api_key', 'test-key')
+    monkeypatch.setattr(config, 'api_secret', 'test-secret')
+    real_client = httpx.AsyncClient
+    calls = []
+    def receive(request):
+        calls.append(request)
+        assert request.url.host == 'api.cloudinary.com'
+        assert request.url.path == '/v1_1/note-test/raw/download'
+        query = parse_qs(request.url.query.decode())
+        assert query['public_id'] == ['construccion/notes/26/stored.pdf']
+        assert query['type'] == ['authenticated']
+        assert 'format' not in query  # Raw IDs already include .pdf.
+        assert 'expires_at' in query and 'signature' in query
+        return httpx.Response(status, content=PDF if status == 200 else b'private error',
+                              headers={'Content-Type': 'application/pdf'})
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(receive), **kw))
+    return calls
+
+
+def _cloud_attachment(client, headers, monkeypatch, tmp_path):
+    from app.database import SessionLocal
+    from app.models.note import NoteAttachment
+    monkeypatch.setattr(file_storage, 'cloudinary_configured', False)
+    monkeypatch.setattr(file_storage.settings, 'upload_dir', str(tmp_path))
+    note_id = _create(client, headers).json()['id']
+    with SessionLocal() as db:
+        attachment = db.query(NoteAttachment).filter_by(note_id=note_id).one()
+        attachment.storage_key = 'cloud:construccion/notes/26/stored.pdf'
+        attachment_id = attachment.id
+        db.commit()
+    return note_id, attachment_id
+
+
+def test_cloud_private_download_and_update_email(client, sent_emails, monkeypatch, tmp_path):
+    *_, headers = _setup_project(client)
+    note_id, attachment_id = _cloud_attachment(client, headers, monkeypatch, tmp_path)
+    calls = _mock_cloud_download(monkeypatch)
+    response = client.get(f'/notes/{note_id}/attachments/{attachment_id}', headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.content == PDF
+    assert response.headers['content-type'] == 'application/pdf'
+    assert 'attachment;' in response.headers['content-disposition']
+    assert client.post(f'/notes/{note_id}/notify', headers=headers, json={}).status_code == 200
+    assert len(calls) == 2
+    assert base64.b64decode(sent_emails[-1]['attachments'][0]['content']) == PDF
+
+
+def test_cloud_download_error_is_safe_and_keeps_file(client, sent_emails, monkeypatch, tmp_path, caplog):
+    *_, headers = _setup_project(client)
+    note_id, attachment_id = _cloud_attachment(client, headers, monkeypatch, tmp_path)
+    _mock_cloud_download(monkeypatch, 403)
+    response = client.get(f'/notes/{note_id}/attachments/{attachment_id}', headers=headers)
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'El adjunto no está disponible. Intentá nuevamente'
+    assert 'provider_status=403' in caplog.text
+    assert 'signature=' not in caplog.text and 'test-secret' not in caplog.text
+    assert len(client.get(f'/notes/{note_id}', headers=headers).json()['attachments']) == 1

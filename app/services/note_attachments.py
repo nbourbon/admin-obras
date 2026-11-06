@@ -1,6 +1,8 @@
 """Private note files; provider addresses are never exposed to clients or emails."""
 from pathlib import Path
 from uuid import uuid4
+import logging
+import time
 from starlette.concurrency import run_in_threadpool
 
 import httpx
@@ -8,6 +10,19 @@ from fastapi import HTTPException
 
 from app.models.note import NoteAttachment
 from app.services import file_storage
+
+logger = logging.getLogger(__name__)
+
+
+class _HidePrivateDownloadURL(logging.Filter):
+    def filter(self, record):
+        # httpx logs complete request URLs at INFO, including API signatures.
+        # Keep our status-only diagnostics, without persisting access links.
+        return not any("api.cloudinary.com" in str(arg) and "/download" in str(arg)
+                       for arg in record.args)
+
+
+logging.getLogger("httpx").addFilter(_HidePrivateDownloadURL())
 
 
 async def prepare_attachments(files, existing=()):
@@ -71,12 +86,23 @@ async def read_attachment(attachment):
     try:
         if attachment.storage_key.startswith("cloud:"):
             import cloudinary.utils
-            url, _ = cloudinary.utils.cloudinary_url(attachment.storage_key[6:], resource_type="raw",
-                                                      type="authenticated", sign_url=True, secure=True)
-            async with httpx.AsyncClient(timeout=30) as client:
+            # Use the authenticated download API. CDN delivery can reject PDFs
+            # even when the asset was uploaded successfully and its URL is signed.
+            # Raw public IDs already contain their extension; adding a format
+            # would change the requested asset's identity.
+            url = cloudinary.utils.private_download_url(
+                attachment.storage_key[6:], None, resource_type="raw",
+                type="authenticated", expires_at=int(time.time()) + 60,
+            )
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 return response.content
         return (file_storage.get_upload_dir() / "notes" / attachment.storage_key[6:]).read_bytes()
+    except httpx.HTTPStatusError as exc:
+        # URLs contain access signatures: never log the exception or request URL.
+        logger.warning("Note attachment download failed (id=%s, provider_status=%s)",
+                       attachment.id, exc.response.status_code)
+        raise HTTPException(503, "El adjunto no está disponible. Intentá nuevamente") from None
     except (OSError, httpx.HTTPError):
         raise HTTPException(503, "El adjunto no está disponible. Intentá nuevamente")

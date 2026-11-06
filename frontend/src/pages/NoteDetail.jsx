@@ -191,7 +191,14 @@ function NoteDetail() {
     setFileBusy(true)
     setFileMessage('')
     try { await action(); setFileMessage(message) }
-    catch (err) { setFileMessage(err.response?.data?.detail || err.message || 'No se pudo completar la operación') }
+    catch (err) {
+      // File responses use Blob, including JSON errors returned by the API.
+      let detail = err.response?.data?.detail
+      if (err.response?.data instanceof Blob) {
+        try { detail = JSON.parse(await err.response.data.text()).detail } catch { /* Use the fallback below. */ }
+      }
+      setFileMessage(detail || 'No se pudo completar la operación. Intentá nuevamente.')
+    }
     finally { setFileBusy(false) }
   }
 
@@ -200,7 +207,11 @@ function NoteDetail() {
     const url = URL.createObjectURL(new Blob([response.data], { type: file.content_type }))
     if (download) {
       const link = document.createElement('a')
-      link.href = url; link.download = file.filename; link.click()
+      link.href = url
+      link.download = file.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } else setPreview({ url, file })
   }
