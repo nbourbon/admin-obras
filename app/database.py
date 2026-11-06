@@ -15,6 +15,12 @@ elif database_url.startswith("postgresql://"):
     # Use psycopg3 driver explicitly
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
+# Supabase transaction pooling reuses server sessions across connections.
+# psycopg's per-connection statement names can collide on those sessions,
+# including during startup migrations. NullPool alone does not prevent this.
+if database_url.startswith("postgresql+psycopg://"):
+    connect_args["prepare_threshold"] = None
+
 # Pool configuration
 # PostgreSQL (Supabase): Use NullPool to avoid "max clients reached".
 # Each request opens/closes its own connection. Slightly more latency
