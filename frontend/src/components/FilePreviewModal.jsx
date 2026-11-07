@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react'
 import { X, Download, ZoomIn, ZoomOut, RotateCw } from 'lucide-react'
 
-function FilePreviewModal({ isOpen, onClose, fileUrl, fileName, onDownload }) {
-  const [loading, setLoading] = useState(true)
+function FilePreviewModal({ isOpen, ...props }) {
+  if (!isOpen) return null
+  // Each opening/file owns its load state, including cached images that load
+  // before passive effects run. Never reset loading after an onLoad event.
+  return <FilePreviewContent key={`${props.fileUrl}:${props.fileName}`} {...props} />
+}
+
+function FilePreviewContent({ onClose, fileUrl, fileName, onDownload }) {
+  const [loading, setLoading] = useState(() => {
+    const name = (fileName || fileUrl || '').toLowerCase()
+    return !(name.endsWith('.pdf') && fileUrl && !fileUrl.startsWith('blob:'))
+  })
   const [error, setError] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -19,21 +29,23 @@ function FilePreviewModal({ isOpen, onClose, fileUrl, fileName, onDownload }) {
   const fileType = getFileType()
 
   useEffect(() => {
-    if (isOpen) {
-      // External PDFs show a static panel — no loading state needed
-      const isExternalPdf = fileType === 'pdf' && fileUrl && !fileUrl.startsWith('blob:')
-      setLoading(!isExternalPdf)
-      setError(false)
-      setZoom(1)
-      setRotation(0)
-    }
-  }, [isOpen, fileUrl])
+    if (!loading) return
+    // Keep failed or stalled previews recoverable on mobile browsers.
+    const timeout = window.setTimeout(() => {
+      setLoading(false)
+      setError(true)
+    }, 20000)
+    return () => window.clearTimeout(timeout)
+  }, [loading])
+
+  const handleLoaded = () => {
+    setLoading(false)
+    setError(false)
+  }
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.25, 3))
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.25, 0.5))
   const handleRotate = () => setRotation(prev => (prev + 90) % 360)
-
-  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 flex flex-col z-50">
@@ -93,9 +105,9 @@ function FilePreviewModal({ isOpen, onClose, fileUrl, fileName, onDownload }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+      <div className="relative min-h-0 flex-1 overflow-auto flex items-center justify-center p-4">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center" role="status" aria-label="Cargando archivo">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
           </div>
         )}
@@ -119,7 +131,7 @@ function FilePreviewModal({ isOpen, onClose, fileUrl, fileName, onDownload }) {
               src={`${fileUrl}#toolbar=1&navpanes=0`}
               className="w-full h-full bg-white rounded-lg"
               style={{ minHeight: '80vh', minWidth: '80vw' }}
-              onLoad={() => setLoading(false)}
+              onLoad={handleLoaded}
               onError={() => { setLoading(false); setError(true) }}
               title="PDF Preview"
             />
@@ -146,12 +158,12 @@ function FilePreviewModal({ isOpen, onClose, fileUrl, fileName, onDownload }) {
           <img
             src={fileUrl}
             alt={fileName || 'Preview'}
-            className="max-w-full max-h-full object-contain transition-transform duration-200"
+            className={`${error ? 'absolute pointer-events-none ' : ''}max-w-full max-h-full object-contain transition-transform duration-200`}
             style={{
               transform: `scale(${zoom}) rotate(${rotation}deg)`,
-              opacity: loading ? 0 : 1,
+              opacity: loading || error ? 0 : 1,
             }}
-            onLoad={() => setLoading(false)}
+            onLoad={handleLoaded}
             onError={() => {
               setLoading(false)
               setError(true)
