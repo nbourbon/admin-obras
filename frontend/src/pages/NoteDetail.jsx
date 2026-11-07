@@ -1,4 +1,5 @@
 import FilePreviewModal from '../components/FilePreviewModal'
+import NoteAttachmentThumbnail from '../components/NoteAttachmentThumbnail'
 import NoteFilePicker, { validateNoteFiles } from '../components/NoteFilePicker'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -202,9 +203,9 @@ function NoteDetail() {
     finally { setFileBusy(false) }
   }
 
-  const openAttachment = async (file, download) => {
-    const response = await notesAPI.downloadAttachment(id, file.id)
-    const url = URL.createObjectURL(new Blob([response.data], { type: file.content_type }))
+  const openAttachment = async (file, download, cachedBlob) => {
+    const blob = cachedBlob || (await notesAPI.downloadAttachment(id, file.id)).data
+    const url = URL.createObjectURL(new Blob([blob], { type: file.content_type || blob.type }))
     if (download) {
       const link = document.createElement('a')
       link.href = url
@@ -345,14 +346,15 @@ function NoteDetail() {
       <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
         <h3 className="font-medium text-gray-900">Adjuntos</h3>
         {!note.attachments?.length && <p className="text-sm text-gray-500">Sin adjuntos.</p>}
-        {note.attachments?.map(file => <div key={file.id} className="flex flex-wrap items-center gap-3 text-sm border-b pb-2">
-          <span className="flex-1 break-all">{file.filename} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-          <button disabled={fileBusy} className="text-blue-600" onClick={() => fileAction(() => openAttachment(file, false))}>Abrir</button>
-          <button disabled={fileBusy} className="text-blue-600" onClick={() => fileAction(() => openAttachment(file, true))}>Descargar</button>
-          {canEdit && <button disabled={fileBusy} className="text-red-600" onClick={() => {
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {note.attachments?.map(file => <div key={`${id}:${file.id}`} className="min-w-0">
+          <NoteAttachmentThumbnail noteId={id} file={file} disabled={fileBusy}
+            onOpen={blob => fileAction(() => openAttachment(file, false, blob))} />
+          {canEdit && <button disabled={fileBusy} className="mt-1 w-full py-2 text-sm text-red-600" aria-label={`Quitar ${file.filename}`} onClick={() => {
             if (confirm('¿Quitar este adjunto de la nota?')) fileAction(async () => { await notesAPI.removeAttachment(id, file.id); await loadNote() })
           }}>Quitar</button>}
         </div>)}
+        </div>
         {canEdit && <>
           <NoteFilePicker files={files} onChange={setFiles} disabled={fileBusy} />
           {files.length > 0 && <button disabled={fileBusy} className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => fileAction(async () => {
