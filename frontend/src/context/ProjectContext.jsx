@@ -13,6 +13,7 @@ export function ProjectProvider({ children }) {
   const [currentProject, setCurrentProject] = useState(null)
   const [isProjectAdmin, setIsProjectAdmin] = useState(false)
   const [currencyMode, setCurrencyMode] = useState('DUAL')
+  const [loadedUserId, setLoadedUserId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showProjectSelector, setShowProjectSelector] = useState(false)
 
@@ -20,6 +21,7 @@ export function ProjectProvider({ children }) {
     if (user) {
       loadProjects()
     } else {
+      setLoadedUserId(null)
       setProjects([])
       setCurrentProject(null)
       setIsProjectAdmin(false)
@@ -80,6 +82,7 @@ export function ProjectProvider({ children }) {
     } catch (err) {
       console.error('Error loading projects:', err)
     } finally {
+      setLoadedUserId(user.id)
       setLoading(false)
     }
   }
@@ -122,7 +125,7 @@ export function ProjectProvider({ children }) {
         currentProject,
         isProjectAdmin,
         currencyMode,
-        loading,
+        loading: loading || Boolean(user && loadedUserId !== user.id),
         selectProject,
         refreshProjects,
         showProjectSelector,

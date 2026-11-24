@@ -37,7 +37,7 @@ async def prepare_attachments(files, existing=()):
             ext = filename.rsplit(".", 1)[-1].lower()
             if ext not in types or len(filename) > 255 or any(ord(c) < 32 for c in filename):
                 raise HTTPException(422, "Solo se admiten PDF, JPG y PNG con nombres válidos")
-            contents = await file_storage.read_validated_file(file)
+            contents = await file_storage.read_validated_file(file, limit_mb=50)
             valid = (ext == "pdf" and contents.startswith(b"%PDF-")) or (ext in ("jpg", "jpeg") and contents.startswith(b"\xff\xd8\xff")) or (ext == "png" and contents.startswith(b"\x89PNG\r\n\x1a\n"))
             if not valid:
                 raise HTTPException(422, "El contenido del archivo no coincide con su formato")

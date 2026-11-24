@@ -37,7 +37,7 @@ const NOTE_TYPE_CONFIG = {
 }
 
 function NoteDetail() {
-  const { id } = useParams()
+  const { id: noteRef } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { isProjectAdmin } = useProject()
@@ -47,6 +47,7 @@ function NoteDetail() {
   const [fileMessage, setFileMessage] = useState('')
   const [includeAttachments, setIncludeAttachments] = useState(true)
   const [note, setNote] = useState(null)
+  const id = note?.id
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
@@ -58,13 +59,19 @@ function NoteDetail() {
 
   useEffect(() => {
     loadNote()
-  }, [id])
+  }, [noteRef])
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url) }, [preview])
 
+  useEffect(() => {
+    if (note && window.location.hash === '#adjuntos') {
+      document.getElementById('adjuntos')?.scrollIntoView()
+    }
+  }, [note])
+
   const loadNote = async () => {
     try {
-      const response = await notesAPI.get(id)
+      const response = await notesAPI.get(noteRef)
       setNote(response.data)
       setEditTitle(response.data.title)
       setEditContent(response.data.content || '')
@@ -343,7 +350,7 @@ function NoteDetail() {
         )}
       </div>
 
-      <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+      <section id="adjuntos" className="bg-white rounded-xl shadow-sm p-4 space-y-3">
         <h3 className="font-medium text-gray-900">Adjuntos</h3>
         {!note.attachments?.length && <p className="text-sm text-gray-500">Sin adjuntos.</p>}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

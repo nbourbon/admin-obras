@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { useProject } from './context/ProjectContext'
 import Layout from './components/Layout'
@@ -22,9 +23,17 @@ import AvanceObra from './pages/AvanceObra'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
-  const { showProjectSelector, loading: projectsLoading } = useProject()
+  const location = useLocation()
+  const { projects, currentProject, selectProject, closeProjectSelector, showProjectSelector, loading: projectsLoading } = useProject()
+  const requestedProject = location.pathname.startsWith('/notes/') && new URLSearchParams(location.search).get('obra')
+  const linkedProject = projects.find(project => String(project.id) === requestedProject)
+  const switching = linkedProject && currentProject?.id !== linkedProject.id
+  useEffect(() => {
+    if (switching) selectProject(linkedProject.id)
+    if (linkedProject && showProjectSelector) closeProjectSelector()
+  }, [switching, linkedProject, selectProject, showProjectSelector, closeProjectSelector])
 
-  if (loading || projectsLoading) {
+  if (loading || projectsLoading || switching) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -33,10 +42,10 @@ function ProtectedRoute({ children }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" state={{ returnTo: location.pathname + location.search + location.hash }} replace />
   }
 
-  if (showProjectSelector) {
+  if (showProjectSelector && !linkedProject) {
     return <ProjectSelector />
   }
 

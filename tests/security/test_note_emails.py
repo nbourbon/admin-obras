@@ -63,7 +63,11 @@ def test_note_emails_cover_all_types_and_recipients(client, sent_emails):
     assert sent_emails[0]["subject"] == "Nueva Votación - Proyecto Torre Norte"
     assert "Estás siendo invitado/a a una votación." in sent_emails[0]["text"]
     assert "- Gris\n- Blanco" in sent_emails[0]["text"]
-    assert f"/notes/{response.json()['id']}" in sent_emails[0]["text"]
+    from uuid import UUID
+    ref = response.json()["public_id"]
+    assert UUID(ref).version == 4
+    assert f"/notes/{ref}?obra={response.json()['project_id']}" in sent_emails[0]["text"]
+    assert client.get(f"/notes/{ref}", headers=headers).json()["id"] == response.json()["id"]
 
 
 def test_inactive_member_cannot_create_note_or_trigger_email(client, sent_emails):

@@ -317,7 +317,7 @@ rewritten or automatically rebalanced during migration.
 ### Archivos adjuntos en notas
 
 Las notas de reunión, notificación y votación admiten PDF, JPG y PNG: hasta
-10 archivos, 10 MB por archivo (configurable en el backend) y 50 MB en total.
+10 archivos y 50 MB en total por nota.
 La creación con archivos valida y guarda todo antes de publicar y programar
 los correos. El autor y los administradores pueden agregar o quitar adjuntos;
 los miembros con acceso al proyecto pueden abrirlos y descargarlos.
@@ -341,7 +341,8 @@ para mantener el historial. No revoca copias ya descargadas o enviadas por email
 
 Si los adjuntos suman hasta 10 MB y la opción está activada, se incluyen como
 archivos en el correo. Si superan ese total o se desactiva la opción, el email
-lista sus nombres e indica que están disponibles desde el enlace a la nota.
+muestra sus nombres y un botón para abrir la sección de descargas. El enlace
+usa el UUID de la nota y selecciona la obra correspondiente al iniciar sesión.
 Agregar archivos a una nota existente requiere pulsar **Guardar adjuntos** y,
 para avisar a los miembros, **Notificar actualización**. Las notificaciones usan
 las tareas en segundo plano existentes; “programada” no confirma la entrega.

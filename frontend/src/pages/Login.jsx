@@ -19,7 +19,7 @@ function Login() {
     setGoogleError('')
     try {
       await loginWithGoogle(credentialResponse.credential)
-      navigate('/dashboard')
+      navigate(location.state?.returnTo || '/dashboard', { replace: true })
     } catch (err) {
       setGoogleError(err.response?.data?.detail || 'Error al iniciar sesion con Google')
     }
@@ -32,7 +32,7 @@ function Login() {
 
     try {
       await login(email, password)
-      navigate('/dashboard')
+      navigate(location.state?.returnTo || '/dashboard', { replace: true })
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al iniciar sesion')
     } finally {

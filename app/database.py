@@ -86,6 +86,17 @@ def init_db():
     user_cols = {c['name'] for c in inspector.get_columns('users')}
     member_cols = {c['name'] for c in inspector.get_columns('project_members')}
     with engine.begin() as conn:
+        if 'public_id' not in {c['name'] for c in inspector.get_columns('notes')}:
+            if engine.dialect.name == 'postgresql':
+                conn.execute(text('ALTER TABLE notes ADD COLUMN IF NOT EXISTS public_id VARCHAR(36) NOT NULL DEFAULT gen_random_uuid()::text'))
+            else:
+                from uuid import uuid4
+                conn.execute(text('ALTER TABLE notes ADD COLUMN public_id VARCHAR(36)'))
+                ids = conn.execute(text('SELECT id FROM notes WHERE public_id IS NULL')).scalars().all()
+                if ids:
+                    conn.execute(text('UPDATE notes SET public_id = :uuid WHERE id = :id'),
+                                 [{'id': note_id, 'uuid': str(uuid4())} for note_id in ids])
+            conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_notes_public_id ON notes(public_id)'))
         if 'email_verified' not in user_cols:
             conn.execute(text('ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE'))
             # Preserve established accounts; invited placeholders must prove identity.
