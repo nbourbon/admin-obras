@@ -1,4 +1,5 @@
 import enum
+from uuid import uuid4
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -18,6 +19,7 @@ class Note(Base):
     __tablename__ = "notes"
 
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), nullable=False, unique=True, default=lambda: str(uuid4()))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=True)

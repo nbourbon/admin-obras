@@ -461,7 +461,7 @@ function Notes() {
             return (
               <Link
                 key={note.id}
-                to={`/notes/${note.id}`}
+                to={`/notes/${note.public_id}?obra=${note.project_id}`}
                 className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow block"
               >
                 <div className="flex items-start justify-between gap-4">

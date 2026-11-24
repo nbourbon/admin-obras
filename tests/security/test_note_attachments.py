@@ -37,7 +37,7 @@ def test_invalid_upload_does_not_publish_or_notify(client, sent_emails, monkeypa
     monkeypatch.setattr(file_storage, 'cloudinary_configured', False)
     monkeypatch.setattr(file_storage.settings, 'upload_dir', str(tmp_path))
     *_, headers = _setup_project(client)
-    for name, content in [('fake.pdf', b'not a pdf'), ('script.html', PDF), ('big.pdf', b'%PDF-' + b'x' * (10 * 1024 * 1024))]:
+    for name, content in [('fake.pdf', b'not a pdf'), ('script.html', PDF), ('big.pdf', b'%PDF-' + b'x' * (50 * 1024 * 1024))]:
         response = _create(client, headers, [('files', (name, content, 'application/pdf'))])
         assert response.status_code in (413, 422), response.text
     assert client.get('/notes', headers=headers).json() == []
@@ -80,11 +80,12 @@ def test_large_attachments_use_note_link(client, sent_emails, monkeypatch, tmp_p
     monkeypatch.setattr(file_storage, 'cloudinary_configured', False)
     monkeypatch.setattr(file_storage.settings, 'upload_dir', str(tmp_path))
     *_, headers = _setup_project(client)
-    contents = b'%PDF-' + b'x' * (6 * 1024 * 1024)
+    contents = b'%PDF-' + b'x' * (11 * 1024 * 1024)
     response = _create(client, headers, [('files', ('uno.pdf', contents, 'application/pdf')),
                                        ('files', ('dos.pdf', contents, 'application/pdf'))])
     assert response.status_code == 200, response.text
     assert sent_emails[0]['attachments'] is None
+    assert f'/notes/{response.json()["public_id"]}?obra={response.json()["project_id"]}#adjuntos' in sent_emails[0]['html']
     assert 'Disponibles en la nota' in sent_emails[0]['text']
     assert 'uno.pdf' in sent_emails[0]['text'] and 'dos.pdf' in sent_emails[0]['text']
 

@@ -50,7 +50,7 @@ def rate_limit(db: Session, request: Request, scope: str, email: str = ''):
     db.commit()
 
 
-async def send_email(to: str, subject: str, text: str, delivery_id: str, attachments=None):
+async def send_email(to: str, subject: str, text: str, delivery_id: str, attachments=None, html=None):
     settings = get_settings()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -58,6 +58,7 @@ async def send_email(to: str, subject: str, text: str, delivery_id: str, attachm
                 'Authorization': f'Bearer {settings.resend_api_key}',
                 'Idempotency-Key': delivery_id,
             }, json={'from': settings.email_from, 'to': [to], 'subject': subject, 'text': text,
+                     **({'html': html} if html else {}),
                      **({'attachments': attachments} if attachments else {})})
             response.raise_for_status()
     except httpx.HTTPError:

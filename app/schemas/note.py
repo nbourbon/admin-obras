@@ -95,6 +95,7 @@ class NoteUpdate(BaseModel):
 
 
 class NoteResponse(NoteBase):
+    public_id: str
     id: int
     project_id: int
     note_type: NoteType

@@ -179,7 +179,8 @@ function Layout() {
                   onChange={(e) => {
                     selectProject(e.target.value)
                     // Reload page to refresh data with new project
-                    window.location.reload()
+                    if (pathname.startsWith('/notes/')) window.location.assign('/notes')
+                    else window.location.reload()
                   }}
                   className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >

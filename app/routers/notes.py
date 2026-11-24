@@ -1,3 +1,4 @@
+from uuid import UUID
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
@@ -27,7 +28,7 @@ from app.schemas.note import (
     VoterInfo,
 )
 from app.utils.dependencies import get_current_user, get_required_project, is_project_admin
-from app.services.note_email import schedule_note_emails
+from app.services.note_email import EMAIL_ATTACHMENT_LIMIT, schedule_note_emails
 from app.services.html_sanitizer import sanitize_plain_text, sanitize_rich_text
 from app.services.note_attachments import prepare_attachments, persist_attachments, read_attachment
 
@@ -53,6 +54,7 @@ def build_note_response(note: Note, db: Session) -> NoteResponse:
     active_comments = [c for c in note.comments if c.is_active]
     return NoteResponse(
         id=note.id,
+        public_id=note.public_id,
         project_id=note.project_id,
         title=note.title,
         content=sanitize_rich_text(note.content),
@@ -143,6 +145,7 @@ def build_note_detail_response(note: Note, db: Session, current_user_id: int) ->
 
     return NoteDetailResponse(
         id=note.id,
+        public_id=note.public_id,
         project_id=note.project_id,
         title=note.title,
         content=sanitize_rich_text(note.content),
@@ -304,14 +307,14 @@ async def get_unread_count(
 
 @router.get("/{note_id}", response_model=NoteDetailResponse)
 async def get_note(
-    note_id: int,
+    note_id: int | UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     project: Project = Depends(get_required_project),
 ):
     """Get note detail with comments and votes. Marks note as read for the current user."""
     note = db.query(Note).filter(
-        Note.id == note_id,
+        (Note.public_id == str(note_id)) if isinstance(note_id, UUID) else (Note.id == note_id),
         Note.project_id == project.id,
         Note.is_active == True,
     ).first()
@@ -320,7 +323,7 @@ async def get_note(
 
     # Mark note as read for the current user (if they are a participant)
     participant = db.query(NoteParticipant).filter(
-        NoteParticipant.note_id == note_id,
+        NoteParticipant.note_id == note.id,
         NoteParticipant.user_id == current_user.id,
     ).first()
     if participant:
@@ -633,7 +636,7 @@ async def notify_note(note_id: int, data: NoteNotify, background_tasks: Backgrou
     note = attachment_note(db, note_id, project, current_user, True)
     contents = []
     active = [a for a in note.attachments if a.is_active]
-    if data.include_attachments and sum(a.size for a in active) <= 10 * 1024 * 1024:
+    if data.include_attachments and sum(a.size for a in active) <= EMAIL_ATTACHMENT_LIMIT:
         for a in active:
             contents.append((a.filename, a.content_type, await read_attachment(a)))
     count = schedule_note_emails(db, background_tasks, note, project.name,

@@ -1,4 +1,5 @@
 """Plain-text email notifications for newly created project notes."""
+from html import escape
 from html.parser import HTMLParser
 import base64
 from uuid import uuid4
@@ -11,6 +12,13 @@ from app.models.note import Note, NoteType
 from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.services.auth_email import send_email
+
+
+EMAIL_ATTACHMENT_LIMIT = 10 * 1024 * 1024
+
+
+def note_url(note):
+    return f"{get_settings().frontend_url.rstrip('/')}/notes/{note.public_id}?obra={note.project_id}"
 
 
 class _PlainTextParser(HTMLParser):
@@ -78,7 +86,7 @@ def build_note_email(note: Note, project_name: str, participant_names: list[str]
             attendees = ", ".join(participant_names) if participant_names else "No se indicaron participantes"
             sections.append(f"Participantes: {attendees}")
 
-    link = f"{get_settings().frontend_url.rstrip('/')}/notes/{note.id}"
+    link = note_url(note)
     sections.extend([
         f"Ver la nota en Obrador:\n{link}",
         "es una solución de Proyectos Compartidos - obrador.xyz",
@@ -106,14 +114,26 @@ def schedule_note_emails(db: Session, tasks: BackgroundTasks, note: Note, projec
         subject = f"Actualización de nota - Proyecto {project_name}"
     active = [a for a in note.attachments if a.is_active]
     attachments = []
-    if include_attachments and sum(a.size for a in active) <= 10 * 1024 * 1024:
+    if include_attachments and sum(a.size for a in active) <= EMAIL_ATTACHMENT_LIMIT:
         attachments = [{"filename": name,
                         "content": base64.b64encode(contents).decode("ascii")}
                        for name, mime, contents in attachment_contents]
+    html = None
     if active:
         listing = "\n".join(f"- {a.filename}" for a in active)
         status = "Incluidos en este correo." if attachments else "Disponibles en la nota dentro de la app (no adjuntos a este correo)."
-        text += f"\n\nArchivos de la nota:\n{listing}\n{status}"
+        file_text = f"\n\nArchivos de la nota:\n{listing}\n{status}"
+        if not attachments:
+            url = note_url(note) + "#adjuntos"
+            file_text += f"\nAbrir y descargar archivos: {url}"
+            rows = "".join(
+                f'<li>{escape(a.filename)} ({a.size / 1024**2:.2f} MB)</li>' for a in active
+            )
+            body = escape(text).replace("\n", "<br>")
+            html = (f'<p>{body}</p><h3>Archivos de la nota</h3><ul>{rows}</ul>'
+                    f'<a href="{escape(url)}" style="background:#1d4ed8;color:white;padding:10px 16px;'
+                    'border-radius:6px;display:inline-block">Abrir y descargar archivos</a>')
+        text += file_text
     delivery = uuid4().hex if update else "created"
     for recipient in recipients:
         tasks.add_task(
@@ -122,6 +142,7 @@ def schedule_note_emails(db: Session, tasks: BackgroundTasks, note: Note, projec
             subject,
             text,
             f"project-note-{note.id}-user-{recipient.id}-{delivery}",
+            **({"html": html} if html else {}),
             **({"attachments": attachments} if attachments else {}),
         )
     return len(recipients)

@@ -58,15 +58,16 @@ def validate_file(file: UploadFile) -> None:
             )
 
 
-async def read_validated_file(file: UploadFile) -> bytes:
+async def read_validated_file(file: UploadFile, *, limit_mb: int | None = None) -> bytes:
     """Read at most the configured limit plus one byte, then reject oversized files."""
-    max_size = settings.max_file_size_mb * 1024 * 1024
+    limit_mb = settings.max_file_size_mb if limit_mb is None else limit_mb
+    max_size = limit_mb * 1024 * 1024
     await file.seek(0)
     contents = await file.read(max_size + 1)
     if len(contents) > max_size:
         raise HTTPException(
             status_code=413,
-            detail=f"El archivo supera el máximo permitido de {settings.max_file_size_mb} MB",
+            detail=f"El archivo supera el máximo permitido de {limit_mb} MB",
         )
     return contents
 
